@@ -1571,7 +1571,7 @@ f.produto].join(' ').toLowerCase().includes(q)));
 
  const at=estado.faccoes.filter(f=>f.status==='ATIVA').length;
 
- $('#facStats').innerHTML=`<span><b>${faccoes.length}</b> POSIÇÕES</span><span><b>${at}</b> ATIVAS</span><span><b>${faccoes.length-at}</b> VAGAS</span><span><b>${filtered.length}</b> EXIBIDAS</span>`;
+ $('#facStats').innerHTML=`<span><b>${estado.faccoes.length}</b> POSIÇÕES</span><span><b>${at}</b> ATIVAS</span><span><b>${estado.faccoes.length-at}</b> VAGAS</span><span><b>${filtered.length}</b> EXIBIDAS</span>`;
 
  if(!operacionais.length){$('#facList').innerHTML='<div class="placeholder"><b>◆</b><h3>BASE AINDA NÃO IMPORTADA</h3><p>ADMIN: clique em “IMPORTAR BASE INICIAL”.</p></div>';
 return}
@@ -3790,7 +3790,7 @@ function buscaResultados(termoBruto){
   if(itens.length)grupos.push({tipo,rotulo,pagina,itens:itens.slice(0,BUSCA_MAX_POR_TIPO),total:itens.length});
  };
 
- add('group','GROUPS E FACÇÕES',(faccoes||[])
+ add('group','GROUPS E FACÇÕES',(estado.faccoes||[])
   .filter(f=>buscaCasa(termo,f.group,f.faccao,f.lider,f.qg,f.segmento,f.staff))
   .map(f=>({titulo:f.group||'(sem Group)',detalhe:[f.faccao,f.lider,f.segmento].filter(Boolean).join(' • ')||'sem facção vinculada',acao:()=>{activateAppPage('faccoes');setTimeout(()=>{try{showGroupProfilePage(f)}catch(err){console.warn('[BUSCA]',err)}},140)}})),'faccoes');
 
@@ -4886,7 +4886,7 @@ ativas=estado.organizacoes.filter(x=>x.status==='ATIVA').length,
 sem=estado.organizacoes.filter(x=>x.status==='SEM_GROUP').length,
 del=estado.entregas.filter(x=>x.status==='ATIVA').length;
 
-  return {text:`Resumo operacional atual:\n• ${faccoes.length} Groups cadastrados: ${occupied} ocupados e ${vagos} vagos.\n• ${estado.organizacoes.length} facções cadastradas: ${ativas} ativas e ${sem} sem Group.\n• ${del} estado.entregas ativas registradas.\n• ${estado.historico.length} eventos no histórico.`,
+  return {text:`Resumo operacional atual:\n• ${estado.faccoes.length} Groups cadastrados: ${occupied} ocupados e ${vagos} vagos.\n• ${estado.organizacoes.length} facções cadastradas: ${ativas} ativas e ${sem} sem Group.\n• ${del} estado.entregas ativas registradas.\n• ${estado.historico.length} eventos no histórico.`,
 refs:['Groups/QGs',
 'Facções',
 'Entregas',
@@ -5265,7 +5265,7 @@ let desc='Informe o link da planilha oficial';
 
  if(has)desc=metricSourceConfig.autoSync===false?'Fonte configurada • sincronização automática pausada':'Apps Script permanente • sincronização automática 14:05, 16:05, 21:05 e 23:05 • sem Blaze';
 
- if(online){desc=`Base sincronizada • ${Number(srv.rows??metricSourceState.count??metricas.length)||0} registros históricos${srv.sheet?' • aba '+srv.sheet:''}${metricLiveLastAt?' • atualização em tempo real ativa':''}`;
+ if(online){desc=`Base sincronizada • ${Number(srv.rows??metricSourceState.count??estado.metricas.length)||0} registros históricos${srv.sheet?' • aba '+srv.sheet:''}${metricLiveLastAt?' • atualização em tempo real ativa':''}`;
 const dc=metricSourceState.directCheck;
 if(dc?.sheetLast)desc+=` • Planilha ${dc.sheetLast.date} ${dc.sheetLast.slot} • Firestore ${dc.fireLast?.date||'—'} ${dc.fireLast?.slot||'—'}`;
 }
@@ -6855,7 +6855,7 @@ async function testMetricSource(){
 if(out)out.textContent='Atualizando os dados já sincronizados no Firestore...';
 
  try{await loadMetrics();
-if(out)out.innerHTML=`<b>CENTRAL ONLINE</b> • ${metricas.length} registro(s) históricos disponíveis no Firestore.`}catch(e){if(out)out.textContent='Falha: '+e.message}
+if(out)out.innerHTML=`<b>CENTRAL ONLINE</b> • ${estado.metricas.length} registro(s) históricos disponíveis no Firestore.`}catch(e){if(out)out.textContent='Falha: '+e.message}
 }
 /* V9.8.1 - Esta funcao havia desaparecido numa das edicoes anteriores do
    arquivo. Sem ela, loadMetrics() lancava ReferenceError e o painel inteiro
@@ -7172,7 +7172,7 @@ action=d.pendingRows?`Sincronização recuperada: ${d.pendingRows} registro(s) e
 
     alert(`${action}\n\nPLANILHA: até ${result.sheetLast.date} • ${result.sheetLast.slot}\nFIRESTORE: até ${result.fireLast.date} • ${result.fireLast.slot}`);
 
-   }else alert(`Central carregada do Firestore. ${metricas.length} registro(s) disponíveis.`)
+   }else alert(`Central carregada do Firestore. ${estado.metricas.length} registro(s) disponíveis.`)
   }
   return true;
 
@@ -10209,11 +10209,11 @@ async function facSheetPushAll(){
 const btn=$('#facSheetPushAllBtn');
 if(btn){btn.disabled=true;
 btn.textContent='ENVIANDO...'}try{if(!facSheetAccessToken)await facSheetAuthorize();
-if(!confirm(`Enviar os ${faccoes.length} Groups atuais do High OS para a planilha oficial?\n\nLinhas existentes serão atualizadas pelo Group e Groups ausentes serão adicionados.`))return;
+if(!confirm(`Enviar os ${estado.faccoes.length} Groups atuais do High OS para a planilha oficial?\n\nLinhas existentes serão atualizadas pelo Group e Groups ausentes serão adicionados.`))return;
 const ok=await syncGroupsToOfficialSheet(estado.faccoes,{forceAuthorize:true});
 if(ok){await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'SYNC_PLANILHA_FACCOES_EXPORT',
-descricao:`Base High OS enviada manualmente para a planilha oficial: ${faccoes.length} Group(s)`,
+descricao:`Base High OS enviada manualmente para a planilha oficial: ${estado.faccoes.length} Group(s)`,
 usuario:currentUser.email,
 data:serverTimestamp()});
 alert('Planilha atualizada com a base atual do High OS.')}}catch(e){alert('Erro ao enviar a base: '+e.message)}finally{if(btn){btn.disabled=false;
