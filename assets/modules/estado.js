@@ -19,5 +19,7 @@ export const estado = {
   /** Linhas de metrica exibidas no momento (planilha, espelho ou colecao). */
   metricas: [],
   /** Copia usada para comparar o que mudou antes de gravar. */
-  metricasCache: []
+  metricasCache: [],
+  /** Groups e faccoes carregados do Firestore. */
+  faccoes: []
 };

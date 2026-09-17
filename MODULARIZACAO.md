@@ -1,5 +1,23 @@
 # Modularização do app.js — como continuar
 
+## Progresso
+
+| Módulo | Conteúdo | Versão |
+|---|---|---|
+| `modules/metricas-parser.js` | 7 funções do parser da planilha | 10.5.0 |
+| `modules/formatadores.js` | `esc`, `alvesNorm`, formatadores de data/duração/moeda | 10.7.0 |
+| `modules/estado.js` | `metricas`, `metricasCache`, `faccoes` | 10.8.0 / 10.9.0 |
+
+Ainda no `app.js`, para migrar um por vez:
+`historico` (48 usos), `organizacoes` (34), `entregas` (29),
+`usuarios` (22), `solicitacoes` (20), `requestRecords` (10),
+`userSessions` (10).
+
+O procedimento está automatizado e é sempre o mesmo: trocar as
+referências só em região de código (o analisador do formatador garante
+que strings e caminhos de coleção fiquem intactos), mover a declaração
+para `estado.js`, rodar o verificador e testar as telas do módulo.
+
 ## O que já foi feito
 
 `assets/modules/metricas-parser.js` — 7 funções do parser de métricas.

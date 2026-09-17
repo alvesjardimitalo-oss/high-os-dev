@@ -49,7 +49,7 @@ facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
 const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#deniedView'),appView=$('#appView'),sessionArea=$('#sessionArea');
 
-let currentUser=null,currentProfile=null,faccoes=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
+let currentUser=null,currentProfile=null,solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
 
 const facCol=collection(db,'highos','data','faccoes'), histCol=collection(db,'highos','data','historico'), reqCol=collection(db,'highos','data','solicitacoes'), deliveryCol=collection(db,'highos','data','entregas'), orgCol=collection(db,'highos','data','organizacoes'), sessionCol=collection(db,'highos','data','sessoes_usuario'), usersCol=collection(db,'users');
 
@@ -1348,7 +1348,7 @@ const legacyKeys=['faccoes',
 'disponiveis',
 'entregas'],
 legacyOwn=legacyKeys.filter(k=>Object.prototype.hasOwnProperty.call(custom,k)).map(k=>normalizePermission(custom[k]));
-if(legacyOwn.length){base.faccoes=legacyOwn.includes('EDIT')?'EDIT':legacyOwn.includes('VIEW')?'VIEW':'NONE'}return base}
+if(legacyOwn.length){base.estado.faccoes=legacyOwn.includes('EDIT')?'EDIT':legacyOwn.includes('VIEW')?'VIEW':'NONE'}return base}
 function pageModule(page=''){return INTERNAL_MODULE_PARENT[page]||page}
 function canViewModule(module){if(isAdmin())return true;
 return ['VIEW',
@@ -1551,10 +1551,10 @@ $('#groupProfileBack')?.addEventListener('click',closeGroupProfilePage);
 
 async function loadFaccoes(){
  try{const qs=await getDocsCached(facCol,'faccoes');
-faccoes=qs.docs.map(d=>({id:d.id,
+estado.faccoes=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
-faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
-renderFaccoes();definirGroupsConhecidos(faccoes);
+estado.faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
+renderFaccoes();definirGroupsConhecidos(estado.faccoes);
 renderAvailableFaccoes()}catch(e){$('#facList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${e.message}</p></div>`}
 }
 function renderFaccoes(){
@@ -1562,14 +1562,14 @@ function renderFaccoes(){
 seg=$('#facSegment').value,
 st=$('#facStatus').value;
 
- const filtered=faccoes.filter(f=>(!seg||f.segmento===seg)&&(!st||f.status===st)&&(!q||[f.group,
+ const filtered=estado.faccoes.filter(f=>(!seg||f.segmento===seg)&&(!st||f.status===st)&&(!q||[f.group,
 f.faccao,
 f.qg,
 f.lider,
 f.staff,
 f.produto].join(' ').toLowerCase().includes(q)));
 
- const at=faccoes.filter(f=>f.status==='ATIVA').length;
+ const at=estado.faccoes.filter(f=>f.status==='ATIVA').length;
 
  $('#facStats').innerHTML=`<span><b>${faccoes.length}</b> POSIÇÕES</span><span><b>${at}</b> ATIVAS</span><span><b>${faccoes.length-at}</b> VAGAS</span><span><b>${filtered.length}</b> EXIBIDAS</span>`;
 
@@ -1837,7 +1837,7 @@ statBump(nome,'docs',rows.length);
 $('#seedBtn').onclick=async()=>{
  if(currentProfile?.role!=='ADMIN')return;
 
- if(faccoes.length){alert('A base já possui registros. A importação inicial foi bloqueada para evitar duplicidade.');
+ if(estado.faccoes.length){alert('A base já possui registros. A importação inicial foi bloqueada para evitar duplicidade.');
 return}
  if(!confirm(`Importar as ${SEED.length} posições do Documento das Facções para o Firestore?`))return;
 
@@ -1961,7 +1961,7 @@ $('#fOutrosBeneficios').value=b.outros||'';
 }
 function selectedDefaultBenefits(){return [...document.querySelectorAll('[data-default-benefit]:checked')].map(x=>x.dataset.defaultBenefit)}
 function currentFactionFromForm(){
- const old=faccoes.find(x=>x.group===$('#fGroup').value)||{};
+ const old=estado.faccoes.find(x=>x.group===$('#fGroup').value)||{};
 
  return {...old,
 group:$('#fGroup').value,
@@ -2118,7 +2118,7 @@ oldArm=oldO.blindados||{};
 
 }
 function autoDeliveryRequests(f=currentFactionFromForm()){
- const old=faccoes.find(x=>x.group===f.group)||{},
+ const old=estado.faccoes.find(x=>x.group===f.group)||{},
  ob=old.beneficios||{},
  b=f.beneficios||{},
  req=[];
@@ -2286,7 +2286,7 @@ function resolveGroupIdentity(f={}){
 
 }
 function openFac(id){
- const raw=faccoes.find(x=>x.id===id);
+ const raw=estado.faccoes.find(x=>x.id===id);
 if(!raw)return;
 const f=resolveGroupIdentity(raw);
 
@@ -2378,7 +2378,7 @@ $('#copyDeliveryBtn').onclick=copyDeliveryExtract;
 $('#facForm').onsubmit=async e=>{
  e.preventDefault();
 const group=$('#fGroup').value,
-old=faccoes.find(x=>x.group===group);
+old=estado.faccoes.find(x=>x.group===group);
 getTechProfileFromForm();
 const data={...old,
 segmento:$('#fSegment')?.value||old?.segmento||'OUTROS',
@@ -2407,8 +2407,8 @@ updatedBy:currentUser.email};
 return}
  try{const generated=autoDeliveryRequests(data);
 await setDoc(doc(db,'highos','data','faccoes',group),data);
-const localIndex=faccoes.findIndex(x=>x.group===group);
-if(localIndex>=0)faccoes[localIndex]={...faccoes[localIndex],
+const localIndex=estado.faccoes.findIndex(x=>x.group===group);
+if(localIndex>=0)estado.faccoes[localIndex]={...estado.faccoes[localIndex],
 ...clonePlain(data)};
 await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:(old?.qg!==data.qg||old?.cds!==data.cds||JSON.stringify(old?.beneficios||{})!==JSON.stringify(data.beneficios||{}))?'QG_ALTERADO':(old?.status==='INATIVA'&&data.status==='ATIVA'?'ENTREGA':'EDICAO'),
@@ -2446,7 +2446,7 @@ minute:'2-digit',
 hour12:false}).formatToParts(d).reduce((a,p)=>(a[p.type]=p.value,a),{});
 return {date:`${parts.day}/${parts.month}/${parts.year}`,
 time:`${parts.hour}:${parts.minute}`}}
-function recollectExtract(){const f=faccoes.find(x=>x.group===$('#rGroup')?.value)||{},
+function recollectExtract(){const f=estado.faccoes.find(x=>x.group===$('#rGroup')?.value)||{},
 reason=$('#rReason')?.value||'',
 lines=['RECOLHIMENTO DE FACÇÃO — HIGH ILEGAL',
 '',
@@ -2467,7 +2467,7 @@ function updateRecollectUi(){const low=$('#rReason')?.value==='BAIXO_CONTINGENTE
 $('#lowContingentBox')?.classList.toggle('hidden',!low);
 if($('#rExtract'))$('#rExtract').value=recollectExtract()}
 function openRecollectModal(){const group=$('#fGroup').value,
-f=faccoes.find(x=>x.group===group);
+f=estado.faccoes.find(x=>x.group===group);
 if(!f||f.status!=='ATIVA')return alert('Este Group não possui uma facção ativa para recolher.');
 recollectPanelImage='';
 $('#recollectForm')?.reset();
@@ -2525,7 +2525,7 @@ $('#copyRecollectExtract')?.addEventListener('click',e=>copyText(recollectExtrac
 $('#recollectModal')?.addEventListener('paste',async e=>{const item=[...(e.clipboardData?.items||[])].find(x=>x.type?.startsWith('image/'));if(item){e.preventDefault();await setRecollectPrint(item.getAsFile())}});
 
 $('#recollectForm')?.addEventListener('submit',async e=>{e.preventDefault();const group=$('#rGroup').value,
-old=faccoes.find(x=>x.group===group);if(!old||old.status!=='ATIVA')return alert('A ocupação deste Group já foi alterada. Atualize a tela e tente novamente.');const reason=$('#rReason').value;if(!reason)return alert('Selecione o motivo do recolhimento.');if(reason==='BAIXO_CONTINGENTE'&&!recollectPanelImage)return alert('Para recolhimento por baixo contingente, o print do painel é obrigatório.');if(reason==='BAIXO_CONTINGENTE'&&!$('#rContingentObserved').value)return alert('Informe o contingente observado.');const recolhimento={motivo:reason,
+old=estado.faccoes.find(x=>x.group===group);if(!old||old.status!=='ATIVA')return alert('A ocupação deste Group já foi alterada. Atualize a tela e tente novamente.');const reason=$('#rReason').value;if(!reason)return alert('Selecione o motivo do recolhimento.');if(reason==='BAIXO_CONTINGENTE'&&!recollectPanelImage)return alert('Para recolhimento por baixo contingente, o print do painel é obrigatório.');if(reason==='BAIXO_CONTINGENTE'&&!$('#rContingentObserved').value)return alert('Informe o contingente observado.');const recolhimento={motivo:reason,
 motivoLabel:recollectReasonLabel(reason),
 responsavel:$('#rResponsible').value.trim(),
 data:$('#rDate').value.trim(),
@@ -2748,13 +2748,13 @@ n])=>`<option value="${v}">${n}</option>`).join('');
 }
 function requestTypeName(v){return REQUEST_TYPES.find(x=>x[0]===v)?.[1]||v||'Solicitação Geral'}
 function updateRequestGroupOptions(selected=''){
-  $('#reqGroup').innerHTML='<option value="">SEM GROUP / GERAL</option>'+faccoes.map(f=>`<option value="${esc(f.group)}">${esc(f.group)}${f.faccao?' — '+esc(f.faccao):''}</option>`).join('');
+  $('#reqGroup').innerHTML='<option value="">SEM GROUP / GERAL</option>'+estado.faccoes.map(f=>`<option value="${esc(f.group)}">${esc(f.group)}${f.faccao?' — '+esc(f.faccao):''}</option>`).join('');
 
   $('#reqGroup').value=selected||'';
  syncRequestFaction();
 
 }
-function syncRequestFaction(){const f=faccoes.find(x=>x.group===$('#reqGroup').value);
+function syncRequestFaction(){const f=estado.faccoes.find(x=>x.group===$('#reqGroup').value);
 $('#reqFaccao').value=f?.faccao||''}
 function defaultSubject(type){return ({
  GARAGEM:'Solicitaçao de Garagem Publica',
@@ -2840,7 +2840,7 @@ function buildRequestText(){
 
  const G=group||'{Nome do Group}';
 
- const fac=faccoes.find(x=>x.group===group);
+ const fac=estado.faccoes.find(x=>x.group===group);
  const b=fac?.beneficios||{};
 
  let L=[];
@@ -3346,7 +3346,7 @@ if(tipo!=='ROTA_FARM')return;
  const pts=requestRoutePoints();
 if(!pts.length)return alert('Não encontrei CDS válidas em “Blips da rota nova”.');
 
- const f=faccoes.find(x=>x.group===group);
+ const f=estado.faccoes.find(x=>x.group===group);
 if(!f)return alert('Group não encontrado na base atual.');
 
  const oldT=mergedTechProfile(f),
@@ -3384,7 +3384,7 @@ data:serverTimestamp()});
   await loadFaccoes();
 
   try{await copyRequestText()}catch{}
-  if(typeof currentGroupProfile!=='undefined'&&currentGroupProfile?.group===group){const fresh=faccoes.find(x=>x.group===group);
+  if(typeof currentGroupProfile!=='undefined'&&currentGroupProfile?.group===group){const fresh=estado.faccoes.find(x=>x.group===group);
 if(fresh){renderTechProfile(fresh);
 $('#fRotaExclusiva').checked=true;
 renderRouteOverview();
@@ -3520,7 +3520,7 @@ async function copyRequestText(){
 group=$('#reqGroup')?.value||'',
 tipo=$('#reqTipo')?.value||'GERAL',
 d=$('#reqDetalhes')?.value||'',
-f=faccoes.find(x=>x.group===group);
+f=estado.faccoes.find(x=>x.group===group);
 
  try{
   if(group&&f){const mut=manualRequestMutation(tipo,d,f);
@@ -3529,9 +3529,9 @@ if(yes){await setDoc(doc(db,'highos','data','faccoes',group),{perfilTecnico:mut.
 beneficios:mut.beneficios,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser?.email||''},{merge:true});
-const ix=faccoes.findIndex(x=>x.group===group);
-if(ix>=0){faccoes[ix].perfilTecnico=clonePlain(mut.perfilTecnico);
-faccoes[ix].beneficios=clonePlain(mut.beneficios)}await addDoc(histCol,{sessionId:currentSessionId||'',
+const ix=estado.faccoes.findIndex(x=>x.group===group);
+if(ix>=0){estado.faccoes[ix].perfilTecnico=clonePlain(mut.perfilTecnico);
+estado.faccoes[ix].beneficios=clonePlain(mut.beneficios)}await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'SOLICITACAO_APLICADA_AO_GROUP',
 group,
 descricao:`${mut.descricao||requestTypeName(tipo)} cadastrada no Group a partir de solicitação`,
@@ -4001,13 +4001,13 @@ function renderFacSegmentChips(all=[]){
 
 // V5 substitui a leitura visual de "Facções" por "Groups / QGs" sem quebrar a coleção legada.
 renderFaccoes=function(){
- renderFacSegmentChips(faccoes);
+ renderFacSegmentChips(estado.faccoes);
 renderFacActivityButtons();
 
  const q=($('#facSearch')?.value||'').toLowerCase(),
 seg=$('#facSegment')?.value||'',
 st=$('#facStatus')?.value||'',
-operacionais=faccoes.filter(f=>!f.removido);
+operacionais=estado.faccoes.filter(f=>!f.removido);
 
  const filtered=operacionais.filter(f=>(!seg||segmentKey(f.segmento)===segmentKey(seg))&&(!st||f.status===st)&&(!q||[f.group,
 f.faccao,
@@ -4074,7 +4074,7 @@ function derivedOrganizations(){
  organizacoes.forEach(o=>map.set(String(o.nome||o.id||'').toLowerCase(),{...o,
 source:'cadastro'}));
 
- faccoes.filter(f=>f.faccao).forEach(f=>{const k=String(f.faccao).toLowerCase(),
+ estado.faccoes.filter(f=>f.faccao).forEach(f=>{const k=String(f.faccao).toLowerCase(),
 old=map.get(k)||{};map.set(k,{...old,
 id:old.id||orgKey(f.faccao),
 nome:old.nome||f.faccao,
@@ -4201,7 +4201,7 @@ $('#oDesde').value=o.desde||'';
 $('#oObs').value=o.observacoes||'';
 $('#orgModalTitle').textContent=o.nome||'NOVA FACÇÃO';
 
- const current=faccoes.find(f=>String(f.faccao||'').toLowerCase()===String(o.nome||'').toLowerCase());
+ const current=estado.faccoes.find(f=>String(f.faccao||'').toLowerCase()===String(o.nome||'').toLowerCase());
 
  $('#orgProfileSummary').innerHTML=`<div><span>STATUS</span><b>${esc(current?'COM GROUP':(o.status||'SEM GROUP'))}</b></div><div><span>GROUP ATUAL</span><b>${esc(current?.group||'—')}</b></div><div><span>SEGMENTO</span><b>${esc(current?.segmento||orgSegmentValue(o)||'—')}</b></div><div><span>QG</span><b>${esc(current?.qg||'—')}</b></div>`;
 
@@ -4223,7 +4223,7 @@ $('#orgModalClose')?.addEventListener('click',closeOrganizationProfilePage);
 'orgStatus'].forEach(id=>$('#'+id)?.addEventListener(id==='orgSearch'?'input':'change',renderOrganizations));
 
 $('#orgForm')?.addEventListener('submit',async e=>{e.preventDefault();const nome=$('#oNome').value.trim();if(!nome)return;const id=$('#orgId').value||orgKey(nome),
-current=faccoes.find(f=>String(f.faccao||'').toLowerCase()===nome.toLowerCase());const data={nome,
+current=estado.faccoes.find(f=>String(f.faccao||'').toLowerCase()===nome.toLowerCase());const data={nome,
 status:current?'ATIVA':'INATIVA',
 lider:$('#oLider').value.trim(),
 contato:$('#oContato').value.trim(),
@@ -4287,7 +4287,7 @@ $('#deliveryStats').innerHTML=`<span><b>${entregas.length}</b> REGISTROS</span><
 }
 function openNewDelivery(group=''){
  const sel=$('#dGroup');
-sel.innerHTML='<option value="">SELECIONE O GROUP</option>'+faccoes.filter(f=>!f.removido).map(f=>`<option value="${esc(f.group)}">${esc(f.group)} — ${esc(f.qg||'SEM LOCAL')} ${f.status==='ATIVA'?'['+esc(f.faccao||'OCUPADO')+']':'[VAGO]'}</option>`).join('');
+sel.innerHTML='<option value="">SELECIONE O GROUP</option>'+estado.faccoes.filter(f=>!f.removido).map(f=>`<option value="${esc(f.group)}">${esc(f.group)} — ${esc(f.qg||'SEM LOCAL')} ${f.status==='ATIVA'?'['+esc(f.faccao||'OCUPADO')+']':'[VAGO]'}</option>`).join('');
 
  $('#newDeliveryForm').reset();
 if(group){sel.value=group;
@@ -4298,7 +4298,7 @@ $('#newDeliveryModal').classList.remove('hidden');
 
 }
 function fillDeliveryFromGroup(group){
- const f=faccoes.find(x=>x.group===group);
+ const f=estado.faccoes.find(x=>x.group===group);
 if(!f)return;
 const b=f.beneficios||{};
 
@@ -4323,7 +4323,7 @@ updateNewDeliveryPreview();
 }
 function selectedDeliveryBenefits(){return [...document.querySelectorAll('[data-delivery-benefit]:checked')].map(x=>x.dataset.deliveryBenefit)}
 function deliveryExtractV5(){
- const f=faccoes.find(x=>x.group===$('#dGroup').value),
+ const f=estado.faccoes.find(x=>x.group===$('#dGroup').value),
  active=selectedDeliveryBenefits();
 if(!f)return '';
 
@@ -4349,7 +4349,7 @@ return lines.join('\n');
 
 }
 function currentDeliveryRequests(){
- const f=faccoes.find(x=>x.group===$('#dGroup').value);
+ const f=estado.faccoes.find(x=>x.group===$('#dGroup').value);
 if(!f)return[];
 const b=f.beneficios||{},
 a=selectedDeliveryBenefits(),
@@ -4468,7 +4468,7 @@ btn.textContent='COPIADO ✓';
 setTimeout(()=>btn.textContent=o,1300)}catch(e){alert('Não foi possível copiar automaticamente.')}}
 async function saveNewDelivery(e){
  e.preventDefault();
-const f=faccoes.find(x=>x.group===$('#dGroup').value);
+const f=estado.faccoes.find(x=>x.group===$('#dGroup').value);
 if(!f)return alert('Selecione um Group.');
 const faccao=$('#dFaccao').value.trim();
 if(!faccao)return alert('Informe a facção que está assumindo.');
@@ -4831,7 +4831,7 @@ $('#historyType')?.addEventListener('change',renderHistory);
 
 const _openFacV51=openFac;
 openFac=function(id){_openFacV51(id);
-renderGroupProfileMemory(faccoes.find(x=>x.id===id))};
+renderGroupProfileMemory(estado.faccoes.find(x=>x.id===id))};
 
 const _loadFaccoesV51=loadFaccoes;
 loadFaccoes=async function(){await _loadFaccoesV51();
@@ -4844,12 +4844,12 @@ await loadOrganizations()};
 
 function alvesFindGroup(text=''){
  const n=alvesNorm(text);
-return faccoes.find(f=>n.includes(alvesNorm(f.group)))||faccoes.find(f=>n.includes(alvesNorm(f.qg||''))&&String(f.qg||'').length>2)||null;
+return estado.faccoes.find(f=>n.includes(alvesNorm(f.group)))||estado.faccoes.find(f=>n.includes(alvesNorm(f.qg||''))&&String(f.qg||'').length>2)||null;
 
 }
 function alvesFindOrg(text=''){
  const n=alvesNorm(text);
-return organizacoes.find(o=>n.includes(alvesNorm(o.nome)))||faccoes.map(f=>({nome:f.faccao,
+return organizacoes.find(o=>n.includes(alvesNorm(o.nome)))||estado.faccoes.map(f=>({nome:f.faccao,
 groupAtual:f.group,
 segmentoAtual:f.segmento,
 qgAtual:f.qg,
@@ -4883,8 +4883,8 @@ o=alvesFindOrg(question);
  if(!q)return {text:'Digite uma pergunta sobre a base operacional.'};
 
  if(q.includes('resumo')&&(q.includes('operacional')||q.includes('geral'))){
-  const occupied=faccoes.filter(f=>f.status==='ATIVA').length,
-vagos=faccoes.length-occupied,
+  const occupied=estado.faccoes.filter(f=>f.status==='ATIVA').length,
+vagos=estado.faccoes.length-occupied,
 ativas=organizacoes.filter(x=>x.status==='ATIVA').length,
 sem=organizacoes.filter(x=>x.status==='SEM_GROUP').length,
 del=entregas.filter(x=>x.status==='ATIVA').length;
@@ -4897,7 +4897,7 @@ refs:['Groups/QGs',
 
  }
  if((q.includes('group')||q.includes('groups'))&&(q.includes('vago')||q.includes('livre'))){
-  const list=faccoes.filter(f=>f.status!=='ATIVA');
+  const list=estado.faccoes.filter(f=>f.status!=='ATIVA');
 return {text:list.length?`Groups vagos (${list.length}):\n${list.map(f=>`• ${f.group} — ${f.qg||'sem QG informado'} (${f.segmento||'OUTROS'})`).join('\n')}`:'Não há Groups vagos cadastrados.',
 refs:['Groups/QGs']};
 
@@ -4928,7 +4928,7 @@ refs:[g.group,
 
  }
  if((g||o)&&q.includes('radio')){
-  const target=g||faccoes.find(f=>alvesNorm(f.faccao)===alvesNorm(o?.nome));
+  const target=g||estado.faccoes.find(f=>alvesNorm(f.faccao)===alvesNorm(o?.nome));
 const radio=target?.beneficios?.radio||'';
 
   return {text:target?(radio?`O rádio cadastrado para ${target.faccao||target.group} no ${target.group} é ${radio}.`:`${target.group}${target.faccao?' / '+target.faccao:''} não possui número de rádio cadastrado no Perfil Técnico.`):`Encontrei a facção ${o?.nome||''}, mas ela não está vinculada a um Group com rádio cadastrado.`,
@@ -4962,7 +4962,7 @@ refs:[g.group,
 
  }
  if(o){
-  const target=faccoes.find(f=>alvesNorm(f.faccao)===alvesNorm(o.nome));
+  const target=estado.faccoes.find(f=>alvesNorm(f.faccao)===alvesNorm(o.nome));
 return {text:`${o.nome}\nStatus: ${o.status||'—'}\nGroup atual: ${o.groupAtual||target?.group||'SEM GROUP'}\nSegmento: ${o.segmentoAtual||target?.segmento||'—'}\nQG: ${o.qgAtual||target?.qg||'—'}\nLíder: ${o.lider||target?.lider||'—'}${o.contato?`\nContato: ${o.contato}`:''}`,
 refs:[o.nome,
 'Facções']};
@@ -5079,7 +5079,7 @@ year:'numeric'}).replace(/^./,c=>c.toUpperCase());
 }
 function parseIsoMetricDate(v=''){const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
 return m?new Date(+m[1],+m[2]-1,+m[3]):null}
-function metricGroupOccupied(group){return faccoes.some(f=>alvesNorm(f.group)===alvesNorm(group)&&f.status==='ATIVA'&&String(f.faccao||'').trim())}
+function metricGroupOccupied(group){return estado.faccoes.some(f=>alvesNorm(f.group)===alvesNorm(group)&&f.status==='ATIVA'&&String(f.faccao||'').trim())}
 function activeMetricRows(){
  const occupied=m=>metricGroupOccupied(m.group||m.organizacao||m.faccao);
 
@@ -5868,7 +5868,7 @@ startMetricRealtime();
 
 }
 function metricIdentity(group,row=null){
- const f=faccoes.find(x=>alvesNorm(x.group)===alvesNorm(group))||SEED.find(x=>alvesNorm(x.group)===alvesNorm(group))||{};
+ const f=estado.faccoes.find(x=>alvesNorm(x.group)===alvesNorm(group))||SEED.find(x=>alvesNorm(x.group)===alvesNorm(group))||{};
 
  return {group:group||f.group||'',
 faccao:row?.faccaoSnapshot||row?.faccao||f.faccao||'',
@@ -5905,7 +5905,7 @@ function metricSummaryRows(){
  return [...groupMap.values()].map(group=>{
   const first=active.find(m=>alvesNorm(String(m.group||m.organizacao||m.faccao||'')).replace(/\s+/g,'')===alvesNorm(group).replace(/\s+/g,''));
   const ident=metricIdentity(group,first);
-  const f=faccoes.find(x=>alvesNorm(String(x.group||'')).replace(/\s+/g,'')===alvesNorm(group).replace(/\s+/g,''))||ident;
+  const f=estado.faccoes.find(x=>alvesNorm(String(x.group||'')).replace(/\s+/g,'')===alvesNorm(group).replace(/\s+/g,''))||ident;
   const a=metricAnalysis(group);
   return a?{f:{...f,
 group:String(f.group||group).trim(),
@@ -7273,7 +7273,7 @@ alvesAnswer=function(question=''){
  const q=alvesNorm(question),
 g=alvesFindGroup(question),
 o=alvesFindOrg(question);
-const metricTarget=g?.group||o?.groupAtual||faccoes.find(f=>o&&alvesNorm(f.faccao)===alvesNorm(o.nome))?.group;
+const metricTarget=g?.group||o?.groupAtual||estado.faccoes.find(f=>o&&alvesNorm(f.faccao)===alvesNorm(o.nome))?.group;
 
  if(metricTarget&&(q.includes('media')||q.includes('pico')||q.includes('predomin')||q.includes('metrica'))){const a=metricAnalysis(metricTarget);
 if(!a)return {text:`Não encontrei métricas cadastradas para ${metricTarget}.`,
@@ -8002,7 +8002,7 @@ if(!entries.length)return alert('Nenhum perfil oficial carregado.');
 missing=0;
 const batch=writeBatch(db);
 for(const [sourceGroup,
-src] of entries){const f=(faccoes||[]).find(x=>alvesNorm(x.group).replace(/\s+/g,'')===alvesNorm(sourceGroup).replace(/\s+/g,''));
+src] of entries){const f=(estado.faccoes||[]).find(x=>alvesNorm(x.group).replace(/\s+/g,'')===alvesNorm(sourceGroup).replace(/\s+/g,''));
 if(!f){missing++;
 continue}const patch=sourceToGroupPatch(f,src);
 batch.set(doc(db,'highos','data','faccoes',f.group),{...patch,
@@ -9003,7 +9003,7 @@ v])=>`<div class="structure-chip"><span>${esc(n)}</span><b>${esc(v)}</b></div>`)
 }
 function techChanged(oldF,newF){return JSON.stringify(mergedTechProfile(oldF))!==JSON.stringify(newF.perfilTecnico||mergedTechProfile(newF))}
 function techAutoRequests(f=currentFactionFromForm()){
- const old=faccoes.find(x=>x.group===f.group)||{},
+ const old=estado.faccoes.find(x=>x.group===f.group)||{},
 now=f.perfilTecnico||getTechProfileFromForm(),
 oldT=mergedTechProfile(old),
 out=[];
@@ -9584,7 +9584,7 @@ mount=$('#groupSettingsMount');
 box.open=true;
 box.classList.add('settings-active');
 
- const raw=faccoes.find(x=>x.group===$('#fGroup')?.value)||{};
+ const raw=estado.faccoes.find(x=>x.group===$('#fGroup')?.value)||{};
 const g=resolveGroupIdentity(raw);
 
  $('#groupSettingsTitle').textContent=`${g.group||$('#fGroup')?.value||'GROUP'} · BENEFÍCIOS E SETAGENS`;
@@ -9652,7 +9652,7 @@ block:'start'}),30)});
 
 const _openFacV74=openFac;
 openFac=function(id){_openFacV74(id);
-const raw=faccoes.find(x=>x.id===id);
+const raw=estado.faccoes.find(x=>x.id===id);
 renderGroupOverview(resolveGroupIdentity(raw||{}))};
 
 ['fStatus',
@@ -9662,7 +9662,7 @@ renderGroupOverview(resolveGroupIdentity(raw||{}))};
 'fLider',
 'fStaff',
 'fCds'].forEach(id=>$('#'+id)?.addEventListener('input',()=>{
- const current=faccoes.find(x=>x.group===$('#fGroup')?.value)||{};
+ const current=estado.faccoes.find(x=>x.group===$('#fGroup')?.value)||{};
  renderGroupOverview({...current,
 status:$('#fStatus')?.value||current.status,
 faccao:$('#fFaccao')?.value.trim()||'',
@@ -9711,7 +9711,7 @@ function movementOpen(mode){
 
   const group = $('#fGroup')?.value;
 
-  const src = faccoes.find(x => x.group === group);
+  const src = estado.faccoes.find(x => x.group === group);
 
   if(!src) return;
 
@@ -9723,7 +9723,7 @@ function movementOpen(mode){
 
   if(!dst) return;
 
-  dst.innerHTML = faccoes
+  dst.innerHTML = estado.faccoes
     .filter(x => x.group !== group)
     .map(x => `<option value="${esc(x.group)}">${esc(x.group)} • ${esc(x.qg || 'SEM LOCAL')} • ${esc(x.faccao || 'VAGO')}</option>`)
     .join('');
@@ -9745,9 +9745,9 @@ function movementOpen(mode){
 }
 
 function movementPreview(){
-  const src = faccoes.find(x => x.group === movementSourceGroup);
+  const src = estado.faccoes.find(x => x.group === movementSourceGroup);
 
-  const dst = faccoes.find(x => x.group === $('#movementDestination')?.value);
+  const dst = estado.faccoes.find(x => x.group === $('#movementDestination')?.value);
 
   if(!src || !dst) return;
 
@@ -9769,8 +9769,8 @@ $('#movementCancel')?.addEventListener('click', () => $('#movementModal')?.class
 
 $('#movementConfirm')?.addEventListener('click', async () => {
   if(!isAdmin()) return;
-  const src = faccoes.find(x => x.group === movementSourceGroup);
-  const dst = faccoes.find(x => x.group === $('#movementDestination')?.value);
+  const src = estado.faccoes.find(x => x.group === movementSourceGroup);
+  const dst = estado.faccoes.find(x => x.group === $('#movementDestination')?.value);
   const reason = $('#movementReason')?.value.trim() || '';
   if(!src || !dst) return;
   if(!reason) return alert('Informe o motivo da operação.');
@@ -10089,7 +10089,7 @@ return records;
 
 }
 function facSheetDiffForRecord(record){
- const current=faccoes.find(f=>facSheetNorm(f.group)===record.key);
+ const current=estado.faccoes.find(f=>facSheetNorm(f.group)===record.key);
 if(!current)return null;
 const patch={...record.patch,
 group:current.group};
@@ -10213,7 +10213,7 @@ const btn=$('#facSheetPushAllBtn');
 if(btn){btn.disabled=true;
 btn.textContent='ENVIANDO...'}try{if(!facSheetAccessToken)await facSheetAuthorize();
 if(!confirm(`Enviar os ${faccoes.length} Groups atuais do High OS para a planilha oficial?\n\nLinhas existentes serão atualizadas pelo Group e Groups ausentes serão adicionados.`))return;
-const ok=await syncGroupsToOfficialSheet(faccoes,{forceAuthorize:true});
+const ok=await syncGroupsToOfficialSheet(estado.faccoes,{forceAuthorize:true});
 if(ok){await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'SYNC_PLANILHA_FACCOES_EXPORT',
 descricao:`Base High OS enviada manualmente para a planilha oficial: ${faccoes.length} Group(s)`,
@@ -10280,7 +10280,7 @@ const prevEnd=new Date(curStart.getTime()-1);
 weekKey=isoDay(curStart),
 out=[];
 
- faccoes.filter(f=>f.status==='ATIVA'&&String(f.faccao||'').trim()).forEach(f=>{
+ estado.faccoes.filter(f=>f.status==='ATIVA'&&String(f.faccao||'').trim()).forEach(f=>{
   const same=r=>alvesNorm(r.group||r.organizacao||r.faccao)===alvesNorm(f.group),
 cur=currentRows.filter(same),
 prev=previousRows.filter(same);if(!cur.length||!prev.length)return;
@@ -10322,7 +10322,7 @@ date:d,
 value:mx,
 row:r})});
 
- return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const f=faccoes.find(z=>alvesNorm(z.group)===alvesNorm(x.group));const lastDelivery=historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
+ return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const f=estado.faccoes.find(z=>alvesNorm(z.group)===alvesNorm(x.group));const lastDelivery=historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
 qg:f?.qg||'',
 staff:f?.staff||'',
 hasExtract:!!lastDelivery};}).sort((a,b)=>b.date-a.date);
@@ -10346,8 +10346,8 @@ function renderCommandDashboard(){
  const box=$('#commandDashboard');
 if(!box)return;
 
- const active=faccoes.filter(f=>f.status==='ATIVA'&&f.faccao),
-vacant=faccoes.filter(f=>f.status!=='ATIVA'||!f.faccao),
+ const active=estado.faccoes.filter(f=>f.status==='ATIVA'&&f.faccao),
+vacant=estado.faccoes.filter(f=>f.status!=='ATIVA'||!f.faccao),
 weekly=weeklyContingentAlerts(),
 visibleWeekly=weekly.filter(x=>x.state!=='LIMPO'),
 openAlerts=visibleWeekly.filter(x=>x.state!=='CONCLUIDO'),
@@ -10358,7 +10358,7 @@ health=dashboardHealth(weekly),
 anomalies=vacantMetricAnomalies();
 
  const segs={};
-faccoes.forEach(f=>{const k=f.segmento||'OUTROS';if(!segs[k])segs[k]={all:0,
+estado.faccoes.forEach(f=>{const k=f.segmento||'OUTROS';if(!segs[k])segs[k]={all:0,
 on:0};segs[k].all++;if(f.status==='ATIVA'&&f.faccao)segs[k].on++});
 
  const movements=historico.slice(0,6),
@@ -10386,7 +10386,7 @@ box.querySelector('[data-open-management]')?.addEventListener('click',()=>{activ
 box.querySelector('[data-open-general-report]')?.addEventListener('click',mgmtOpenRichReport);
 box.querySelectorAll('[data-alert-group]').forEach(b=>b.onclick=()=>openMetricForGroup(b.dataset.alertGroup));
 box.querySelectorAll('[data-alert-state]').forEach(b=>b.onclick=e=>{e.stopPropagation();setDashboardAlertState(b.dataset.group,b.dataset.week,b.dataset.alertState)});
-box.querySelectorAll('[data-anomaly-group]').forEach(b=>b.onclick=()=>{activateAppPage('faccoes');const f=faccoes.find(x=>alvesNorm(x.group)===alvesNorm(b.dataset.anomalyGroup));if(f)openFac(f.id)});
+box.querySelectorAll('[data-anomaly-group]').forEach(b=>b.onclick=()=>{activateAppPage('faccoes');const f=estado.faccoes.find(x=>alvesNorm(x.group)===alvesNorm(b.dataset.anomalyGroup));if(f)openFac(f.id)});
 box.querySelectorAll('[data-clear-anomaly]').forEach(b=>b.onclick=e=>{e.stopPropagation();clearVacantMetricAlert(b.dataset.clearAnomaly,new Date(b.dataset.anomalyDate))});
 
 }
@@ -10526,7 +10526,7 @@ async function persistCurrentTechProfile(group, {reload=true}={}){
 updatedAt:serverTimestamp(),
 updatedBy:currentUser?.email||''},{merge:true});
 
- const local=faccoes.find(x=>x.group===group);
+ const local=estado.faccoes.find(x=>x.group===group);
 
  if(local)local.perfilTecnico=clonePlain(perfilTecnico);
 
@@ -10537,12 +10537,12 @@ updatedBy:currentUser?.email||''},{merge:true});
      const fresh={id:snap.id,
 ...snap.data()};
 
-     const pos=faccoes.findIndex(x=>x.group===group);
+     const pos=estado.faccoes.findIndex(x=>x.group===group);
 
-     if(pos>=0)faccoes[pos]={...faccoes[pos],
+     if(pos>=0)estado.faccoes[pos]={...estado.faccoes[pos],
 ...fresh};
 
-     techDraft=mergedTechProfile(faccoes[pos>=0?pos:faccoes.findIndex(x=>x.group===group)]||fresh);
+     techDraft=mergedTechProfile(estado.faccoes[pos>=0?pos:estado.faccoes.findIndex(x=>x.group===group)]||fresh);
 
    }
  }
@@ -10580,7 +10580,7 @@ insumos=readIngredientEditor();
  if(btn){btn.disabled=true;btn.textContent='SALVANDO...'}
  try{
    if(!group)throw new Error('Group não identificado.');
-   const local=faccoes.find(x=>x.group===group);
+   const local=estado.faccoes.find(x=>x.group===group);
    const oldPerfil=clonePlain(mergedTechProfile(local||{}));
    const perfilTecnico=getTechProfileFromForm();
    const oldRecipe=(oldPerfil?.craft?.receitas||[]).find(x=>craftRecipeKey(x)===craftRecipeKey(r));
@@ -10687,7 +10687,7 @@ f.group||''].filter(Boolean).join(' - ');
 }
 
 async function saveAvailableImageLink(group,input,button){
- const f=faccoes.find(x=>x.group===group);
+ const f=estado.faccoes.find(x=>x.group===group);
 if(!f||!currentUser)return;
 
  const url=String(input?.value||'').trim();
@@ -10722,7 +10722,7 @@ if(button){button.disabled=false;
 button.textContent='SALVAR LINK'}}
 }
 async function saveAvailableContingent(group,card,button){
- const f=faccoes.find(x=>x.group===group);
+ const f=estado.faccoes.find(x=>x.group===group);
 if(!f||!currentUser)return;
 
  const min=Math.max(1,Number(card?.querySelector('.available-cont-min')?.value||15));
@@ -10778,7 +10778,7 @@ renderAvailableSegmentCards();
 seg=$('#availableSegment')?.value||'',
 dc=$('#availableDiscord')?.value||'';
 
- const all=faccoes.filter(f=>f.status!=='ATIVA'||!String(f.faccao||'').trim());
+ const all=estado.faccoes.filter(f=>f.status!=='ATIVA'||!String(f.faccao||'').trim());
 
  const list=all.filter(f=>(!seg||segmentKey(f.segmento)===segmentKey(seg))&&(!q||[f.group,
 f.qg,
@@ -10817,9 +10817,9 @@ ta=card?.querySelector('.available-preview');if(!ta)return;ta.classList.toggle('
 
  box.querySelectorAll('.available-image-input').forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const b=i.closest('.available-image-editor')?.querySelector('.available-save-image');if(b)saveAvailableImageLink(i.dataset.group,i,b)}}));
 
- box.querySelectorAll('.available-copy-text').forEach(b=>b.onclick=()=>{const f=faccoes.find(x=>x.group===b.dataset.group);if(f)copyText(availableAnnouncementText(f),b)});
+ box.querySelectorAll('.available-copy-text').forEach(b=>b.onclick=()=>{const f=estado.faccoes.find(x=>x.group===b.dataset.group);if(f)copyText(availableAnnouncementText(f),b)});
 
- box.querySelectorAll('.available-copy-image').forEach(b=>b.onclick=()=>{const f=faccoes.find(x=>x.group===b.dataset.group);if(f?.imagemAnuncio)copyText(f.imagemAnuncio,b)});
+ box.querySelectorAll('.available-copy-image').forEach(b=>b.onclick=()=>{const f=estado.faccoes.find(x=>x.group===b.dataset.group);if(f?.imagemAnuncio)copyText(f.imagemAnuncio,b)});
 
  box.querySelectorAll('.available-set-posted').forEach(b=>b.onclick=()=>setAvailableDiscordState(b.dataset.group,true));
 
@@ -10827,7 +10827,7 @@ ta=card?.querySelector('.available-preview');if(!ta)return;ta.classList.toggle('
 
 }
 async function setAvailableDiscordState(group,postado){
- const f=faccoes.find(x=>x.group===group);
+ const f=estado.faccoes.find(x=>x.group===group);
 if(!f)return;
 
  if(f.status==='ATIVA'&&String(f.faccao||'').trim())return alert('Este Group está ocupado e não faz parte das facções livres.');
@@ -10869,11 +10869,11 @@ usuario:currentUser.email,
 data:serverTimestamp()});
 await loadFaccoes()}catch(e){alert('Erro ao atualizar status do anúncio: '+e.message)}
 }
-async function toggleAvailablePosted(group){const f=faccoes.find(x=>x.group===group);
+async function toggleAvailablePosted(group){const f=estado.faccoes.find(x=>x.group===group);
 return setAvailableDiscordState(group,!availablePosted(f))}
 
 function freeFaccoesForReport(type='TODAS'){
- const rows=faccoes.filter(f=>!f.removido&&(f.status!=='ATIVA'||!String(f.faccao||'').trim()));
+ const rows=estado.faccoes.filter(f=>!f.removido&&(f.status!=='ATIVA'||!String(f.faccao||'').trim()));
 
  return type==='TODAS'?rows:rows.filter(f=>availableDiscordState(f)===type);
 
@@ -10976,7 +10976,7 @@ boxId:'orgSegmentChips',
 onChange:renderOrganizations})};
 
 function renderAvailableSegmentCards(){
- const rows=faccoes.filter(f=>!f.removido&&(f.status!=='ATIVA'||!String(f.faccao||'').trim()));
+ const rows=estado.faccoes.filter(f=>!f.removido&&(f.status!=='ATIVA'||!String(f.faccao||'').trim()));
 
  renderVisualSegmentFilter({rows,
 field:'segmento',
@@ -11019,14 +11019,14 @@ function renderOrgActivityButtons(){activityButtons('orgStatusButtons','orgStatu
 
 // HIGH OS V8.13 · GERENCIAMENTO DE SEGMENTOS
 function segmentUsage(name){const key=segmentKey(name);
-return {groups:faccoes.filter(f=>segmentKey(f.segmento)===key).length,
+return {groups:estado.faccoes.filter(f=>segmentKey(f.segmento)===key).length,
 orgs:derivedOrganizations().filter(o=>segmentKey(orgSegmentValue(o))===key).length}}
 function refreshSegmentAssignEntities(){
  const type=$('#segmentAssignType')?.value||'GROUP',
 el=$('#segmentAssignEntity');
 if(!el)return;
 
- const rows=type==='GROUP'?faccoes.filter(f=>!f.removido).map(f=>({v:f.group,
+ const rows=type==='GROUP'?estado.faccoes.filter(f=>!f.removido).map(f=>({v:f.group,
 t:`${f.group} • ${f.qg||'SEM LOCAL'} • ${f.segmento||'—'}`})):derivedOrganizations().map(o=>({v:o.nome,
 t:`${o.nome} • ${orgSegmentValue(o)||'SEM SEGMENTO'}`}));
 
@@ -11082,7 +11082,7 @@ if(!nome)return alert('Informe o nome do segmento.');
  try{
   if(oldName){const item=segmentDefs().find(x=>segmentKey(x.nome)===segmentKey(oldName));
 const batch=writeBatch(db);
-faccoes.filter(f=>segmentKey(f.segmento)===segmentKey(oldName)).forEach(f=>batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:nome,
+estado.faccoes.filter(f=>segmentKey(f.segmento)===segmentKey(oldName)).forEach(f=>batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:nome,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true}));
 organizacoes.filter(o=>segmentKey(orgSegmentValue(o))===segmentKey(oldName)).forEach(o=>batch.set(doc(db,'highos','data','organizacoes',o.id||orgKey(o.nome)),{segmentoAtual:nome,
@@ -11124,7 +11124,7 @@ async function assignSegment(){
 entity=$('#segmentAssignEntity')?.value,
 target=$('#segmentAssignTarget')?.value;
 if(!entity||!target)return alert('Selecione o cadastro e o segmento.');
-try{if(type==='GROUP'){const f=faccoes.find(x=>x.group===entity);
+try{if(type==='GROUP'){const f=estado.faccoes.find(x=>x.group===entity);
 if(!f)return;
 await setDoc(doc(db,'highos','data','faccoes',f.group),{segmento:target,
 updatedAt:serverTimestamp(),
@@ -11152,7 +11152,7 @@ if((u.groups||u.orgs)&&!replacement)return alert(`O segmento ${name} está em us
 if(!confirm(`Apagar o segmento ${name}?${replacement?`\n\nTodos os vínculos serão transferidos para ${replacement}.`:''}`))return;
 
  try{if(replacement){const batch=writeBatch(db);
-faccoes.filter(f=>segmentKey(f.segmento)===segmentKey(name)).forEach(f=>batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:replacement,
+estado.faccoes.filter(f=>segmentKey(f.segmento)===segmentKey(name)).forEach(f=>batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:replacement,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true}));
 organizacoes.filter(o=>segmentKey(orgSegmentValue(o))===segmentKey(name)).forEach(o=>batch.set(doc(db,'highos','data','organizacoes',o.id||orgKey(o.nome)),{segmentoAtual:replacement,
@@ -11176,7 +11176,7 @@ Contrabando02:'CONTRABANDO',
 IlegalMedic1:'APOIO',
 IlegalMedic2:'APOIO',
 IlegalMecanic01:'APOIO'};
-const needs=faccoes.filter(f=>rules[f.group]&&segmentKey(f.segmento)!==segmentKey(rules[f.group]));
+const needs=estado.faccoes.filter(f=>rules[f.group]&&segmentKey(f.segmento)!==segmentKey(rules[f.group]));
 if(!needs.length)return;
 try{const batch=writeBatch(db);
 needs.forEach(f=>{const seg=rules[f.group];batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:seg,
@@ -11186,7 +11186,7 @@ segmentoVinculado:seg,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true})});
 await batch.commit();
-faccoes=faccoes.map(f=>rules[f.group]?{...f,
+estado.faccoes=estado.faccoes.map(f=>rules[f.group]?{...f,
 segmento:rules[f.group]}:f);
 await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'SEGMENTOS_PADRAO_V813',
@@ -11217,7 +11217,7 @@ if(!box)return;
  const q=String($('#adminGroupSearch')?.value||'').trim().toLowerCase(),
 status=$('#adminGroupStatus')?.value||'';
 
- const rows=faccoes.filter(f=>!f.removido).filter(f=>{const st=adminGroupStatus(f);if(status&&st!==status)return false;const hay=[f.group,
+ const rows=estado.faccoes.filter(f=>!f.removido).filter(f=>{const st=adminGroupStatus(f);if(status&&st!==status)return false;const hay=[f.group,
 f.qg,
 f.segmento,
 f.faccao,
@@ -11225,28 +11225,28 @@ f.produto,
 f.staff,
 f.lider].join(' ').toLowerCase();return !q||hay.includes(q)});
 
- const occupied=faccoes.filter(f=>!f.removido&&adminGroupStatus(f)==='ATIVA').length,
-total=faccoes.filter(f=>!f.removido).length;
+ const occupied=estado.faccoes.filter(f=>!f.removido&&adminGroupStatus(f)==='ATIVA').length,
+total=estado.faccoes.filter(f=>!f.removido).length;
 
  if(stats)stats.innerHTML=`<article><span>TOTAL</span><b>${total}</b><small>Groups cadastrados</small></article><article><span>OCUPADOS</span><b>${occupied}</b><small>com facção ativa</small></article><article><span>VAGOS</span><b>${total-occupied}</b><small>sem ocupação</small></article><article><span>EXIBIDOS</span><b>${rows.length}</b><small>filtro atual</small></article>`;
 
  box.innerHTML=rows.length?rows.map(f=>`<article class="admin-group-row" data-group="${esc(f.group)}"><div class="admin-group-identity"><b>${esc(f.group||'—')}</b><span>${esc(f.qg||'SEM QG')}</span><small>${esc(f.segmento||'OUTROS')} • ${adminGroupStatus(f)==='ATIVA'?'OCUPADO':'VAGO'}</small></div><div class="admin-group-link"><span>VÍNCULO ATUAL</span><b>${esc(f.faccao||'SEM FACÇÃO')}</b><small>${esc(f.lider||f.staff||'—')}</small></div><div class="admin-group-product"><span>PRODUTO / OPERAÇÃO</span><b>${esc(f.produto||'—')}</b></div><div class="admin-group-actions"><button type="button" class="mini-btn admin-group-full-edit" data-id="${esc(f.id||f.group)}">EDITAR COMPLETO</button><button type="button" class="mini-btn admin-group-rename" data-group="${esc(f.group)}">RENOMEAR</button></div></article>`).join(''):'<div class="dash-empty">Nenhum Group encontrado com esse filtro.</div>';
 
- box.querySelectorAll('.admin-group-full-edit').forEach(b=>b.onclick=()=>{const f=faccoes.find(x=>(x.id||x.group)===b.dataset.id);if(!f)return;activateAppPage('faccoes');openFac(f.id||f.group)});
+ box.querySelectorAll('.admin-group-full-edit').forEach(b=>b.onclick=()=>{const f=estado.faccoes.find(x=>(x.id||x.group)===b.dataset.id);if(!f)return;activateAppPage('faccoes');openFac(f.id||f.group)});
 
  box.querySelectorAll('.admin-group-rename').forEach(b=>b.onclick=()=>renameAdminGroup(b.dataset.group));
 
 }
 async function renameAdminGroup(oldGroup){
  if(!isAdmin())return;
-const current=faccoes.find(f=>alvesNorm(f.group)===alvesNorm(oldGroup));
+const current=estado.faccoes.find(f=>alvesNorm(f.group)===alvesNorm(oldGroup));
 if(!current)return alert('Group não encontrado.');
 
  const nextRaw=prompt(`Novo nome para ${current.group}:`,current.group);
 if(nextRaw===null)return;
 const next=String(nextRaw||'').trim();
 if(!next||next===current.group)return;
-if(faccoes.some(f=>alvesNorm(f.group)===alvesNorm(next)))return alert('Já existe um Group com esse nome.');
+if(estado.faccoes.some(f=>alvesNorm(f.group)===alvesNorm(next)))return alert('Já existe um Group com esse nome.');
 
  if(!confirm(`Renomear o Group ${current.group} para ${next}?\n\nO vínculo da facção ocupante será atualizado. O histórico antigo será preservado.`))return;
 
@@ -11309,13 +11309,13 @@ $('#adminOpenUsersBtn')?.addEventListener('click',()=>activateAppPage('usuarios'
 async function normalizeOccupationStatusV820(){
  const changes=[];
 
- faccoes.forEach(f=>{const active=!!String(f.faccao||'').trim(),
+ estado.faccoes.forEach(f=>{const active=!!String(f.faccao||'').trim(),
 wanted=active?'ATIVA':'INATIVA';if(f.status!==wanted)changes.push({f,
 wanted})});
 
  if(!changes.length)return;
 
- faccoes=faccoes.map(f=>{const hit=changes.find(x=>x.f.group===f.group);return hit?{...f,
+ estado.faccoes=estado.faccoes.map(f=>{const hit=changes.find(x=>x.f.group===f.group);return hit?{...f,
 status:hit.wanted}:f});
 
  if(isAdmin()){
@@ -12003,7 +12003,7 @@ p:grParseCoord(x.raw)}));
 function grFmtPoint(p){return `{ ${Number(p.x).toFixed(2)},${Number(p.y).toFixed(2)},${Number(p.z).toFixed(2)}${Number.isFinite(p.h)?','+Number(p.h).toFixed(2):''} },`}
 function grRouteText(){return grParseRoute($('#grRouteInput')?.value||'').filter(x=>x.p).map(x=>grFmtPoint(x.p)).join('\n')}
 function grCurrent(){const g=$('#fGroup')?.value||'';
-return faccoes.find(x=>x.group===g)||currentFactionFromForm()||{};
+return estado.faccoes.find(x=>x.group===g)||currentFactionFromForm()||{};
 }
 function grSavedPoints(f=grCurrent()){return routePointList(mergedTechProfile(f)?.rota?.pontos||f?.beneficios?.rotaBlips||'').map(grParseCoord).filter(Boolean)}
 function grRequestText(action='auto'){
@@ -12215,7 +12215,7 @@ titulo:old.length?'Atualização de rota de farm exclusiva':'Ativação de rota 
 texto:text},f,'ROTA_EXCLUSIVA');
 grRouteDirty=false;
 await loadFaccoes();
-const fresh=faccoes.find(x=>x.group===group);
+const fresh=estado.faccoes.find(x=>x.group===group);
 if(fresh){renderTechProfile(fresh);
 $('#fRotaExclusiva').checked=true}grShowRequest(old.length?'update':'activate');
 grRenderRouteUi(true);
@@ -12303,14 +12303,14 @@ v9=f?.estruturaCatalogoV9||[];
 const hasMap=!!(v9.some(x=>x.tipo==='QG'&&gsCoord(x.cds))||(t?.estruturaCatalogo||[]).some(x=>x.tipo==='QG'&&gsCoord(x.cds))||gsCoord(f?.perfilOperacional?.qg?.cds||f?.perfilOperacional?.coordenadaPrincipal||f?.beneficios?.coordenadaBase||''));
 return v836Occupied(f)||isRegisteredAvailable(f)||hasMap};
 
- const rows=faccoes.filter(f=>!f.removido&&isOperational(f)&&(!seg||segmentKey(f.segmento)===segmentKey(seg))&&(!st||(st==='ATIVA'?v836Occupied(f):!v836Occupied(f)))&&(!q||[f.group,
+ const rows=estado.faccoes.filter(f=>!f.removido&&isOperational(f)&&(!seg||segmentKey(f.segmento)===segmentKey(seg))&&(!st||(st==='ATIVA'?v836Occupied(f):!v836Occupied(f)))&&(!q||[f.group,
 f.faccao,
 f.qg,
 f.lider,
 f.staff,
 f.produto].join(' ').toLowerCase().includes(q)));
 
- const visibleBase=faccoes.filter(f=>!f.removido&&isOperational(f)),
+ const visibleBase=estado.faccoes.filter(f=>!f.removido&&isOperational(f)),
 occupied=visibleBase.filter(v836Occupied).length,
 total=visibleBase.length,
 free=visibleBase.filter(f=>!v836Occupied(f)).length;
@@ -12337,9 +12337,9 @@ dcText=dc==='POSTADO'?'DIVULGADA':dc==='NAO_POSTADO'?'NÃO POSTADA':'DIVULGAÇÃ
 
  box.querySelectorAll('.unified-delivery').forEach(b=>b.onclick=e=>{e.stopPropagation();openNewDelivery(b.dataset.group)});
 
- box.querySelectorAll('.unified-copy-ad').forEach(b=>b.onclick=e=>{e.stopPropagation();const f=faccoes.find(x=>x.group===b.dataset.group);if(f)copyText(availableAnnouncementText(f),b)});
+ box.querySelectorAll('.unified-copy-ad').forEach(b=>b.onclick=e=>{e.stopPropagation();const f=estado.faccoes.find(x=>x.group===b.dataset.group);if(f)copyText(availableAnnouncementText(f),b)});
 
- box.querySelectorAll('.unified-posted').forEach(b=>b.onclick=e=>{e.stopPropagation();const f=faccoes.find(x=>x.group===b.dataset.group);setAvailableDiscordState(b.dataset.group,availableDiscordState(f)!=='POSTADO')});
+ box.querySelectorAll('.unified-posted').forEach(b=>b.onclick=e=>{e.stopPropagation();const f=estado.faccoes.find(x=>x.group===b.dataset.group);setAvailableDiscordState(b.dataset.group,availableDiscordState(f)!=='POSTADO')});
 
  box.querySelectorAll('.req-from-fac').forEach(b=>b.onclick=e=>{e.stopPropagation();openRequestModal('',b.dataset.group)});
 
@@ -12399,7 +12399,7 @@ usuario:currentUser.email,
 data:serverTimestamp()});
 grRouteDirty=false;
 await loadFaccoes();
-const fresh=faccoes.find(x=>x.group===group);
+const fresh=estado.faccoes.find(x=>x.group===group);
 if(fresh)renderTechProfile(fresh);
 grRenderRouteUi(true);
 alert(`${group} agora utiliza ROTA PADRÃO.`)}catch(e){alert('Erro ao confirmar remoção: '+e.message)}
@@ -12427,7 +12427,7 @@ return _activateAppPageV836(page)};
 
 const _loadFaccoesV836=loadFaccoes;
 loadFaccoes=async function(){await _loadFaccoesV836();
-faccoes.forEach(f=>{const pts=v836RoutePoints(f);if(!pts.length&&f.beneficios){f.beneficios.rotaExclusiva=false;f.beneficios.rotaBlips=''} });
+estado.faccoes.forEach(f=>{const pts=v836RoutePoints(f);if(!pts.length&&f.beneficios){f.beneficios.rotaExclusiva=false;f.beneficios.rotaBlips=''} });
 renderFaccoes();
 renderCommandDashboard?.();
 };
@@ -12539,7 +12539,7 @@ group,
 descricao:`Estrutura administrativa atualizada • ${gsRows().length} itens`,
 usuario:currentUser.email,
 data:serverTimestamp()});
-const local=faccoes.find(x=>x.group===group);
+const local=estado.faccoes.find(x=>x.group===group);
 if(local)local.perfilTecnico=clonePlain(techDraft);
 alert(`Estrutura de ${group} salva com ${gsRows().length} itens.`)}catch(e){alert('Erro ao salvar estrutura: '+e.message)}}
 function gsImportArmas01(){if(String(grCurrent()?.group||'').toUpperCase()!=='ARMAS01')return;
@@ -12849,7 +12849,7 @@ group,
 descricao:description,
 usuario:currentUser.email,
 data:serverTimestamp()});
-const local=faccoes.find(x=>x.group===group);
+const local=estado.faccoes.find(x=>x.group===group);
 if(local)local.perfilTecnico=clonePlain(techDraft);
 return true}catch(e){alert('Erro ao salvar: '+e.message);
 return false}
@@ -13270,7 +13270,7 @@ try{techDraft.estruturaCatalogo=v9Clone(after);
 await setDoc(doc(db,'highos','data','faccoes',group),{perfilTecnico:clonePlain(techDraft),
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true});
-const local=faccoes.find(x=>x.group===group);
+const local=estado.faccoes.find(x=>x.group===group);
 if(local)local.perfilTecnico=clonePlain(techDraft);
 await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'ESTRUTURA_ATUALIZADA',
@@ -13363,12 +13363,12 @@ async function v909CommitStructure(beforeRows, descricao='Estrutura atualizada')
 
   if(JSON.stringify(persisted)!==JSON.stringify(after)) throw new Error('O Firestore não confirmou todas as coordenadas salvas.');
 
-  const pos=faccoes.findIndex(x=>x.group===group);
+  const pos=estado.faccoes.findIndex(x=>x.group===group);
 
-  if(pos>=0) faccoes[pos]={...faccoes[pos],
+  if(pos>=0) estado.faccoes[pos]={...estado.faccoes[pos],
 ...fresh};
 
-  techDraft=mergedTechProfile(pos>=0?faccoes[pos]:fresh);
+  techDraft=mergedTechProfile(pos>=0?estado.faccoes[pos]:fresh);
 
   techDraft.estruturaCatalogo=v9Clone(persisted);
 
@@ -13567,15 +13567,15 @@ async function v9010CommitStructure(beforeRows, descricao='Estrutura atualizada'
 
   if(JSON.stringify(persisted)!==JSON.stringify(after)) throw new Error('O Firestore não confirmou todas as coordenadas salvas.');
 
-  let pos=faccoes.findIndex(x=>x.group===group);
+  let pos=estado.faccoes.findIndex(x=>x.group===group);
 
-  if(pos>=0) faccoes[pos]={...faccoes[pos],
+  if(pos>=0) estado.faccoes[pos]={...estado.faccoes[pos],
 ...fresh,
-id:faccoes[pos].id||fresh.id};
+id:estado.faccoes[pos].id||fresh.id};
 
-  else {faccoes.push(fresh);
-pos=faccoes.length-1}
-  techDraft=mergedTechProfile(faccoes[pos]);
+  else {estado.faccoes.push(fresh);
+pos=estado.faccoes.length-1}
+  techDraft=mergedTechProfile(estado.faccoes[pos]);
 
   techDraft.estruturaCatalogo=v9Clone(persisted);
 
@@ -13653,7 +13653,7 @@ if(!x.length)return 0;
 const m=Math.floor(x.length/2);
 return x.length%2?x[m]:(x[m-1]+x[m])/2}
 function mgmtBuild(){
- const occupied=faccoes.filter(f=>f.status==='ATIVA'&&String(f.faccao||'').trim());
+ const occupied=estado.faccoes.filter(f=>f.status==='ATIVA'&&String(f.faccao||'').trim());
 
  const base=occupied.map(f=>{const w=mgmtPeriodStats(f.group,7),
 wp=mgmtPeriodStats(f.group,7,7),
@@ -13858,7 +13858,7 @@ if(g.includes('ilegalmec')||g.includes('ilegalmedic'))return 'APOIO';
 return 'OUTROS';
 
 }
-function orgV92Rows(){return faccoes.filter(f=>!f.removido).map(f=>({...f,
+function orgV92Rows(){return estado.faccoes.filter(f=>!f.removido).map(f=>({...f,
 __orgStatus:orgV92Status(f),
 __orgSegment:orgV92Segment(f)}))}
 function orgV92Audit(rows=[]){
