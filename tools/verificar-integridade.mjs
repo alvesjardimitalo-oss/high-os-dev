@@ -89,15 +89,26 @@ if (!fs.existsSync(REFERENCIA)) {
 
 const referencia = JSON.parse(fs.readFileSync(REFERENCIA, 'utf8'));
 console.log('');
+// Uma função que saiu de um arquivo e apareceu em outro foi MOVIDA, não perdida.
+// Sem essa distinção, toda modularização era reprovada por engano.
+const todasAgora = new Set(Object.values(atual).flat());
+
 for (const rel of ARQUIVOS) {
   const antes = new Set(referencia[rel] || []);
   const agora = new Set(atual[rel] || []);
-  const sumiram = [...antes].filter(f => !agora.has(f));
+  const foram = [...antes].filter(f => !agora.has(f));
+  const sumiram = foram.filter(f => !todasAgora.has(f));
+  const movidas = foram.filter(f => todasAgora.has(f));
   const novas = [...agora].filter(f => !antes.has(f));
+
   if (sumiram.length) {
-    console.log(vermelho(`${rel}: ${sumiram.length} função(ões) SUMIRAM`));
+    console.log(vermelho(`${rel}: ${sumiram.length} função(ões) SUMIRAM do projeto`));
     sumiram.forEach(f => console.log(vermelho(`  - ${f}`)));
     erros += sumiram.length;
+  }
+  if (movidas.length) {
+    const onde = f => ARQUIVOS.find(r => (atual[r] || []).includes(f)) || '?';
+    console.log(`${rel}: ${movidas.length} movida(s) — ${movidas.map(f => `${f} → ${onde(f)}`).join(', ')}`);
   }
   if (novas.length) console.log(`${rel}: ${novas.length} função(ões) nova(s): ${novas.join(', ')}`);
 }

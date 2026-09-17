@@ -24,6 +24,8 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
+import { estado } from './modules/estado.js';
+import { esc, alvesNorm, fmtDuration, fmtDateMs, fmtMoneyMaybe } from './modules/formatadores.js';
 import { definirGroupsConhecidos, normalizeMetricDate, parseMetricNumber, normalizeMetricSlotKey, metricSlotLabel, metricGroupLabel, parseMetricSheet, parseCsvRows } from './modules/metricas-parser.js';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
@@ -1094,13 +1096,35 @@ async function login(){try{await signInWithPopup(auth,provider)}catch(e){alert('
 const SESSION_MAX_MS=8*60*60*1000;
 
 function sessionStorageKey(email=''){return 'highos_session_'+String(email||'').toLowerCase()}
+
+/* ---------------------------------------------------------------------
+   V10.6 - Duas abas abertas juntas liam o localStorage vazio ao mesmo
+   tempo e cada uma criava a sua sessao. O historico ficou cheio de pares
+   de SESSION START no mesmo minuto e o painel de saude contava o dobro
+   de sessoes abertas.
+
+   Agora existe uma reserva: a aba grava uma intencao com o proprio id e
+   espera um instante; se outra aba reservou antes, esta adota a sessao
+   da primeira em vez de abrir outra.
+--------------------------------------------------------------------- */
+const TAB_ID=Math.random().toString(36).slice(2)+Date.now().toString(36);
+function reservaKey(email=''){return 'highos_session_claim_'+String(email||'').toLowerCase()}
+function esperar(ms){return new Promise(r=>setTimeout(r,ms))}
+
+async function reservarSessao(email){
+ const chave=reservaKey(email),agora=Date.now();
+ let atual=null;
+ try{atual=JSON.parse(localStorage.getItem(chave)||'null')}catch(e){}
+ // reserva de outra aba, feita ha menos de 10s: deixa ela criar
+ if(atual&&atual.tab!==TAB_ID&&agora-Number(atual.em||0)<10000)return false;
+ try{localStorage.setItem(chave,JSON.stringify({tab:TAB_ID,em:agora}))}catch(e){return true}
+ await esperar(180);   // janela para outra aba se manifestar
+ let confirmada=null;
+ try{confirmada=JSON.parse(localStorage.getItem(chave)||'null')}catch(e){}
+ return !confirmada||confirmada.tab===TAB_ID;
+}
 function makeSessionId(email=''){return `${Date.now()}_${String(email||'user').replace(/[^a-z0-9]/gi,'_')}_${Math.random().toString(36).slice(2,8)}`}
-function fmtDuration(ms=0){ms=Math.max(0,Number(ms)||0);
-const total=Math.floor(ms/1000),
-h=Math.floor(total/3600),
-m=Math.floor((total%3600)/60),
-sec=total%60;
-return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`}
+
 function sessionMeta(){return {sessionId:currentSessionId,
 sessionStart:currentSessionStart||0}}
 async function closeCurrentSession(reason='LOGOUT'){
@@ -1144,9 +1168,20 @@ now=Date.now();
 let saved=null;
 
  try{saved=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
- if(saved?.id&&saved?.start&&now-saved.start<SESSION_MAX_MS){currentSessionId=saved.id;
-currentSessionStart=Number(saved.start)||now;
-}
+ if(saved?.id&&saved?.start&&now-saved.start<SESSION_MAX_MS){currentSessionId=saved.id;currentSessionStart=Number(saved.start)||now;}
+ else if(!(await reservarSessao(email))){
+  // outra aba esta criando a sessao agora: aguarda e adota a dela
+  await esperar(900);
+  let dela=null;
+  try{dela=JSON.parse(localStorage.getItem(key)||'null')}catch(e){}
+  if(dela?.id&&dela?.start){
+   currentSessionId=dela.id;currentSessionStart=Number(dela.start)||now;
+   startSessionClock(email);
+   return;
+  }
+  currentSessionId=makeSessionId(email);currentSessionStart=now;
+  try{localStorage.setItem(key,JSON.stringify({id:currentSessionId,start:currentSessionStart,email}))}catch(e){}
+ }
  else{
   if(saved?.id&&saved?.start&&now-saved.start>=SESSION_MAX_MS){try{await setDoc(doc(db,'highos','data','sessoes_usuario',saved.id),{status:'ENCERRADA',
 endAtText:new Date(saved.start+SESSION_MAX_MS).toISOString(),
@@ -1358,7 +1393,23 @@ function permissionDeniedMessage(module,edit=false){const label=SYSTEM_MODULES.f
 alert(edit?`Seu acesso a ${label} é somente para visualização.\n\nSolicite a um ADMIN permissão de edição.`:`Você não possui acesso ao módulo ${label}.`)}
 document.addEventListener('click',e=>{const nav=e.target.closest?.('.nav-item[data-page]');if(nav&&!nav.classList.contains('admin-only')&&!canViewModule(nav.dataset.page)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(nav.dataset.page,false);return}const b=e.target.closest?.('button');if(!b||isAdmin())return;const mod=moduleForElement(b);if(mutationButton(b)&&!canEditModule(mod)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(mod,true)}},true);
 
-document.addEventListener('submit',e=>{if(isAdmin())return;const mod=moduleForElement(e.target);if(!canEditModule(mod)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(mod,true)}},true);
+/* V10.6 - a faixa avisava que nada seria gravado, mas os botoes seguiam
+   clicaveis: o usuario clicava, o Firestore recusava em silencio e ele
+   achava que tinha salvo. */
+document.addEventListener('click',e=>{
+ if(!window.HighOSOffline?.ativo)return;
+ const b=e.target.closest?.('button');
+ if(!b||!mutationButton(b))return;
+ e.preventDefault();e.stopImmediatePropagation();
+ window.highToast?.('Modo local ativo: o Firebase não está respondendo, então nada pode ser gravado agora. Use TENTAR DE NOVO na faixa amarela.','warn');
+},true);
+document.addEventListener('submit',e=>{
+ if(window.HighOSOffline?.ativo){
+  e.preventDefault();e.stopImmediatePropagation();
+  window.highToast?.('Modo local ativo: gravação indisponível.','warn');
+  return;
+ }
+ if(isAdmin())return;const mod=moduleForElement(e.target);if(!canEditModule(mod)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(mod,true)}},true);
 
 /* =====================================================================
    HIGH OS V9.8 - LEITURA DO CADASTRO COM DIAGNOSTICO
@@ -1530,11 +1581,6 @@ return}
 document.querySelectorAll('.req-from-fac').forEach(b=>b.onclick=(e)=>{e.stopPropagation();openRequestModal('',b.dataset.group)});
 
 }
-const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;',
-'<':'&lt;',
-'>':'&gt;',
-'"':'&quot;',
-"'":'&#39;'}[m]));
 
 /* =====================================================================
    HIGH OS V9.4.1 - CAMADA DE RESILIENCIA DO FIRESTORE
@@ -1561,18 +1607,21 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;',
    ===================================================================== */
 /* Qualquer gravacao limpa a janela de cache: assim uma tela nunca mostra
    dado velho logo depois de salvar. */
-const setDoc=(...a)=>{cacheMemoria.clear();
-return _setDoc(...a)};
-
-const addDoc=(...a)=>{cacheMemoria.clear();
-return _addDoc(...a)};
-
-const deleteDoc=(...a)=>{cacheMemoria.clear();
-return _deleteDoc(...a)};
+/* V10.6 - o painel mostrava so as gravacoes de metricas sob o rotulo
+   "GRAVACOES", subestimando o consumo real. Agora toda escrita conta. */
+let firestoreWriteCount=0;
+const setDoc=(...a)=>{cacheMemoria.clear();firestoreWriteCount++;return _setDoc(...a)};
+const addDoc=(...a)=>{cacheMemoria.clear();firestoreWriteCount++;return _addDoc(...a)};
+const deleteDoc=(...a)=>{cacheMemoria.clear();firestoreWriteCount++;return _deleteDoc(...a)};
 
 const writeBatch=(...a)=>{const b=_writeBatch(...a);
 const commit=b.commit.bind(b);
+let n=0;
+['set','update','delete'].forEach(op=>{const orig=b[op].bind(b);
+b[op]=(...args)=>{n++;
+return orig(...args)}});
 b.commit=()=>{cacheMemoria.clear();
+firestoreWriteCount+=n||1;
 return commit()};
 return b};
 
@@ -3659,7 +3708,7 @@ function auditModule(tipo=''){
 function auditTarget(h){return [h.group,h.faccao,h.usuarioAlvo,h.segmento,h.alvo].filter(Boolean).join(' • ')||'—'}
 function sessionStartMs(x){const d=x?.startAt;try{if(d?.toDate)return d.toDate().getTime();if(d?.seconds)return d.seconds*1000;if(x?.startAtText)return new Date(x.startAtText).getTime()}catch(e){}return 0}
 function sessionEndMs(x){const d=x?.endAt;try{if(d?.toDate)return d.toDate().getTime();if(d?.seconds)return d.seconds*1000;if(x?.endAtText)return new Date(x.endAtText).getTime()}catch(e){}return 0}
-function fmtDateMs(ms){return ms?new Date(ms).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'}
+
 function sessionActions(sess){return historico.filter(h=>h.sessionId===sess.sessionId&&!['SESSION_START','SESSION_END'].includes(String(h.tipo||'').toUpperCase())).sort((a,b)=>(historyDateValue(a)?.getTime()||0)-(historyDateValue(b)?.getTime()||0))}
 function sessionEffectiveEnd(sess){const end=sessionEndMs(sess);if(end)return end;if(sess.sessionId===currentSessionId)return Date.now();const last=sessionActions(sess).map(h=>historyDateValue(h)?.getTime()||0).filter(Boolean).pop();return last||Number(sess.lastActivityText?new Date(sess.lastActivityText).getTime():0)||sessionStartMs(sess)}
 function sessionDuration(sess){return Math.min(SESSION_MAX_MS,Math.max(0,Number(sess.durationMs)||sessionEffectiveEnd(sess)-sessionStartMs(sess)))}
@@ -3852,7 +3901,7 @@ function renderSaudeSistema(){
  const box=document.getElementById('adminSaude');
  if(!box)return;
 
- const leituras=metricReadCount(), gravacoes=metricWriteCount;
+ const leituras=metricReadCount(), gravacoes=Math.max(firestoreWriteCount,metricWriteCount);
  const pctL=Math.min(100,Math.round(leituras/50000*100));
 
  const origem=metricOrigem==='PLANILHA'?'Planilha (0 leituras)'
@@ -4681,6 +4730,24 @@ img.src=e.imagemDataUrl||'';
 meta.innerHTML=`<span><b>${esc(e.group||h.group||'—')}</b> • ${esc(e.faccao||h.faccao||'—')}</span><span>${esc(h.motivoLabel||recollectReasonLabel(e.motivo)||'Recolhimento')} • ${esc(h.dataRecolhimento||'')}</span>`}catch(err){meta.textContent='Não foi possível abrir a evidência: '+err.message}}
 $('#recollectEvidenceClose')?.addEventListener('click',()=>$('#recollectEvidenceModal')?.classList.add('hidden'));
 
+/* ---------------------------------------------------------------------
+   V10.6 - Com a paginacao, o campo de busca passou a filtrar apenas os
+   registros ja carregados, dando a impressao de que nao havia mais nada.
+   Agora, quando ha termo digitado, o rodape explica o alcance e oferece
+   varrer o historico inteiro pagina a pagina.
+--------------------------------------------------------------------- */
+async function buscarHistoricoCompleto(termo){
+ const botao=document.getElementById('historyDeepBtn');
+ if(botao){botao.disabled=true;botao.textContent='VARRENDO...'}
+ let voltas=0;
+ while(!historyEsgotado&&voltas<20){
+  voltas++;
+  if(botao)botao.textContent=`VARRENDO... (${historico.length} lidos)`;
+  await loadHistory({append:true});
+ }
+ window.highToast?.(`Varredura concluída: ${historico.length} registro(s) no total.`,'ok');
+ renderHistory();
+}
 function renderHistoryFooter(){
  const lista=$('#historyList');
 if(!lista)return;
@@ -4692,8 +4759,15 @@ if(!lista)return;
  box.id='historyMore';
 box.className='history-more';
 
+ const termo=($('#historySearch')?.value||'').trim();
+ if(termo&&!historyEsgotado){
+  box.innerHTML=`<span><b>Atenção:</b> a busca por "${esc(termo)}" cobre apenas os ${historico.length} registros já carregados. Podem existir outros mais antigos.</span>`+
+   `<button type="button" id="historyDeepBtn">BUSCAR EM TODO O HISTÓRICO</button>`;
+  document.getElementById('historyDeepBtn')?.addEventListener('click',()=>buscarHistoricoCompleto(termo));
+  return;
+ }
  box.innerHTML=historyEsgotado
-  ? `<span>${historico.length} registro(s) — fim do histórico${historyModoLegado?' (leitura completa)':''}.</span>`
+  ? `<span>${historico.length} registro(s) — ${termo?'busca feita sobre o histórico completo.':`fim do histórico${historyModoLegado?' (leitura completa)':''}.`}</span>`
   : `<span>${historico.length} registro(s) carregados</span><button type="button" id="historyMoreBtn">CARREGAR MAIS ${HISTORY_PAGE}</button>`;
 
  lista.insertAdjacentElement('afterend',box);
@@ -4767,7 +4841,7 @@ await loadOrganizations()};
 // ===== HIGH OS V5.2 · PERFIL PADRÃO DE ENTREGA POR GROUP =====
 
 // ===== HIGH OS V5.4 · ALVESINHO OPERACIONAL =====
-function alvesNorm(v=''){return String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
+
 function alvesFindGroup(text=''){
  const n=alvesNorm(text);
 return faccoes.find(f=>n.includes(alvesNorm(f.group)))||faccoes.find(f=>n.includes(alvesNorm(f.qg||''))&&String(f.qg||'').length>2)||null;
@@ -4922,8 +4996,7 @@ q=input.value;input.value='';askAlvesinho(q)});
 document.querySelectorAll('#alvesQuick [data-q]').forEach(b=>b.addEventListener('click',()=>askAlvesinho(b.dataset.q)));
 
 // ===== HIGH OS V5.8 · PARSER DA PLANILHA OFICIAL + GOOGLE SHEETS SOMENTE LEITURA =====
-let metricas=[],
-metricasCache=[],
+let 
 metricPeriodKey='',
 metricDateStart='',
 metricDateEnd='',
@@ -5012,9 +5085,9 @@ function activeMetricRows(){
 
  if(metricDateStart||metricDateEnd){const a=parseIsoMetricDate(metricDateStart),
 b=parseIsoMetricDate(metricDateEnd);
-return metricas.filter(m=>{const d=metricDateValue(m);return occupied(m)&&(!a||d>=a)&&(!b||d<=new Date(b.getFullYear(),b.getMonth(),b.getDate(),23,59,59))})}
+return estado.metricas.filter(m=>{const d=metricDateValue(m);return occupied(m)&&(!a||d>=a)&&(!b||d<=new Date(b.getFullYear(),b.getMonth(),b.getDate(),23,59,59))})}
  const key=metricPeriodKey||currentMetricMonthKey();
-return metricas.filter(m=>occupied(m)&&metricMonthKey(m)===key)
+return estado.metricas.filter(m=>occupied(m)&&metricMonthKey(m)===key)
 }
 function metricActivePeriodLabel(){if(metricDateStart||metricDateEnd){const f=x=>{const d=parseIsoMetricDate(x);
 return d?d.toLocaleDateString('pt-BR'):'…'};
@@ -5028,7 +5101,7 @@ function refreshMetricPeriodOptions(){
  const el=$('#metricPeriod');
 if(!el)return;
 const current=currentMetricMonthKey();
-const keys=[...new Set(metricas.map(metricMonthKey).filter(Boolean))].sort().reverse();
+const keys=[...new Set(estado.metricas.map(metricMonthKey).filter(Boolean))].sort().reverse();
 if(!keys.includes(current))keys.unshift(current);
 if(!metricPeriodKey)metricPeriodKey=current;
 if(!keys.includes(metricPeriodKey))metricPeriodKey=current;
@@ -5222,7 +5295,7 @@ renderMetricSourceStatus();
 
  try{const result=await readMetricsDirect({authorize});
 const rows=result.rows.map(metricSnapshot);
-metricas=rows;
+estado.metricas=rows;
 metricPeriodKey=currentMetricMonthKey();
 metricSourceState={status:'ONLINE',
 lastSync:Date.now(),
@@ -5236,7 +5309,7 @@ renderMetrics();
 if(persist)await persistMetricRows(rows,result.sheet);
 if(!quiet)alert(`${rows.length} registro(s) históricos lidos da aba ${result.sheet}. Exibindo ${activeMetricRows().length} registro(s) de ${metricPeriodLabel(metricPeriodKey)}. A planilha não foi alterada.`);
 return true
- }catch(e){metricas=metricasCache.slice();
+ }catch(e){estado.metricas=estado.metricasCache.slice();
 if(e.message==='AUTORIZAÇÃO NECESSÁRIA'){metricSourceState={...metricSourceState,
 status:'AGUARDANDO',
 error:''};
@@ -5326,10 +5399,10 @@ async function persistMetricRows(rows,sheet='',{jaFiltrado=false}={}){
  if(metricQuotaBlocked)return {gravadas:0,
 bloqueado:true};
 
- const pendentes=jaFiltrado?rows:metricRowsPendentes(rows,metricasCache);
+ const pendentes=jaFiltrado?rows:metricRowsPendentes(rows,estado.metricasCache);
 
  if(!pendentes.length){
-  metricasCache=rows.slice();
+  estado.metricasCache=rows.slice();
 
   return {gravadas:0,
 bloqueado:false};
@@ -5366,7 +5439,7 @@ data:serverTimestamp()});
 
   metricWriteCount++;
 
-  metricasCache=rows.slice();
+  estado.metricasCache=rows.slice();
 
   renderMetricQuotaPanel();
 
@@ -5386,10 +5459,10 @@ erro:e?.message||String(e)};
 function applyMetricSnapshot(qs,{realtime=false}={}){
  const previousKey=metricPeriodKey||currentMetricMonthKey();
 
- metricasCache=qs.docs.map(d=>({id:d.id,
+ estado.metricasCache=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
 
- metricas=metricasCache.slice();
+ estado.metricas=estado.metricasCache.slice();
 
  metricPeriodKey=previousKey;
 
@@ -5397,7 +5470,7 @@ function applyMetricSnapshot(qs,{realtime=false}={}){
 metricSourceState={...metricSourceState,
 status:'ONLINE',
 lastSync:metricLiveLastAt,
-count:metricas.length,
+count:estado.metricas.length,
 activeCount:activeMetricRows().length,
 error:''}}
  refreshMetricPeriodOptions();
@@ -5613,12 +5686,20 @@ async function salvarEspelhoMensal(rows=[],sheet=''){
  for(const [mes,
 linhas] of porMes){
   const assinatura=assinaturaMes(linhas);
-
+  /* V10.6 - a assinatura vivia so no localStorage do navegador. Se o
+     documento do espelho fosse apagado no Firestore, este navegador
+     continuaria achando que estava sincronizado e nunca regravaria.
+     Agora a fonte da verdade e o proprio documento; o cache local
+     apenas evita a leitura quando ele ja confirma o valor. */
   let anterior='';
-
   try{anterior=localStorage.getItem('highos_metric_sig_'+mes)||''}catch(e){}
-  if(anterior===assinatura)continue;
-               // nada mudou nesse mes
+  if(anterior===assinatura){
+   try{
+    const atual=await getDoc(doc(metricMonthCol,mes));
+    statBump('metricas_mensais','leituras');statBump('metricas_mensais','docs',1);
+    if(atual.exists()&&String(atual.data()?.assinatura||'')===assinatura)continue;
+   }catch(e){ /* na duvida, regrava */ }
+  }
   try{
    await setDoc(doc(metricMonthCol,mes),{
     mes,
@@ -5705,9 +5786,9 @@ out;
 function aplicarLinhasMetricas(rows=[],origem=''){
  metricOrigem=origem;
 
- metricasCache=rows.slice();
+ estado.metricasCache=rows.slice();
 
- metricas=rows.slice();
+ estado.metricas=rows.slice();
 
  metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
 
@@ -5777,8 +5858,8 @@ startMetricRealtime();
 
   metricOrigem='COLECAO_ANTIGA';
 
- }catch(e){metricasCache=[];
-metricas=[]}
+ }catch(e){estado.metricasCache=[];
+estado.metricas=[]}
  refreshMetricPeriodOptions();
 renderMetrics();
 renderMetricSourceStatus();
@@ -6257,7 +6338,7 @@ function boletimTotalLinha(row){
 /* Agrega por Group dentro de uma janela de datas. */
 function boletimAgregar(inicio,fim){
  const mapa=new Map();
- for(const row of (metricas||[])){
+ for(const row of (estado.metricas||[])){
   const d=boletimParseData(row.data);
   if(!d||d<inicio||d>fim)continue;
   const nome=String(row.group||row.organizacao||'').trim();
@@ -6727,7 +6808,7 @@ async function saveMetricImport(){
 if(!rows.length){alert('Nenhuma linha válida. Use um cabeçalho como: Group;Data;18:00;18:30;19:00;...');
 return}
  try{const batch=writeBatch(db);
-rows.forEach(r=>{const existing=metricas.find(x=>alvesNorm(x.group||'')===alvesNorm(r.group)&&normalizeMetricDate(x.data||x.date)===normalizeMetricDate(r.data));r={...r,
+rows.forEach(r=>{const existing=estado.metricas.find(x=>alvesNorm(x.group||'')===alvesNorm(r.group)&&normalizeMetricDate(x.data||x.date)===normalizeMetricDate(r.data));r={...r,
 slots:{...metricSlots(existing||{}),
 ...r.slots}};r=metricSnapshot(r);const id=(r.group+'_'+r.data).replace(/[^a-zA-Z0-9_-]/g,'_');batch.set(doc(db,'highos','data','metricas',id),{...r,
 updatedAt:serverTimestamp(),
@@ -6958,7 +7039,7 @@ async function recoverMetricsAutomatically({quiet=true}={}){
 
  /* V9.6 - antes lia a colecao inteira aqui e DE NOVO depois de gravar.
     Agora usa a copia que ja esta em memoria (carregada no loadMetrics). */
- let fireRows=metricasCache.slice();
+ let fireRows=estado.metricasCache.slice();
 
  if(!fireRows.length){
   const qs=await metricTimeout(getDocsCached(metricCol,'metricas',{ttl:120000}),12000,'leitura do Firestore');
@@ -6993,9 +7074,9 @@ diff=compareMetricSources(sheetRows,fireRows);
  }
  /* V9.6 - nada de reler a colecao: a planilha ja e a versao mais nova,
     entao aplicamos localmente e economizamos N leituras por ciclo. */
- metricasCache=sheetRows.slice();
+ estado.metricasCache=sheetRows.slice();
 
- metricas=sheetRows.slice();
+ estado.metricas=sheetRows.slice();
 
  metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
 
@@ -7004,12 +7085,12 @@ renderMetrics();
 renderMetricQuotaPanel();
 
  const sheetLast=metricLatestInfo(sheetRows),
-fireLast=metricLatestInfo(metricas);
+fireLast=metricLatestInfo(estado.metricas);
 
  metricSourceState={...metricSourceState,
 status:'ONLINE',
 lastSync:Date.now(),
-count:metricas.length,
+count:estado.metricas.length,
 activeCount:activeMetricRows().length,
 error:'',
 sheet:result.sheet,
@@ -7167,10 +7248,7 @@ renderMarket()}catch(e){mercadoCatalogo=[];
 mercadoStatus='INDISPONÍVEL';
 renderMarket(e)}
 }
-function fmtMoneyMaybe(v){if(v===''||v==null)return '—';
-if(typeof v==='number')return '$'+v.toLocaleString('pt-BR');
-const n=Number(String(v).replace(/[^0-9,.-]/g,'').replace('.','').replace(',','.'));
-return Number.isFinite(n)&&n?('$'+n.toLocaleString('pt-BR')):String(v)}
+
 function marketFind(question=''){const n=alvesNorm(question);
 return mercadoCatalogo.filter(x=>n.includes(alvesNorm(x.__name))||alvesNorm(x.__name).includes(n)).sort((a,b)=>b.__name.length-a.__name.length)[0]||null}
 function renderMarket(err){
@@ -10194,9 +10272,9 @@ prevStart=new Date(curStart);
 prevStart.setDate(prevStart.getDate()-7);
 const prevEnd=new Date(curStart.getTime()-1);
 
- const currentRows=metricasCache.filter(r=>{const d=metricDateValue(r);return d&&d>=curStart&&d<=now});
+ const currentRows=estado.metricasCache.filter(r=>{const d=metricDateValue(r);return d&&d>=curStart&&d<=now});
 
- const previousRows=metricasCache.filter(r=>{const d=metricDateValue(r);return d&&d>=prevStart&&d<=prevEnd});
+ const previousRows=estado.metricasCache.filter(r=>{const d=metricDateValue(r);return d&&d>=prevStart&&d<=prevEnd});
 
  const cfg=dashboardConfig||DEFAULT_DASHBOARD_CONFIG,
 weekKey=isoDay(curStart),
@@ -10237,7 +10315,7 @@ function vacantMetricAnomalies(){
  const cutoff=new Date();
 cutoff.setDate(cutoff.getDate()-7);
 const by=new Map();
-metricasCache.forEach(r=>{const g=String(r.group||r.organizacao||r.faccao||'').trim(),
+estado.metricasCache.forEach(r=>{const g=String(r.group||r.organizacao||r.faccao||'').trim(),
 d=metricDateValue(r);if(!g||!d||d<cutoff||metricGroupOccupied(g))return;const vals=Object.values(metricSlots(r)).map(Number).filter(Number.isFinite),
 mx=vals.length?Math.max(...vals):0;if(mx<=0)return;const cur=by.get(alvesNorm(g));if(!cur||d>cur.date)by.set(alvesNorm(g),{group:g,
 date:d,
@@ -13546,7 +13624,7 @@ function mgmtStart(days,offset=0){const d=new Date();
 d.setHours(0,0,0,0);
 d.setDate(d.getDate()-offset-days+1);
 return d}
-function mgmtRowsFor(group,start,end){return metricas.filter(m=>alvesNorm(m.group||m.organizacao||m.faccao)===alvesNorm(group)&&metricDateValue(m)>=start&&metricDateValue(m)<=end)}
+function mgmtRowsFor(group,start,end){return estado.metricas.filter(m=>alvesNorm(m.group||m.organizacao||m.faccao)===alvesNorm(group)&&metricDateValue(m)>=start&&metricDateValue(m)<=end)}
 function mgmtPeriodStats(group,days,offset=0){const start=mgmtStart(days,offset),
 end=new Date();
 end.setHours(23,59,59,999);
