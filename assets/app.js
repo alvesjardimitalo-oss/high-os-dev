@@ -24,6 +24,8 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 
+import { definirGroupsConhecidos, normalizeMetricDate, parseMetricNumber, normalizeMetricSlotKey, metricSlotLabel, metricGroupLabel, parseMetricSheet, parseCsvRows } from './modules/metricas-parser.js';
+
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
 authDomain:'high-os.firebaseapp.com',
 projectId:'high-os',
@@ -1501,7 +1503,7 @@ async function loadFaccoes(){
 faccoes=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
 faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
-renderFaccoes();
+renderFaccoes();definirGroupsConhecidos(faccoes);
 renderAvailableFaccoes()}catch(e){$('#facList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${e.message}</p></div>`}
 }
 function renderFaccoes(){
@@ -4959,17 +4961,7 @@ return new Date(y,+br[2]-1,+br[1])}
 return isNaN(d)?new Date(0):d;
 
 }
-function normalizeMetricSlotKey(v=''){
- const x=String(v??'').trim().toUpperCase().replace(/\s+/g,'');
 
- let m=x.match(/^(\d{1,2})(?::(\d{2}))?H?$/);
-if(!m)return '';
-let h=+m[1],
-min=m[2]===undefined?0:+m[2];
-if(h>23||min>59)return '';
-return min===0?`${String(h).padStart(2,'0')}H`:`${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`;
-
-}
 function metricSlotMinutes(k=''){const x=String(k).toUpperCase();
 let m=x.match(/^(\d{1,2})H$/);
 if(m)return +m[1]*60;
@@ -5176,165 +5168,7 @@ if(m)return m[1];
 
 }
 function a1SheetName(name=''){return `'${String(name).replace(/'/g,"''")}'`}
-function normalizeMetricDate(v){
- const x=String(v??'').trim();
-if(!x)return '';
 
- let m=x.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-if(m){let y=+m[3];
-if(y<100)y+=2000;
-return `${String(+m[1]).padStart(2,'0')}/${String(+m[2]).padStart(2,'0')}/${y}`}
- m=x.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-if(m)return `${String(+m[3]).padStart(2,'0')}/${String(+m[2]).padStart(2,'0')}/${m[1]}`;
-
- return '';
-
-}
-function parseMetricNumber(v){if(v===null||v===undefined||String(v).trim()==='')return null;
-const n=Number(String(v).replace(/\s/g,'').replace(',','.'));
-return Number.isFinite(n)?n:null}
-function metricSlotLabel(v){return normalizeMetricSlotKey(v)}
-function metricGroupLabel(v){
- const raw=String(v??'').trim();
-if(!raw)return '';
-
- const n=alvesNorm(raw).replace(/\s+/g,'');
-
- const known=(faccoes||[]).find(f=>alvesNorm(f.group).replace(/\s+/g,'')===n);
-if(known)return known.group;
-
- const compact=raw.replace(/\s+/g,'');
-
- if(/^(ARMAS|MUNI[CÇ][AÃ]O|MUNICAO|LAVAGEM|DROGAS|DESMANCHE|CONTRABANDO|ESTELIONATARIOS|ILEGALMEDIC|ILEGALMECHANIC)0*\d+$/i.test(compact))return compact.replace(/^MUNI[CÇ][AÃ]O/i,'Municao');
-
- if(/^(VANILLA|MANICOMIO)$/i.test(compact))return compact;
-
- return '';
-
-}
-function parseMetricSheet(values=[]){
- if(!Array.isArray(values)||!values.length)return [];
-
- /* V9.7.4 - parser dirigido pela linha de DATAS.
-    A planilha oficial possui blocos mensais repetidos e setembro aparece duas vezes
-    (um bloco preenchido e outro vazio). Nao usamos mais a deteccao de cabecalho para
-    delimitar o bloco: uma linha com varias datas e a ancora; a linha seguinte e o
-    cabecalho e as linhas seguintes sao os Groups ate a proxima linha de datas. */
- const scanLimit=Math.min(values.length,600),
- dateBlocks=[];
-
- for(let r=0;r<scanLimit;r++){
-  const row=values[r]||[],
- anchors=[];
-
-  for(let c=0;c<row.length;c++){const d=normalizeMetricDate(row[c]);
-if(d)anchors.push({c,
-d})}
-  // Um bloco mensal real tem muitas datas. >=7 evita datas soltas de outras tabelas.
-  if(anchors.length>=7)dateBlocks.push({dateRowIndex:r,
-anchors});
-
- }
- if(!dateBlocks.length)return [];
-
- const candidates=[];
-
- for(let b=0;b<dateBlocks.length;b++){
-  const block=dateBlocks[b],
- dateRowIndex=block.dateRowIndex;
-
-  const headerIndex=dateRowIndex+1;
-
-  const nextDateRow=dateBlocks[b+1]?.dateRowIndex??values.length;
-
-  const header=values[headerIndex]||[];
-
-  const map={},
-slotByCol={},
-padrao=['14H',
-'16H',
-'21H',
-'23H'];
-
-  for(let i=0;i<block.anchors.length;i++){
-   const a=block.anchors[i],
-next=block.anchors[i+1]?.c??Infinity;
-
-   for(let off=0;off<4;off++){
-    const c=a.c+off;
-if(c>=next)break;
-
-    map[c]=a.d;
-
-    // Usa o texto real quando valido, mas a posicao fisica e a garantia.
-    slotByCol[c]=metricSlotLabel(header[c])||padrao[off];
-
-   }
-  }
-  const rows=[];
-
-  for(let r=headerIndex+1;r<nextDateRow;r++){
-   const row=values[r]||[];
-let group='';
-
-   for(const cell of row.slice(0,20)){group=metricGroupLabel(cell);
-if(group)break}
-   if(!group)continue;
-
-   const byDate={};
-
-   for(const [cs,
-d] of Object.entries(map)){
-    const c=Number(cs),
-h=slotByCol[c],
-num=parseMetricNumber(row[c]);
-
-    if(num===null)continue;
-
-    if(!byDate[d])byDate[d]={group,
-data:d,
-slots:{}};
-
-    byDate[d].slots[h]=num;
-
-   }
-   Object.values(byDate).forEach(x=>rows.push(x));
-
-  }
-  const populated=rows.reduce((n,x)=>n+Object.values(x.slots).filter(v=>Number(v)>0).length,0);
-
-  candidates.push({dateRowIndex,
-rows,
-populated});
-
- }
- // Duplicatas do mesmo mes: prioriza o bloco que realmente possui coletas.
- const bestByMonth=new Map();
-
- for(const c of candidates){
-  const first=c.rows[0]?.data||normalizeMetricDate((values[c.dateRowIndex]||[]).find(normalizeMetricDate));
-
-  if(!first)continue;
-const month=first.slice(3);
-const old=bestByMonth.get(month);
-
-  if(!old||c.populated>old.populated)bestByMonth.set(month,c);
-
- }
- const out=[],
-seen=new Set();
-
- for(const c of bestByMonth.values())for(const x of c.rows){
-  const key=`${alvesNorm(x.group)}|${x.data}`;
-
-  if(seen.has(key))continue;
-seen.add(key);
-out.push(x);
-
- }
- return out;
-
-}
 function metricTsToDate(v){
  if(!v)return null;
 if(v?.toDate)return v.toDate();
@@ -7085,25 +6919,7 @@ return Promise.race([promise,
 new Promise((_,rej)=>timer=setTimeout(()=>rej(new Error(`Tempo limite ao executar ${label}.`)),ms))]).finally(()=>clearTimeout(timer));
 
 }
-function parseCsvRows(text=''){
- const rows=[];
-let row=[],
-cell='',
-q=false;
 
- for(let i=0;i<text.length;i++){const c=text[i];
-if(q){if(c==='"'&&text[i+1]==='"'){cell+='"';
-i++}else if(c==='"')q=false;
-else cell+=c}else if(c==='"')q=true;
-else if(c===','){row.push(cell);
-cell=''}else if(c==='\n'){row.push(cell.replace(/\r$/,''));
-rows.push(row);
-row=[];
-cell=''}else cell+=c}
- if(cell||row.length){row.push(cell.replace(/\r$/,''));
-rows.push(row)}return rows;
-
-}
 async function readMetricsWithoutPopup(){
  const id=extractSpreadsheetId(metricSourceConfig.url);
 if(!id)throw new Error('Fonte da planilha não configurada.');

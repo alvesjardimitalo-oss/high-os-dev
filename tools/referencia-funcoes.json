@@ -281,7 +281,6 @@
     "metricDayAverage",
     "metricFmtDay",
     "metricGroupKey",
-    "metricGroupLabel",
     "metricGroupOccupied",
     "metricGroupRecords",
     "metricIdentity",
@@ -302,7 +301,6 @@
     "metricSegmentSummary",
     "metricSelectedGroup",
     "metricSlotKeys",
-    "metricSlotLabel",
     "metricSlotMinutes",
     "metricSlots",
     "metricSnapshot",
@@ -344,8 +342,6 @@
     "movementOpen",
     "movementPreview",
     "mutationButton",
-    "normalizeMetricDate",
-    "normalizeMetricSlotKey",
     "normalizeOccupationStatusV820",
     "normalizePermission",
     "opBlank",
@@ -388,11 +384,8 @@
     "orgV92StatusLabel",
     "packCache",
     "pageModule",
-    "parseCsvRows",
     "parseIsoMetricDate",
     "parseMetricImport",
-    "parseMetricNumber",
-    "parseMetricSheet",
     "permissionDeniedMessage",
     "persistCurrentTechProfile",
     "persistMetricRows",
@@ -798,5 +791,16 @@
     "setupNav",
     "skipLink",
     "toast"
+  ],
+  "assets/modules/metricas-parser.js": [
+    "alvesNorm",
+    "definirGroupsConhecidos",
+    "metricGroupLabel",
+    "metricSlotLabel",
+    "normalizeMetricDate",
+    "normalizeMetricSlotKey",
+    "parseCsvRows",
+    "parseMetricNumber",
+    "parseMetricSheet"
   ]
 }

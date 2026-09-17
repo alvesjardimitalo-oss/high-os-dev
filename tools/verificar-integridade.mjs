@@ -21,7 +21,14 @@ import { fileURLToPath } from 'node:url';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REFERENCIA = path.join(raiz, 'tools', 'referencia-funcoes.json');
-const ARQUIVOS = ['assets/app.js', 'assets/mission-planner.js', 'assets/ui-kit.js'];
+const ARQUIVOS = ['assets/app.js', 'assets/mission-planner.js', 'assets/ui-kit.js']
+  .concat(
+    fs.existsSync(path.join(raiz, 'assets/modules'))
+      ? fs.readdirSync(path.join(raiz, 'assets/modules'))
+          .filter(f => f.endsWith('.js'))
+          .map(f => 'assets/modules/' + f)
+      : []
+  );
 
 const vermelho = t => `\x1b[31m${t}\x1b[0m`;
 const verde = t => `\x1b[32m${t}\x1b[0m`;
