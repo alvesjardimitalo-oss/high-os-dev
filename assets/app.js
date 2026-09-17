@@ -49,7 +49,7 @@ facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
 const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#deniedView'),appView=$('#appView'),sessionArea=$('#sessionArea');
 
-let currentUser=null,currentProfile=null,solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
+let currentUser=null,currentProfile=null;
 
 const facCol=collection(db,'highos','data','faccoes'), histCol=collection(db,'highos','data','historico'), reqCol=collection(db,'highos','data','solicitacoes'), deliveryCol=collection(db,'highos','data','entregas'), orgCol=collection(db,'highos','data','organizacoes'), sessionCol=collection(db,'highos','data','sessoes_usuario'), usersCol=collection(db,'users');
 
@@ -1099,7 +1099,7 @@ function sessionStorageKey(email=''){return 'highos_session_'+String(email||'').
 
 /* ---------------------------------------------------------------------
    V10.6 - Duas abas abertas juntas liam o localStorage vazio ao mesmo
-   tempo e cada uma criava a sua sessao. O historico ficou cheio de pares
+   tempo e cada uma criava a sua sessao. O estado.historico ficou cheio de pares
    de SESSION START no mesmo minuto e o painel de saude contava o dobro
    de sessoes abertas.
 
@@ -2270,7 +2270,7 @@ document.execCommand('copy')}}
 function resolveGroupIdentity(f={}){
  const seed=SEED.find(x=>x.group===f.group)||{};
 
- const org=organizacoes.find(o=>String(o.nome||'').trim().toLowerCase()===String(f.faccao||'').trim().toLowerCase())||{};
+ const org=estado.organizacoes.find(o=>String(o.nome||'').trim().toLowerCase()===String(f.faccao||'').trim().toLowerCase())||{};
 
  const sameSeedOccupant=!!f.faccao && String(seed.faccao||'').trim().toLowerCase()===String(f.faccao||'').trim().toLowerCase();
 
@@ -2567,7 +2567,7 @@ segmentoVinculado:old.segmento||'',
 qgAtual:'',
 ultimoRecolhimento:recolhimento,
 updatedAt:serverTimestamp(),
-updatedBy:currentUser.email},{merge:true})}const activeDeliveries=entregas.filter(x=>x.group===group&&x.status==='ATIVA');for(const d of activeDeliveries)await setDoc(doc(db,'highos','data','entregas',d.id),{status:'RECOLHIDA',
+updatedBy:currentUser.email},{merge:true})}const activeDeliveries=estado.entregas.filter(x=>x.group===group&&x.status==='ATIVA');for(const d of activeDeliveries)await setDoc(doc(db,'highos','data','entregas',d.id),{status:'RECOLHIDA',
 recolhimento,
 recolhidaEm:serverTimestamp(),
 recolhidaPor:currentUser.email},{merge:true});await addDoc(histCol,{sessionId:currentSessionId||'',
@@ -3262,13 +3262,13 @@ async function loadRequests(){
 all=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
 
-   solicitacoes=all.filter(x=>x.isModelo===true);
+   estado.solicitacoes=all.filter(x=>x.isModelo===true);
 
-   requestRecords=all.filter(x=>x.isModelo!==true);
+   estado.requestRecords=all.filter(x=>x.isModelo!==true);
 
-   solicitacoes.sort((a,b)=>(a.nome||a.assunto||'').localeCompare(b.nome||b.assunto||'','pt-BR'));
+   estado.solicitacoes.sort((a,b)=>(a.nome||a.assunto||'').localeCompare(b.nome||b.assunto||'','pt-BR'));
 
-   requestRecords.sort((a,b)=>String(b.createdAtText||'').localeCompare(String(a.createdAtText||'')));
+   estado.requestRecords.sort((a,b)=>String(b.createdAtText||'').localeCompare(String(a.createdAtText||'')));
 
    renderRequests();
 
@@ -3290,7 +3290,7 @@ r.group,
 r.origem,
 r.detalhes].join(' ').toLowerCase().includes(q)));
 
- const custom=solicitacoes.length;
+ const custom=estado.solicitacoes.length;
 
  $('#reqStats').innerHTML=`<span><b>${models.length}</b> MODELOS</span><span><b>${BUILTIN_REQUEST_MODELS.length}</b> PADRÃO HIGH</span><span><b>${custom}</b> PERSONALIZADOS</span><span><b>${list.length}</b> EXIBIDOS</span>`;
 
@@ -3602,7 +3602,7 @@ function initUsersUi(){
 
  $('#toggleUserBtn').onclick=toggleUserAccess;
 
- $('#uRole')?.addEventListener('change',()=>{const original=$('#userOriginalEmail')?.value||'';const u=original?usuarios.find(x=>x.email===original):null;if(!u?.permissions)renderUserPermissionMatrix(defaultPermissionsForRole($('#uRole').value))});
+ $('#uRole')?.addEventListener('change',()=>{const original=$('#userOriginalEmail')?.value||'';const u=original?estado.usuarios.find(x=>x.email===original):null;if(!u?.permissions)renderUserPermissionMatrix(defaultPermissionsForRole($('#uRole').value))});
 
  $('#permPresetView')?.addEventListener('click',()=>applyPermissionPreset('VIEW'));
 
@@ -3619,7 +3619,7 @@ async function loadUsers(){
  try{
   const qs=await getDocsCached(usersCol,'usuarios');
 
-  usuarios=qs.docs.map(d=>({email:d.id,
+  estado.usuarios=qs.docs.map(d=>({email:d.id,
 ...d.data()})).sort((a,b)=>(a.name||a.email).localeCompare(b.name||b.email,'pt-BR'));
 
   renderUsers();
@@ -3633,25 +3633,25 @@ function renderUsers(){
  role=$('#userRoleFilter').value,
  st=$('#userStatusFilter').value;
 
- const list=usuarios.filter(u=>(!role||String(u.role||'CONSULTA').toUpperCase()===role)&&(!st||(st==='ATIVO'?u.active===true:u.active!==true))&&(!q||[u.name,
+ const list=estado.usuarios.filter(u=>(!role||String(u.role||'CONSULTA').toUpperCase()===role)&&(!st||(st==='ATIVO'?u.active===true:u.active!==true))&&(!q||[u.name,
 u.cargo,
 u.email,
 u.role,
 u.notes].join(' ').toLowerCase().includes(q)));
 
- const ativos=usuarios.filter(u=>u.active===true).length,
- admins=usuarios.filter(u=>String(u.role||'').toUpperCase()==='ADMIN'&&u.active===true).length;
+ const ativos=estado.usuarios.filter(u=>u.active===true).length,
+ admins=estado.usuarios.filter(u=>String(u.role||'').toUpperCase()==='ADMIN'&&u.active===true).length;
 
- $('#userStats').innerHTML=`<span><b>${usuarios.length}</b> CADASTRADOS</span><span><b>${ativos}</b> ATIVOS</span><span><b>${usuarios.length-ativos}</b> INATIVOS</span><span><b>${admins}</b> ADMINS</span><span><b>${list.length}</b> EXIBIDOS</span>`;
+ $('#userStats').innerHTML=`<span><b>${estado.usuarios.length}</b> CADASTRADOS</span><span><b>${ativos}</b> ATIVOS</span><span><b>${estado.usuarios.length-ativos}</b> INATIVOS</span><span><b>${admins}</b> ADMINS</span><span><b>${list.length}</b> EXIBIDOS</span>`;
 
- if(!usuarios.length){$('#userList').innerHTML='<div class="placeholder"><b>♟</b><h3>NENHUM USUÁRIO</h3><p>Cadastre a primeira conta autorizada.</p></div>';
+ if(!estado.usuarios.length){$('#userList').innerHTML='<div class="placeholder"><b>♟</b><h3>NENHUM USUÁRIO</h3><p>Cadastre a primeira conta autorizada.</p></div>';
 return}
  $('#userList').innerHTML=list.map(u=>`<article class="user-row" data-email="${esc(u.email)}"><div class="user-avatar">${esc((u.name||u.email||'?').slice(0,1).toUpperCase())}</div><div class="user-main"><strong>${esc(u.name||'Sem nome')}</strong><span>${esc(u.email)}</span><small class="user-cargo-line">${esc(u.cargo||String(u.role||'CONSULTA').toUpperCase())}</small>${u.notes?`<small>${esc(u.notes)}</small>`:''}</div><div class="user-tags"><span class="role-chip r-${slug(u.role)}">${esc(String(u.role||'CONSULTA').toUpperCase())}</span><span class="status-chip ${u.active===true?'ativa':'inativa'}">${u.active===true?'ATIVO':'INATIVO'}</span><small class="perm-summary">${(()=>{const p={...defaultPermissionsForRole(u.role),...(u.permissions||{})};const v=SYSTEM_MODULES.filter(m=>['VIEW','EDIT'].includes(normalizePermission(p[m.id]))).length,e=SYSTEM_MODULES.filter(m=>normalizePermission(p[m.id])==='EDIT').length;return `${v}/${SYSTEM_MODULES.length} módulos • ${e} editáveis`})()}</small></div><div class="user-row-actions"><button type="button" class="mini-btn user-activity-btn" data-activity="${esc(u.email)}">ATIVIDADE</button><button type="button" class="mini-btn user-edit-btn">EDITAR</button></div></article>`).join('');
  document.querySelectorAll('.user-row').forEach(r=>{r.querySelector('.user-edit-btn')?.addEventListener('click',e=>{e.stopPropagation();openUserModal(r.dataset.email)});r.querySelector('.user-activity-btn')?.addEventListener('click',e=>{e.stopPropagation();openUserActivity(e.currentTarget.dataset.activity)});r.addEventListener('click',()=>openUserModal(r.dataset.email));});
 }
 function openUserModal(email=''){
  if(!assertAdmin())return;
- const u=email?usuarios.find(x=>x.email===email):null;
+ const u=email?estado.usuarios.find(x=>x.email===email):null;
  $('#userOriginalEmail').value=u?.email||'';
  $('#uEmail').value=u?.email||''; $('#uEmail').disabled=!!u;
  $('#uName').value=u?.name||''; $('#uCargo').value=u?.cargo||''; $('#uRole').value=String(u?.role||'CONSULTA').toUpperCase(); $('#uActive').value=u?.active===false?'false':'true'; $('#uNotes').value=u?.notes||'';
@@ -3666,7 +3666,7 @@ async function saveUser(e){
  e.preventDefault(); if(!assertAdmin())return;
  const original=$('#userOriginalEmail').value.trim().toLowerCase(), email=$('#uEmail').value.trim().toLowerCase();
  if(!email){alert('Informe o e-mail Google.');return}
- const old=original?usuarios.find(x=>x.email===original):null;
+ const old=original?estado.usuarios.find(x=>x.email===original):null;
  const payload={email,name:$('#uName').value.trim(),cargo:$('#uCargo').value.trim(),role:$('#uRole').value,active:$('#uActive').value==='true',notes:$('#uNotes').value.trim(),permissions:readUserPermissions(),updatedAt:serverTimestamp(),updatedBy:currentUser.email};
  if(email===String(currentUser.email||'').toLowerCase() && payload.active!==true){alert('Você não pode desativar sua própria conta enquanto está logado.');return}
  try{
@@ -3677,7 +3677,7 @@ async function saveUser(e){
 }
 async function toggleUserAccess(){
  if(!assertAdmin())return;
- const email=$('#userOriginalEmail').value.trim().toLowerCase(), old=usuarios.find(x=>x.email===email); if(!old)return;
+ const email=$('#userOriginalEmail').value.trim().toLowerCase(), old=estado.usuarios.find(x=>x.email===email); if(!old)return;
  if(email===String(currentUser.email||'').toLowerCase() && old.active===true){alert('Você não pode desativar sua própria conta enquanto está logado.');return}
  const next=old.active!==true;
  if(!confirm(`${next?'Reativar':'Desativar'} o acesso de ${old.name||email}?`))return;
@@ -3690,7 +3690,6 @@ async function toggleUserAccess(){
 initUsersUi();
 
 // ===== HIGH OS V8.15 · SESSÕES E AUDITORIA DE USUÁRIOS =====
-let userSessions=[];
 function auditModule(tipo=''){
  const t=String(tipo||'').toUpperCase();
  if(t.includes('SESSION')||t.includes('LOGIN')||t.includes('USUARIO'))return 'ACESSO';
@@ -3709,7 +3708,7 @@ function auditTarget(h){return [h.group,h.faccao,h.usuarioAlvo,h.segmento,h.alvo
 function sessionStartMs(x){const d=x?.startAt;try{if(d?.toDate)return d.toDate().getTime();if(d?.seconds)return d.seconds*1000;if(x?.startAtText)return new Date(x.startAtText).getTime()}catch(e){}return 0}
 function sessionEndMs(x){const d=x?.endAt;try{if(d?.toDate)return d.toDate().getTime();if(d?.seconds)return d.seconds*1000;if(x?.endAtText)return new Date(x.endAtText).getTime()}catch(e){}return 0}
 
-function sessionActions(sess){return historico.filter(h=>h.sessionId===sess.sessionId&&!['SESSION_START','SESSION_END'].includes(String(h.tipo||'').toUpperCase())).sort((a,b)=>(historyDateValue(a)?.getTime()||0)-(historyDateValue(b)?.getTime()||0))}
+function sessionActions(sess){return estado.historico.filter(h=>h.sessionId===sess.sessionId&&!['SESSION_START','SESSION_END'].includes(String(h.tipo||'').toUpperCase())).sort((a,b)=>(historyDateValue(a)?.getTime()||0)-(historyDateValue(b)?.getTime()||0))}
 function sessionEffectiveEnd(sess){const end=sessionEndMs(sess);if(end)return end;if(sess.sessionId===currentSessionId)return Date.now();const last=sessionActions(sess).map(h=>historyDateValue(h)?.getTime()||0).filter(Boolean).pop();return last||Number(sess.lastActivityText?new Date(sess.lastActivityText).getTime():0)||sessionStartMs(sess)}
 function sessionDuration(sess){return Math.min(SESSION_MAX_MS,Math.max(0,Number(sess.durationMs)||sessionEffectiveEnd(sess)-sessionStartMs(sess)))}
 function isSameLocalDay(ms,base=Date.now()){if(!ms)return false;const a=new Date(ms),b=new Date(base);return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
@@ -3757,7 +3756,7 @@ function saudeCartao(rotulo,valor,estado='ok',detalhe=''){
    ---------------------------------------------------------------------
    Ate aqui, achar onde uma faccao aparecia exigia abrir modulo por
    modulo. Esta busca varre o que ja esta carregado em memoria -
-   Groups, organizacoes, solicitacoes, entregas, historico, usuarios,
+   Groups, estado.organizacoes, estado.solicitacoes, estado.entregas, estado.historico, estado.usuarios,
    missoes do planejador - e leva direto ao lugar certo.
 
    Nao faz nenhuma leitura no Firebase: e busca em memoria. O que nao
@@ -3795,23 +3794,23 @@ function buscaResultados(termoBruto){
   .filter(f=>buscaCasa(termo,f.group,f.faccao,f.lider,f.qg,f.segmento,f.staff))
   .map(f=>({titulo:f.group||'(sem Group)',detalhe:[f.faccao,f.lider,f.segmento].filter(Boolean).join(' • ')||'sem facção vinculada',acao:()=>{activateAppPage('faccoes');setTimeout(()=>{try{showGroupProfilePage(f)}catch(err){console.warn('[BUSCA]',err)}},140)}})),'faccoes');
 
- add('org','ORGANIZAÇÕES',(organizacoes||[])
+ add('org','ORGANIZAÇÕES',(estado.organizacoes||[])
   .filter(o=>buscaCasa(termo,o.nome,o.group,o.tipo,o.status))
   .map(o=>({titulo:o.nome||o.group||'(sem nome)',detalhe:[o.group,o.status].filter(Boolean).join(' • '),acao:()=>activateAppPage('faccoes')})),'faccoes');
 
- add('sol','SOLICITAÇÕES',(solicitacoes||[]).concat(requestRecords||[])
+ add('sol','SOLICITAÇÕES',(estado.solicitacoes||[]).concat(estado.requestRecords||[])
   .filter(r=>buscaCasa(termo,r.titulo,r.group,r.descricao,r.tipo,r.status))
   .map(r=>({titulo:r.titulo||r.tipo||'(solicitação)',detalhe:[r.group,r.status].filter(Boolean).join(' • '),acao:()=>activateAppPage('solicitacoes')})),'solicitacoes');
 
- add('entrega','ENTREGAS',(entregas||[])
+ add('entrega','ENTREGAS',(estado.entregas||[])
   .filter(e=>buscaCasa(termo,e.group,e.faccao,e.lider,e.responsavel))
   .map(e=>({titulo:`${e.group||''} → ${e.faccao||''}`.trim(),detalhe:[e.lider,e.dataTexto||e.data].filter(Boolean).join(' • '),acao:()=>activateAppPage('faccoes')})),'faccoes');
 
- add('hist','HISTÓRICO CARREGADO',(historico||[])
+ add('hist','HISTÓRICO CARREGADO',(estado.historico||[])
   .filter(h=>buscaCasa(termo,h.group,h.faccao,h.descricao,h.tipo,h.usuario))
   .map(h=>({titulo:h.tipo||'evento',detalhe:[h.group,h.descricao].filter(Boolean).join(' • ').slice(0,110),acao:()=>activateAppPage('historico')})),'historico');
 
- if(isAdmin())add('user','USUÁRIOS',(usuarios||[])
+ if(isAdmin())add('user','USUÁRIOS',(estado.usuarios||[])
   .filter(u=>buscaCasa(termo,u.email,u.name,u.cargo,u.role))
   .map(u=>({titulo:u.name||u.email,detalhe:[u.email,u.role].filter(Boolean).join(' • '),acao:()=>activateAppPage('usuarios')})),'usuarios');
 
@@ -3840,7 +3839,7 @@ function buscaRenderizar(termo){
  const lista=document.getElementById('buscaGlobalLista');
  if(!lista)return;
  if(buscaNorm(termo).length<2){
-  lista.innerHTML=`<div class="busca-vazio">Digite ao menos 2 letras. A busca cobre Groups, facções, organizações, solicitações, entregas, histórico já carregado, usuários e missões.</div>`;
+  lista.innerHTML=`<div class="busca-vazio">Digite ao menos 2 letras. A busca cobre Groups, facções, organizações, solicitações, estado.entregas, histórico já carregado, usuários e missões.</div>`;
   return;
  }
  const grupos=buscaResultados(termo);
@@ -3915,7 +3914,7 @@ function renderSaudeSistema(){
  const backupDias=backup?Math.floor((Date.now()-new Date(backup).getTime())/86400000):999;
  const estadoBackup=backupDias<=31?'ok':backupDias<=45?'alerta':'erro';
 
- const sessoesAbertas=(typeof userSessions!=="undefined"?userSessions:[]).filter(x=>String(x.status||'').toUpperCase()==='EM_ANDAMENTO').length;
+ const sessoesAbertas=(typeof estado.userSessions!=="undefined"?estado.userSessions:[]).filter(x=>String(x.status||'').toUpperCase()==='EM_ANDAMENTO').length;
 
  box.innerHTML=`
   <div class="saude-head">
@@ -3937,27 +3936,26 @@ function renderSaudeSistema(){
 
 async function loadUserAudit(){
  if(!isAdmin()||!$('#adminSessionList'))return;
- try{if(!historico.length){const hq=await getDocsCached(histCol,'historico');historico=hq.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(historyDateValue(b)?.getTime()||0)-(historyDateValue(a)?.getTime()||0));}
- const qs=await getDocsCached(sessionCol,'sessoes_usuario');userSessions=qs.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>sessionStartMs(b)-sessionStartMs(a));renderUserAudit();}catch(e){$('#adminSessionList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR AUDITORIA</h3><p>${esc(e.message)}</p></div>`}
+ try{if(!estado.historico.length){const hq=await getDocsCached(histCol,'historico');estado.historico=hq.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(historyDateValue(b)?.getTime()||0)-(historyDateValue(a)?.getTime()||0));}
+ const qs=await getDocsCached(sessionCol,'sessoes_usuario');estado.userSessions=qs.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>sessionStartMs(b)-sessionStartMs(a));renderUserAudit();}catch(e){$('#adminSessionList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR AUDITORIA</h3><p>${esc(e.message)}</p></div>`}
 }
 function renderUserAudit(){
  const box=$('#adminSessionList');if(!box)return;const q=String($('#adminAuditSearch')?.value||'').toLowerCase(),user=String($('#adminAuditUser')?.value||'').toLowerCase(),status=$('#adminAuditStatus')?.value||'',day=$('#adminAuditDate')?.value||'';
- const known=[...new Set(userSessions.map(s=>String(s.email||'').toLowerCase()).filter(Boolean))].sort();const sel=$('#adminAuditUser');if(sel){const old=sel.value;sel.innerHTML='<option value="">TODOS OS USUÁRIOS</option>'+known.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');if(known.includes(old))sel.value=old;}
- const list=userSessions.filter(s=>{const sm=sessionStartMs(s),date=sm?new Date(sm).toISOString().slice(0,10):'';const acts=sessionActions(s);return(!user||String(s.email||'').toLowerCase()===user)&&(!status||(status==='ATIVA'?s.sessionId===currentSessionId&&s.status!=='ENCERRADA':s.status==='ENCERRADA'))&&(!day||date===day)&&(!q||[s.email,s.nome,s.role,s.endReason,...acts.map(a=>[a.tipo,a.group,a.faccao,a.descricao].join(' '))].join(' ').toLowerCase().includes(q))});
- const todayTotal=userSessions.filter(s=>isSameLocalDay(sessionStartMs(s))).reduce((n,s)=>n+sessionDuration(s),0),active=userSessions.filter(s=>s.sessionId===currentSessionId&&s.status!=='ENCERRADA').length;
- $('#adminAuditStats').innerHTML=`<span><b>${userSessions.length}</b> SESSÕES</span><span><b>${active}</b> EM ANDAMENTO</span><span><b>${fmtDuration(todayTotal)}</b> TEMPO LOGADO HOJE</span><span><b>${list.length}</b> EXIBIDAS</span>`;
+ const known=[...new Set(estado.userSessions.map(s=>String(s.email||'').toLowerCase()).filter(Boolean))].sort();const sel=$('#adminAuditUser');if(sel){const old=sel.value;sel.innerHTML='<option value="">TODOS OS USUÁRIOS</option>'+known.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');if(known.includes(old))sel.value=old;}
+ const list=estado.userSessions.filter(s=>{const sm=sessionStartMs(s),date=sm?new Date(sm).toISOString().slice(0,10):'';const acts=sessionActions(s);return(!user||String(s.email||'').toLowerCase()===user)&&(!status||(status==='ATIVA'?s.sessionId===currentSessionId&&s.status!=='ENCERRADA':s.status==='ENCERRADA'))&&(!day||date===day)&&(!q||[s.email,s.nome,s.role,s.endReason,...acts.map(a=>[a.tipo,a.group,a.faccao,a.descricao].join(' '))].join(' ').toLowerCase().includes(q))});
+ const todayTotal=estado.userSessions.filter(s=>isSameLocalDay(sessionStartMs(s))).reduce((n,s)=>n+sessionDuration(s),0),active=estado.userSessions.filter(s=>s.sessionId===currentSessionId&&s.status!=='ENCERRADA').length;
+ $('#adminAuditStats').innerHTML=`<span><b>${estado.userSessions.length}</b> SESSÕES</span><span><b>${active}</b> EM ANDAMENTO</span><span><b>${fmtDuration(todayTotal)}</b> TEMPO LOGADO HOJE</span><span><b>${list.length}</b> EXIBIDAS</span>`;
  if(!list.length){box.innerHTML='<div class="placeholder"><b>◷</b><h3>NENHUMA SESSÃO ENCONTRADA</h3><p>Altere os filtros de auditoria.</p></div>';return}
  box.innerHTML=list.map(s=>{const acts=sessionActions(s),start=sessionStartMs(s),end=sessionEffectiveEnd(s),ongoing=s.sessionId===currentSessionId&&s.status!=='ENCERRADA';return `<article class="audit-session-row" data-session="${esc(s.sessionId)}"><div class="audit-session-state ${ongoing?'live':''}">●</div><div class="audit-session-main"><strong>${esc(s.nome||s.email||'Usuário')}</strong><span>${esc(s.email||'—')} • ${esc(String(s.role||'').toUpperCase())}</span><small>${fmtDateMs(start)} → ${ongoing?'EM ANDAMENTO':fmtDateMs(end)}</small></div><div class="audit-session-kpi"><span>TEMPO</span><b>${fmtDuration(sessionDuration(s))}</b></div><div class="audit-session-kpi"><span>AÇÕES</span><b>${acts.length}</b></div><button type="button" class="mini-btn audit-open">VER SESSÃO</button></article>`}).join('');
  box.querySelectorAll('.audit-session-row').forEach(r=>r.querySelector('.audit-open')?.addEventListener('click',()=>openAuditSession(r.dataset.session)));
 }
-function openAuditSession(id){const s=userSessions.find(x=>x.sessionId===id);if(!s)return;const acts=sessionActions(s),start=sessionStartMs(s),end=sessionEffectiveEnd(s),ongoing=s.sessionId===currentSessionId&&s.status!=='ENCERRADA';$('#auditSessionTitle').textContent=`SESSÃO • ${s.email||'USUÁRIO'}`;$('#auditSessionMeta').innerHTML=`<span><b>LOGIN</b>${fmtDateMs(start)}</span><span><b>${ongoing?'ÚLTIMA ATIVIDADE':'ENCERRAMENTO'}</b>${ongoing?fmtDateMs(end):fmtDateMs(sessionEndMs(s)||end)}</span><span><b>DURAÇÃO</b>${fmtDuration(sessionDuration(s))}</span><span><b>AÇÕES</b>${acts.length}</span>`;$('#auditSessionTimeline').innerHTML=`<div class="audit-event"><time>${new Date(start).toLocaleTimeString('pt-BR')}</time><div><b>LOGIN</b><span>Usuário entrou no High OS</span></div></div>`+acts.map(h=>{const d=historyDateValue(h);return `<div class="audit-event"><time>${d?d.toLocaleTimeString('pt-BR'):'—'}</time><div><b>${esc(String(h.tipo||'AÇÃO').replaceAll('_',' '))}</b><span>${esc(auditModule(h.tipo))}${auditTarget(h)!=='—'?' • '+esc(auditTarget(h)):''}</span>${h.descricao?`<small>${esc(h.descricao)}</small>`:''}${h.antes||h.depois?`<details><summary>VER ALTERAÇÃO ANTES → DEPOIS</summary><div class="audit-diff"><pre>${esc(JSON.stringify(h.antes||{},null,2))}</pre><pre>${esc(JSON.stringify(h.depois||{},null,2))}</pre></div></details>`:''}</div></div>`}).join('')+(!ongoing?`<div class="audit-event"><time>${new Date(end).toLocaleTimeString('pt-BR')}</time><div><b>FIM DA SESSÃO</b><span>${esc(s.endReason==='TIMEOUT_8H'?'Limite máximo de 8 horas atingido':'Sessão encerrada')}</span></div></div>`:'');$('#auditSessionModal').classList.remove('hidden');}
+function openAuditSession(id){const s=estado.userSessions.find(x=>x.sessionId===id);if(!s)return;const acts=sessionActions(s),start=sessionStartMs(s),end=sessionEffectiveEnd(s),ongoing=s.sessionId===currentSessionId&&s.status!=='ENCERRADA';$('#auditSessionTitle').textContent=`SESSÃO • ${s.email||'USUÁRIO'}`;$('#auditSessionMeta').innerHTML=`<span><b>LOGIN</b>${fmtDateMs(start)}</span><span><b>${ongoing?'ÚLTIMA ATIVIDADE':'ENCERRAMENTO'}</b>${ongoing?fmtDateMs(end):fmtDateMs(sessionEndMs(s)||end)}</span><span><b>DURAÇÃO</b>${fmtDuration(sessionDuration(s))}</span><span><b>AÇÕES</b>${acts.length}</span>`;$('#auditSessionTimeline').innerHTML=`<div class="audit-event"><time>${new Date(start).toLocaleTimeString('pt-BR')}</time><div><b>LOGIN</b><span>Usuário entrou no High OS</span></div></div>`+acts.map(h=>{const d=historyDateValue(h);return `<div class="audit-event"><time>${d?d.toLocaleTimeString('pt-BR'):'—'}</time><div><b>${esc(String(h.tipo||'AÇÃO').replaceAll('_',' '))}</b><span>${esc(auditModule(h.tipo))}${auditTarget(h)!=='—'?' • '+esc(auditTarget(h)):''}</span>${h.descricao?`<small>${esc(h.descricao)}</small>`:''}${h.antes||h.depois?`<details><summary>VER ALTERAÇÃO ANTES → DEPOIS</summary><div class="audit-diff"><pre>${esc(JSON.stringify(h.antes||{},null,2))}</pre><pre>${esc(JSON.stringify(h.depois||{},null,2))}</pre></div></details>`:''}</div></div>`}).join('')+(!ongoing?`<div class="audit-event"><time>${new Date(end).toLocaleTimeString('pt-BR')}</time><div><b>FIM DA SESSÃO</b><span>${esc(s.endReason==='TIMEOUT_8H'?'Limite máximo de 8 horas atingido':'Sessão encerrada')}</span></div></div>`:'');$('#auditSessionModal').classList.remove('hidden');}
 $('#auditSessionClose')?.addEventListener('click',()=>$('#auditSessionModal')?.classList.add('hidden'));
 ['adminAuditSearch','adminAuditUser','adminAuditStatus','adminAuditDate'].forEach(id=>{$('#'+id)?.addEventListener(id==='adminAuditSearch'?'input':'change',renderUserAudit)});
 $('#adminAuditRefresh')?.addEventListener('click',loadUserAudit);
 function openUserActivity(email){activateAppPage('administracao');loadUserAudit().then(()=>{const s=$('#adminAuditUser');if(s){s.value=String(email||'').toLowerCase();renderUserAudit();}})}
 
 // ===== HIGH OS V5 · GROUP COMO PATRIMÔNIO + ENTREGA COMO VÍNCULO =====
-let entregas=[];
 const INSTALLATIONS=[
  ['vipOrg','VIP Org'],['chatFaccao','Chat da Facção'],['radio','Rádio Exclusiva'],['salario','Salário'],
  ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaExclusiva','Rota Exclusiva'],
@@ -4071,7 +4069,7 @@ function orgKey(name){return String(name||'').trim().toLowerCase().normalize('NF
 function derivedOrganizations(){
  const map=new Map();
 
- organizacoes.forEach(o=>map.set(String(o.nome||o.id||'').toLowerCase(),{...o,
+ estado.organizacoes.forEach(o=>map.set(String(o.nome||o.id||'').toLowerCase(),{...o,
 source:'cadastro'}));
 
  estado.faccoes.filter(f=>f.faccao).forEach(f=>{const k=String(f.faccao).toLowerCase(),
@@ -4096,7 +4094,7 @@ status:o.groupAtual?'ATIVA':'INATIVA'})).sort((a,b)=>(a.nome||'').localeCompare(
 }
 async function loadOrganizations(){
  try{const qs=await getDocsCached(orgCol,'organizacoes');
-organizacoes=qs.docs.map(d=>({id:d.id,
+estado.organizacoes=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
 renderOrganizations();
 syncOrgOptions()}catch(e){if($('#orgList'))$('#orgList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message)}</p></div>`}
@@ -4264,7 +4262,7 @@ updatedBy:currentUser.email},{merge:true});
 }
 async function loadDeliveries(){
  try{const qs=await getDocsCached(deliveryCol,'entregas');
-entregas=qs.docs.map(d=>({id:d.id,
+estado.entregas=qs.docs.map(d=>({id:d.id,
 ...d.data()})).sort((a,b)=>String(b.createdAtText||b.dataEntrega||'').localeCompare(String(a.createdAtText||a.dataEntrega||'')));
 renderDeliveries()}catch(e){if($('#deliveryList'))$('#deliveryList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message)}</p></div>`}
 }
@@ -4273,14 +4271,14 @@ function renderDeliveries(){
 const q=($('#deliverySearch').value||'').toLowerCase(),
 st=$('#deliveryStatus').value;
 
- const list=entregas.filter(d=>(!st||d.status===st)&&(!q||[d.group,
+ const list=estado.entregas.filter(d=>(!st||d.status===st)&&(!q||[d.group,
 d.faccao,
 d.lider,
 d.staff,
 d.dataEntrega].join(' ').toLowerCase().includes(q)));
 
- const at=entregas.filter(d=>d.status==='ATIVA').length;
-$('#deliveryStats').innerHTML=`<span><b>${entregas.length}</b> REGISTROS</span><span><b>${at}</b> ATIVOS</span><span><b>${list.length}</b> EXIBIDOS</span>`;
+ const at=estado.entregas.filter(d=>d.status==='ATIVA').length;
+$('#deliveryStats').innerHTML=`<span><b>${estado.entregas.length}</b> REGISTROS</span><span><b>${at}</b> ATIVOS</span><span><b>${list.length}</b> EXIBIDOS</span>`;
 
  $('#deliveryList').innerHTML=list.length?list.map(d=>`<article class="delivery-row"><div><div class="group-kicker">GROUP</div><strong>${esc(d.group)}</strong></div><div><span>${esc(d.faccao||'—')}</span><small>${esc(d.qg||'')} ${d.plano?'• '+esc(d.plano):''}</small></div><div><strong>${esc(d.dataEntrega||'—')}</strong><small>${esc(d.staff||'')}</small></div><span class="status-chip ${d.status==='ATIVA'?'ativa':'inativa'}">${esc(d.status||'ATIVA')}</span></article>`).join(''):'<div class="placeholder"><b>◇</b><h3>NENHUMA ENTREGA REGISTRADA</h3><p>Use “Nova Entrega” ou entregue diretamente pelo card de um Group.</p></div>';
 
@@ -4495,7 +4493,7 @@ createdBy:currentUser.email};
 
  try{
   // encerra logicamente a ocupação anterior no Group e mantém a estrutura física do local.
-  const previous=entregas.filter(x=>x.group===f.group&&x.status==='ATIVA');
+  const previous=estado.entregas.filter(x=>x.group===f.group&&x.status==='ATIVA');
 for(const d of previous)await setDoc(doc(db,'highos','data','entregas',d.id),{...d,
 status:'RECOLHIDA',
 recolhidaEm:serverTimestamp(),
@@ -4543,7 +4541,6 @@ renderFaccoes();
 await loadDeliveries()};
 
 // ===== HIGH OS V5.1 · PERFIL TÉCNICO + MEMÓRIA OPERACIONAL DO GROUP =====
-let historico=[];
 
 function historyDateValue(h){
  const d=h?.data;
@@ -4648,7 +4645,7 @@ arena:'Arena'};
 /* =====================================================================
    HIGH OS V9.9 - HISTORICO PAGINADO
    ---------------------------------------------------------------------
-   Antes: getDocs(historico) trazia a colecao inteira em toda visita ao
+   Antes: getDocs(estado.historico) trazia a colecao inteira em toda visita ao
    modulo. Como o sistema grava um evento em 45 pontos diferentes, essa
    colecao so cresce - em poucos meses ela sozinha consumiria a cota
    diaria de leitura.
@@ -4669,7 +4666,7 @@ async function loadHistory({append=false}={}){
  if(!$('#historyList')&&!$('#groupHistoryPreview'))return;
 
  try{
-  if(!append){historico=[];
+  if(!append){estado.historico=[];
 historyCursor=null;
 historyEsgotado=false;
 historyModoLegado=false}
@@ -4690,7 +4687,7 @@ limit(HISTORY_PAGE)];
     const novos=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
 
-    historico=append?historico.concat(novos):novos;
+    estado.historico=append?estado.historico.concat(novos):novos;
 
     statBump('historico','leituras');
 statBump('historico','docs',novos.length);
@@ -4708,7 +4705,7 @@ historyEsgotado=true;
    }
   }
   const qs=await getDocsCached(histCol,'historico');
-historico=qs.docs.map(d=>({id:d.id,
+estado.historico=qs.docs.map(d=>({id:d.id,
 ...d.data()})).sort((a,b)=>(historyDateValue(b)?.getTime()||0)-(historyDateValue(a)?.getTime()||0));
 renderHistory();
 
@@ -4725,7 +4722,7 @@ modal.classList.remove('hidden');
 try{const snap=await getDoc(doc(db,'highos','data','evidencias_recolhimento',evidenceId));
 if(!snap.exists())throw new Error('Evidência não encontrada.');
 const e=snap.data(),
-h=historico.find(x=>x.id===historyId)||{};
+h=estado.historico.find(x=>x.id===historyId)||{};
 img.src=e.imagemDataUrl||'';
 meta.innerHTML=`<span><b>${esc(e.group||h.group||'—')}</b> • ${esc(e.faccao||h.faccao||'—')}</span><span>${esc(h.motivoLabel||recollectReasonLabel(e.motivo)||'Recolhimento')} • ${esc(h.dataRecolhimento||'')}</span>`}catch(err){meta.textContent='Não foi possível abrir a evidência: '+err.message}}
 $('#recollectEvidenceClose')?.addEventListener('click',()=>$('#recollectEvidenceModal')?.classList.add('hidden'));
@@ -4734,7 +4731,7 @@ $('#recollectEvidenceClose')?.addEventListener('click',()=>$('#recollectEvidence
    V10.6 - Com a paginacao, o campo de busca passou a filtrar apenas os
    registros ja carregados, dando a impressao de que nao havia mais nada.
    Agora, quando ha termo digitado, o rodape explica o alcance e oferece
-   varrer o historico inteiro pagina a pagina.
+   varrer o estado.historico inteiro pagina a pagina.
 --------------------------------------------------------------------- */
 async function buscarHistoricoCompleto(termo){
  const botao=document.getElementById('historyDeepBtn');
@@ -4742,10 +4739,10 @@ async function buscarHistoricoCompleto(termo){
  let voltas=0;
  while(!historyEsgotado&&voltas<20){
   voltas++;
-  if(botao)botao.textContent=`VARRENDO... (${historico.length} lidos)`;
+  if(botao)botao.textContent=`VARRENDO... (${estado.historico.length} lidos)`;
   await loadHistory({append:true});
  }
- window.highToast?.(`Varredura concluída: ${historico.length} registro(s) no total.`,'ok');
+ window.highToast?.(`Varredura concluída: ${estado.historico.length} registro(s) no total.`,'ok');
  renderHistory();
 }
 function renderHistoryFooter(){
@@ -4761,14 +4758,14 @@ box.className='history-more';
 
  const termo=($('#historySearch')?.value||'').trim();
  if(termo&&!historyEsgotado){
-  box.innerHTML=`<span><b>Atenção:</b> a busca por "${esc(termo)}" cobre apenas os ${historico.length} registros já carregados. Podem existir outros mais antigos.</span>`+
+  box.innerHTML=`<span><b>Atenção:</b> a busca por "${esc(termo)}" cobre apenas os ${estado.historico.length} registros já carregados. Podem existir outros mais antigos.</span>`+
    `<button type="button" id="historyDeepBtn">BUSCAR EM TODO O HISTÓRICO</button>`;
   document.getElementById('historyDeepBtn')?.addEventListener('click',()=>buscarHistoricoCompleto(termo));
   return;
  }
  box.innerHTML=historyEsgotado
-  ? `<span>${historico.length} registro(s) — ${termo?'busca feita sobre o histórico completo.':`fim do histórico${historyModoLegado?' (leitura completa)':''}.`}</span>`
-  : `<span>${historico.length} registro(s) carregados</span><button type="button" id="historyMoreBtn">CARREGAR MAIS ${HISTORY_PAGE}</button>`;
+  ? `<span>${estado.historico.length} registro(s) — ${termo?'busca feita sobre o histórico completo.':`fim do histórico${historyModoLegado?' (leitura completa)':''}.`}</span>`
+  : `<span>${estado.historico.length} registro(s) carregados</span><button type="button" id="historyMoreBtn">CARREGAR MAIS ${HISTORY_PAGE}</button>`;
 
  lista.insertAdjacentElement('afterend',box);
 
@@ -4784,7 +4781,7 @@ function renderHistory(){
  const q=($('#historySearch')?.value||'').toLowerCase(),
 type=$('#historyType')?.value||'';
 
- const list=historico.filter(h=>(!type||historyFamily(h.tipo)===type||String(h.tipo||'')===type)&&(!q||[h.tipo,
+ const list=estado.historico.filter(h=>(!type||historyFamily(h.tipo)===type||String(h.tipo||'')===type)&&(!q||[h.tipo,
 h.group,
 h.faccao,
 h.usuario,
@@ -4795,11 +4792,11 @@ h.responsavel,
 h.justificativa,
 JSON.stringify(h.depois||{})].join(' ').toLowerCase().includes(q)));
 
- const deliveries=historico.filter(h=>historyFamily(h.tipo)==='ENTREGA').length,
-recol=historico.filter(h=>historyFamily(h.tipo)==='RECOLHIMENTO').length,
-edits=historico.filter(h=>historyFamily(h.tipo)==='EDICAO').length;
+ const deliveries=estado.historico.filter(h=>historyFamily(h.tipo)==='ENTREGA').length,
+recol=estado.historico.filter(h=>historyFamily(h.tipo)==='RECOLHIMENTO').length,
+edits=estado.historico.filter(h=>historyFamily(h.tipo)==='EDICAO').length;
 
- $('#historyStats').innerHTML=`<span><b>${historico.length}</b> EVENTOS</span><span><b>${deliveries}</b> ENTREGAS</span><span><b>${recol}</b> RECOLHIMENTOS</span><span><b>${edits}</b> ALTERAÇÕES</span><span><b>${list.length}</b> EXIBIDOS</span>`;
+ $('#historyStats').innerHTML=`<span><b>${estado.historico.length}</b> EVENTOS</span><span><b>${deliveries}</b> ENTREGAS</span><span><b>${recol}</b> RECOLHIMENTOS</span><span><b>${edits}</b> ALTERAÇÕES</span><span><b>${list.length}</b> EXIBIDOS</span>`;
 
  if(!list.length){$('#historyList').innerHTML='<div class="placeholder"><b>◷</b><h3>NENHUM EVENTO ENCONTRADO</h3><p>Altere os filtros ou registre uma nova operação.</p></div>';
 return}
@@ -4819,7 +4816,7 @@ installed=INSTALLATIONS.filter(([k])=>isInstalled(b,k));
 
  if($('#groupProfileSummary'))$('#groupProfileSummary').innerHTML=`<div><span>STATUS</span><b class="${f.status==='ATIVA'?'online':''}">${f.status==='ATIVA'?'OCUPADO':'VAGO'}</b></div><div><span>OCUPANTE ATUAL</span><b>${esc(f.faccao||'—')}</b></div><div><span>QG / LOCAL</span><b>${esc(f.qg||'SEM LOCAL')}</b></div><div><span>INSTALAÇÕES</span><b>${installed.length}</b></div>`;
 
- const hs=historico.filter(h=>h.group===f.group).slice(0,6),
+ const hs=estado.historico.filter(h=>h.group===f.group).slice(0,6),
 box=$('#groupHistoryPreview');
 if(!box)return;
 
@@ -4849,7 +4846,7 @@ return estado.faccoes.find(f=>n.includes(alvesNorm(f.group)))||estado.faccoes.fi
 }
 function alvesFindOrg(text=''){
  const n=alvesNorm(text);
-return organizacoes.find(o=>n.includes(alvesNorm(o.nome)))||estado.faccoes.map(f=>({nome:f.faccao,
+return estado.organizacoes.find(o=>n.includes(alvesNorm(o.nome)))||estado.faccoes.map(f=>({nome:f.faccao,
 groupAtual:f.group,
 segmentoAtual:f.segmento,
 qgAtual:f.qg,
@@ -4873,7 +4870,7 @@ n])=>{if(isInstalled(b,k))lines.push(`${n}: ${installedValue(b,k)||'SIM'}`)});
  return [...new Set(lines)];
 
 }
-function alvesLastHistory(group,limit=5){return historico.filter(h=>alvesNorm(h.group)===alvesNorm(group)).slice(0,limit)}
+function alvesLastHistory(group,limit=5){return estado.historico.filter(h=>alvesNorm(h.group)===alvesNorm(group)).slice(0,limit)}
 function alvesDateFromDelivery(d){return d?.dataEntrega||(()=>{try{return d?.createdAt?.toDate?.().toLocaleDateString('pt-BR')||''}catch{return''}})()||'—'}
 function alvesAnswer(question=''){
  const q=alvesNorm(question),
@@ -4885,11 +4882,11 @@ o=alvesFindOrg(question);
  if(q.includes('resumo')&&(q.includes('operacional')||q.includes('geral'))){
   const occupied=estado.faccoes.filter(f=>f.status==='ATIVA').length,
 vagos=estado.faccoes.length-occupied,
-ativas=organizacoes.filter(x=>x.status==='ATIVA').length,
-sem=organizacoes.filter(x=>x.status==='SEM_GROUP').length,
-del=entregas.filter(x=>x.status==='ATIVA').length;
+ativas=estado.organizacoes.filter(x=>x.status==='ATIVA').length,
+sem=estado.organizacoes.filter(x=>x.status==='SEM_GROUP').length,
+del=estado.entregas.filter(x=>x.status==='ATIVA').length;
 
-  return {text:`Resumo operacional atual:\n• ${faccoes.length} Groups cadastrados: ${occupied} ocupados e ${vagos} vagos.\n• ${organizacoes.length} facções cadastradas: ${ativas} ativas e ${sem} sem Group.\n• ${del} entregas ativas registradas.\n• ${historico.length} eventos no histórico.`,
+  return {text:`Resumo operacional atual:\n• ${faccoes.length} Groups cadastrados: ${occupied} ocupados e ${vagos} vagos.\n• ${estado.organizacoes.length} facções cadastradas: ${ativas} ativas e ${sem} sem Group.\n• ${del} estado.entregas ativas registradas.\n• ${estado.historico.length} eventos no histórico.`,
 refs:['Groups/QGs',
 'Facções',
 'Entregas',
@@ -4903,14 +4900,14 @@ refs:['Groups/QGs']};
 
  }
  if(q.includes('facc')&&(q.includes('sem group')||q.includes('sem qg')||q.includes('sem local'))){
-  const list=organizacoes.filter(x=>x.status==='SEM_GROUP'||!x.groupAtual);
+  const list=estado.organizacoes.filter(x=>x.status==='SEM_GROUP'||!x.groupAtual);
 return {text:list.length?`Facções sem Group (${list.length}):\n${list.map(x=>`• ${x.nome}${x.lider?' — líder: '+x.lider:''}`).join('\n')}`:'Não há facções sem Group cadastradas.',
 refs:['Facções']};
 
  }
  if((q.includes('ultima')||q.includes('recent'))&&q.includes('entrega')){
-  const list=entregas.slice(0,6);
-return {text:list.length?`Últimas entregas registradas:\n${list.map(d=>`• ${d.group} → ${d.faccao||'—'} | ${alvesDateFromDelivery(d)} | ${d.status||'—'}`).join('\n')}`:'Ainda não há entregas registradas.',
+  const list=estado.entregas.slice(0,6);
+return {text:list.length?`Últimas estado.entregas registradas:\n${list.map(d=>`• ${d.group} → ${d.faccao||'—'} | ${alvesDateFromDelivery(d)} | ${d.status||'—'}`).join('\n')}`:'Ainda não há estado.entregas registradas.',
 refs:['Entregas']};
 
  }
@@ -4944,19 +4941,19 @@ refs:[g.group,
 
  }
  if(g&&q.includes('solicit')){
-  const ds=entregas.filter(d=>d.group===g.group&&Array.isArray(d.solicitacoesGeradas)&&d.solicitacoesGeradas.length).slice(0,3);
+  const ds=estado.entregas.filter(d=>d.group===g.group&&Array.isArray(d.solicitacoesGeradas)&&d.solicitacoesGeradas.length).slice(0,3);
 const reqs=ds.flatMap(d=>d.solicitacoesGeradas.map(r=>({d,
 r}))).slice(0,8);
 
-  return {text:reqs.length?`Solicitações recentes geradas para ${g.group}:\n${reqs.map(x=>`• ${x.r.titulo||x.r.tipo||'Solicitação'} — entrega ${x.d.faccao||'—'}`).join('\n')}`:`Não encontrei solicitações geradas em entregas do ${g.group}. A Biblioteca de Solicitações continua disponível para modelos manuais.`,
+  return {text:reqs.length?`Solicitações recentes geradas para ${g.group}:\n${reqs.map(x=>`• ${x.r.titulo||x.r.tipo||'Solicitação'} — entrega ${x.d.faccao||'—'}`).join('\n')}`:`Não encontrei solicitações geradas em estado.entregas do ${g.group}. A Biblioteca de Solicitações continua disponível para modelos manuais.`,
 refs:[g.group,
 'Entregas',
 'Biblioteca de Solicitações']};
 
  }
  if(g&&q.includes('entrega')){
-  const ds=entregas.filter(d=>d.group===g.group).slice(0,5);
-return {text:ds.length?`Entregas registradas para ${g.group}:\n${ds.map(d=>`• ${alvesDateFromDelivery(d)} — ${d.faccao||'—'} — ${d.status||'—'}${d.lider?' — líder: '+d.lider:''}`).join('\n')}`:`Não há entregas registradas para ${g.group}.`,
+  const ds=estado.entregas.filter(d=>d.group===g.group).slice(0,5);
+return {text:ds.length?`Entregas registradas para ${g.group}:\n${ds.map(d=>`• ${alvesDateFromDelivery(d)} — ${d.faccao||'—'} — ${d.status||'—'}${d.lider?' — líder: '+d.lider:''}`).join('\n')}`:`Não há estado.entregas registradas para ${g.group}.`,
 refs:[g.group,
 'Entregas']};
 
@@ -5605,7 +5602,7 @@ error:err?.message||String(err)};
    leituras, e o limite gratuito e de 50.000 por dia. Cinco aberturas
    esgotavam a cota - era o fundo do poco do problema original.
 
-   A planilha publicada ja contem o historico inteiro e e servida como
+   A planilha publicada ja contem o estado.historico inteiro e e servida como
    arquivo estatico: ler o CSV nao consome cota nenhuma do Firebase.
    Entao a ordem de leitura passa a ser:
 
@@ -5618,7 +5615,7 @@ error:err?.message||String(err)};
    conteudo daquele mes muda. Sai de ate 2.060 gravacoes por
    sincronizacao para 1 por mes alterado.
 
-   A colecao antiga nao e apagada: fica como historico ate voce decidir.
+   A colecao antiga nao e apagada: fica como estado.historico ate voce decidir.
    ===================================================================== */
 const metricMonthCol=collection(db,'highos','data','metricas_mensais');
 
@@ -9071,7 +9068,7 @@ if(!group||!texto)return null;
  const fp=requestFingerprint({group,
 tipo,
 texto}),
-dup=requestRecords.find(x=>x.status==='PENDENTE'&&x.fingerprint===fp);
+dup=estado.requestRecords.find(x=>x.status==='PENDENTE'&&x.fingerprint===fp);
 if(dup)return dup;
 
  const payload={isModelo:false,
@@ -9093,13 +9090,13 @@ fingerprint:fp};
 item={id:ref.id,
 ...clonePlain(payload),
 createdAt:null};
-requestRecords.unshift(item);
+estado.requestRecords.unshift(item);
 return item;
 
 }
 function fmtRequestWhen(r={}){const d=r.createdAtText?new Date(r.createdAtText):null;
 return d&&!isNaN(d)?d.toLocaleString('pt-BR'):'—'}
-async function copyArchivedRequest(id,btn){const r=requestRecords.find(x=>x.id===id);
+async function copyArchivedRequest(id,btn){const r=estado.requestRecords.find(x=>x.id===id);
 if(!r?.texto)return;
 try{await navigator.clipboard.writeText(r.texto);
 const o=btn.textContent;
@@ -9112,7 +9109,7 @@ const f=currentFactionFromForm(),
 group=f?.group||$('#fGroup')?.value||'';
 let pending=[];
 try{pending=autoDeliveryRequests(f)}catch{}
- const archived=requestRecords.filter(x=>x.group===group).slice(0,60);
+ const archived=estado.requestRecords.filter(x=>x.group===group).slice(0,60);
 
  const pendingHtml=pending.length?`<div class="request-archive-section"><div class="request-archive-head"><b>DEMANDAS GERADAS PELAS ALTERAÇÕES ATUAIS</b><span>${pending.length} pendente(s) de salvar</span></div>${pending.map((r,i)=>`<article class="delivery-request-card request-live"><div><b>${i+1}. ${esc(r.titulo)}</b><span>${esc(r.tipo)}</span></div><pre>${esc(r.texto)}</pre></article>`).join('')}</div>`:'<div class="delivery-no-change">Nenhuma nova demanda pelas alterações atuais.</div>';
 
@@ -9920,7 +9917,7 @@ $('#adminResetAll')?.addEventListener('click', async () => {
   if(!isAdmin()) return;
   const typed = prompt('RESET OPERACIONAL COMPLETO. O histórico de auditoria será PRESERVADO.\n\nDigite exatamente: RESETAR HIGH OS');
   if(typed !== 'RESETAR HIGH OS') return alert('Confirmação incorreta. Nada foi apagado.');
-  if(!confirm('Última confirmação: apagar Groups/QGs, organizações, solicitações, entregas e métricas?')) return;
+  if(!confirm('Última confirmação: apagar Groups/QGs, organizações, solicitações, estado.entregas e métricas?')) return;
 
   try{
     await addDoc(histCol, {
@@ -10322,7 +10319,7 @@ date:d,
 value:mx,
 row:r})});
 
- return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const f=estado.faccoes.find(z=>alvesNorm(z.group)===alvesNorm(x.group));const lastDelivery=historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
+ return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const f=estado.faccoes.find(z=>alvesNorm(z.group)===alvesNorm(x.group));const lastDelivery=estado.historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
 qg:f?.qg||'',
 staff:f?.staff||'',
 hasExtract:!!lastDelivery};}).sort((a,b)=>b.date-a.date);
@@ -10353,7 +10350,7 @@ visibleWeekly=weekly.filter(x=>x.state!=='LIMPO'),
 openAlerts=visibleWeekly.filter(x=>x.state!=='CONCLUIDO'),
 critical=openAlerts.filter(x=>x.level==='CRÍTICO').length;
 
- const pending=solicitacoes.filter(x=>String(x.status||'').toUpperCase()==='PENDENTE').length,
+ const pending=estado.solicitacoes.filter(x=>String(x.status||'').toUpperCase()==='PENDENTE').length,
 health=dashboardHealth(weekly),
 anomalies=vacantMetricAnomalies();
 
@@ -10361,9 +10358,9 @@ anomalies=vacantMetricAnomalies();
 estado.faccoes.forEach(f=>{const k=f.segmento||'OUTROS';if(!segs[k])segs[k]={all:0,
 on:0};segs[k].all++;if(f.status==='ATIVA'&&f.faccao)segs[k].on++});
 
- const movements=historico.slice(0,6),
-rec30=historico.filter(h=>historyFamily(h.tipo)==='RECOLHIMENTO').length,
-ent30=historico.filter(h=>historyFamily(h.tipo)==='ENTREGA').length;
+ const movements=estado.historico.slice(0,6),
+rec30=estado.historico.filter(h=>historyFamily(h.tipo)==='RECOLHIMENTO').length,
+ent30=estado.historico.filter(h=>historyFamily(h.tipo)==='ENTREGA').length;
 
  const bars=Object.entries(segs).map(([k,
 v])=>`<div class="dash-seg-row"><span>${esc(k)}</span><div><i style="width:${v.all?Math.max(3,v.on/v.all*100):0}%"></i></div><b>${v.on}/${v.all}</b></div>`).join('');
@@ -10374,11 +10371,11 @@ v])=>`<div class="dash-seg-row"><span>${esc(k)}</span><div><i style="width:${v.a
 
  const activity=movements.map(h=>`<div class="dash-activity-row"><i></i><div><b>${esc(historyTitle(h))}</b><span>${esc([h.group,h.faccao].filter(Boolean).join(' • ')||h.descricao||'Operação administrativa')}</span><small>${esc(formatHistoryDate(h))}${h.usuario?' • '+esc(h.usuario):''}</small></div></div>`).join('')||'<div class="dash-empty">Nenhuma movimentação registrada.</div>';
 
- box.innerHTML=`<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>QGs VAGOS</span><b>${vacant.length}</b><small>fora de métricas globais</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><button data-go="solicitacoes"><span>SOLICITAÇÕES</span><b>${pending||solicitacoes.length}</b><small>${pending?'pendentes':'modelos cadastrados'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
+ box.innerHTML=`<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>QGs VAGOS</span><b>${vacant.length}</b><small>fora de métricas globais</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><button data-go="solicitacoes"><span>SOLICITAÇÕES</span><b>${pending||estado.solicitacoes.length}</b><small>${pending?'pendentes':'modelos cadastrados'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
  <div class="dash-grid"><section class="dash-panel dash-wide"><header><div><span>COMPARAÇÃO SEMANAL</span><h3>ALERTAS OBJETIVOS DE CONTINGENTE</h3></div><button data-go="metricas">ABRIR CENTRAL →</button></header><p class="dash-rule-note">A semana atual é comparada com os mesmos dias e horários da semana anterior. Facções sem ocupação nunca geram alerta.</p><div class="dash-week-alerts">${attention}</div></section>
  <section class="dash-panel"><header><div><span>PATRIMÔNIO</span><h3>OCUPAÇÃO POR SEGMENTO</h3></div><button data-go="faccoes">VER ORGANIZAÇÕES →</button></header><div class="dash-segments">${bars}</div></section>
  <section class="dash-panel dash-wide"><header><div><span>VALIDAÇÃO AUTOMÁTICA</span><h3>INCONSISTÊNCIAS • GROUP VAGO COM PLAYER</h3></div></header><div class="dash-anomalies">${anomalyHtml}</div></section>
- <section class="dash-panel"><header><div><span>30 DIAS / HISTÓRICO</span><h3>MOVIMENTAÇÃO DE FACÇÕES</h3></div><button data-go="historico">VER HISTÓRICO →</button></header><div class="dash-move-kpis"><div><b>${ent30}</b><span>ENTREGAS</span></div><div><b>${rec30}</b><span>RECOLHIMENTOS</span></div><div><b>${historico.length}</b><span>EVENTOS</span></div></div></section>
+ <section class="dash-panel"><header><div><span>30 DIAS / HISTÓRICO</span><h3>MOVIMENTAÇÃO DE FACÇÕES</h3></div><button data-go="historico">VER HISTÓRICO →</button></header><div class="dash-move-kpis"><div><b>${ent30}</b><span>ENTREGAS</span></div><div><b>${rec30}</b><span>RECOLHIMENTOS</span></div><div><b>${estado.historico.length}</b><span>EVENTOS</span></div></div></section>
  <section class="dash-panel dash-wide"><header><div><span>AUDITORIA</span><h3>ATIVIDADE RECENTE</h3></div><button data-go="historico">ABRIR HISTÓRICO →</button></header><div class="dash-activity">${activity}</div></section></div>`;
 
  box.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>dashboardGo(b.dataset.go));
@@ -10606,7 +10603,7 @@ createdAtText:new Date().toISOString(),
 createdBy:currentUser?.email||'',
 fingerprint:requestFingerprint({group,
 tipo:'CRAFT_ITEM',
-texto:generatedRequest.texto})};const dup=requestRecords.find(x=>x.status==='PENDENTE'&&x.fingerprint===craftPayload.fingerprint);if(dup){requestRef={id:dup.id}}else{requestRef=await addDoc(reqCol,craftPayload);requestRecords.unshift({id:requestRef.id,
+texto:generatedRequest.texto})};const dup=estado.requestRecords.find(x=>x.status==='PENDENTE'&&x.fingerprint===craftPayload.fingerprint);if(dup){requestRef={id:dup.id}}else{requestRef=await addDoc(reqCol,craftPayload);estado.requestRecords.unshift({id:requestRef.id,
 ...clonePlain(craftPayload),
 createdAt:null})};
    }
@@ -11085,7 +11082,7 @@ const batch=writeBatch(db);
 estado.faccoes.filter(f=>segmentKey(f.segmento)===segmentKey(oldName)).forEach(f=>batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:nome,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true}));
-organizacoes.filter(o=>segmentKey(orgSegmentValue(o))===segmentKey(oldName)).forEach(o=>batch.set(doc(db,'highos','data','organizacoes',o.id||orgKey(o.nome)),{segmentoAtual:nome,
+estado.organizacoes.filter(o=>segmentKey(orgSegmentValue(o))===segmentKey(oldName)).forEach(o=>batch.set(doc(db,'highos','data','organizacoes',o.id||orgKey(o.nome)),{segmentoAtual:nome,
 segmentoVinculado:nome,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true}));
@@ -11155,7 +11152,7 @@ if(!confirm(`Apagar o segmento ${name}?${replacement?`\n\nTodos os vínculos ser
 estado.faccoes.filter(f=>segmentKey(f.segmento)===segmentKey(name)).forEach(f=>batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:replacement,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true}));
-organizacoes.filter(o=>segmentKey(orgSegmentValue(o))===segmentKey(name)).forEach(o=>batch.set(doc(db,'highos','data','organizacoes',o.id||orgKey(o.nome)),{segmentoAtual:replacement,
+estado.organizacoes.filter(o=>segmentKey(orgSegmentValue(o))===segmentKey(name)).forEach(o=>batch.set(doc(db,'highos','data','organizacoes',o.id||orgKey(o.nome)),{segmentoAtual:replacement,
 segmentoVinculado:replacement,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true}));
@@ -11262,7 +11259,7 @@ delete payload.id;
   await setDoc(doc(db,'highos','data','faccoes',next),payload,{merge:false});
 await deleteDoc(doc(db,'highos','data','faccoes',current.id||current.group));
 
-  const linked=organizacoes.filter(o=>alvesNorm(o.groupAtual)===alvesNorm(current.group));
+  const linked=estado.organizacoes.filter(o=>alvesNorm(o.groupAtual)===alvesNorm(current.group));
 for(const o of linked){await setDoc(doc(db,'highos','data','organizacoes',o.id||orgKey(o.nome)),{groupAtual:next,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true})}
@@ -11576,7 +11573,7 @@ function chatTime(v){const d=v?.toDate?v.toDate():v?.seconds?new Date(v.seconds*
 return d&&!isNaN(d)?d.toLocaleString('pt-BR'):'agora'}
 function hmInitials(v=''){const parts=String(v||'H').trim().split(/\s+/).filter(Boolean);
 return (parts[0]?.[0]||'H')+(parts.length>1?(parts.at(-1)?.[0]||''):'')}
-function hmUser(email=''){return usuarios.find(u=>String(u.email||'').toLowerCase()===String(email||'').toLowerCase())||null}
+function hmUser(email=''){return estado.usuarios.find(u=>String(u.email||'').toLowerCase()===String(email||'').toLowerCase())||null}
 function hmUserName(u){return u?.name||u?.nome||u?.displayName||u?.email||'Usuário'}
 function hmUserRole(u){return u?.cargo||u?.role||'MEMBRO'}
 function chatAttachmentHtml(m){const a=m.anexo;
@@ -11599,7 +11596,7 @@ function populateChatRecipients(){const sel=$('#chatRecipientSelect');
 if(!sel||!currentUser)return;
 const me=(currentUser.email||'').toLowerCase(),
 keep=chatRecipientEmail||sel.value;
-const list=usuarios.filter(u=>String(u.email||'').toLowerCase()!==me&&u.active!==false);
+const list=estado.usuarios.filter(u=>String(u.email||'').toLowerCase()!==me&&u.active!==false);
 sel.innerHTML='<option value="">Selecione um usuário</option>'+list.map(u=>`<option value="${esc(u.email)}">${esc(hmUserName(u))} • ${esc(hmUserRole(u))}</option>`).join('');
 if(keep&&list.some(u=>String(u.email||'').toLowerCase()===String(keep).toLowerCase())){sel.value=keep;
 chatRecipientEmail=keep}renderHmContacts()}
@@ -11612,7 +11609,7 @@ function renderHmContacts(){const box=$('#hmContactList');
 if(!box||!currentUser)return;
 const q=String($('#hmContactSearch')?.value||'').trim().toLowerCase(),
 me=String(currentUser.email||'').toLowerCase();
-const list=usuarios.filter(u=>u.active!==false&&String(u.email||'').toLowerCase()!==me).filter(u=>`${hmUserName(u)} ${hmUserRole(u)} ${u.email||''}`.toLowerCase().includes(q)).sort((a,b)=>hmUserName(a).localeCompare(hmUserName(b),'pt-BR'));
+const list=estado.usuarios.filter(u=>u.active!==false&&String(u.email||'').toLowerCase()!==me).filter(u=>`${hmUserName(u)} ${hmUserRole(u)} ${u.email||''}`.toLowerCase().includes(q)).sort((a,b)=>hmUserName(a).localeCompare(hmUserName(b),'pt-BR'));
 box.innerHTML=list.length?list.map(u=>{const active=String(u.email||'').toLowerCase()===String(chatRecipientEmail||'').toLowerCase(),
 last=hmLastMessageFor(u.email);const preview=last?(last.texto||last.sticker||last.anexo?.name||(last.reuniao?'Chamada':'Mensagem')):'Clique para conversar';return `<button type="button" class="hm-contact ${active?'active':''}" data-hm-email="${esc(u.email||'')}"><span class="hm-contact-avatar">${u.photoURL?`<img src="${esc(u.photoURL)}" alt="">`:esc(hmInitials(hmUserName(u)))}</span><span class="hm-contact-copy"><b>${esc(hmUserName(u))}</b><small><i>${esc(hmUserRole(u))}</i> • ${esc(String(preview).slice(0,42))}</small></span><span class="hm-contact-state" title="Usuário cadastrado">●</span></button>`}).join(''):'<div class="chat-empty">Nenhum usuário cadastrado encontrado.</div>';
 box.querySelectorAll('[data-hm-email]').forEach(b=>b.onclick=()=>selectChatRecipient(b.dataset.hmEmail))}

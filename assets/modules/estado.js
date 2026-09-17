@@ -21,5 +21,19 @@ export const estado = {
   /** Copia usada para comparar o que mudou antes de gravar. */
   metricasCache: [],
   /** Groups e faccoes carregados do Firestore. */
-  faccoes: []
+  faccoes: [],
+  /** Eventos de auditoria carregados (janela paginada). */
+  historico: [],
+  /** Organizacoes vinculadas aos Groups. */
+  organizacoes: [],
+  /** Entregas registradas. */
+  entregas: [],
+  /** Usuarios cadastrados e suas permissoes. */
+  usuarios: [],
+  /** Solicitacoes tecnicas abertas. */
+  solicitacoes: [],
+  /** Registros da biblioteca de solicitacoes. */
+  requestRecords: [],
+  /** Sessoes de acesso para a auditoria. */
+  userSessions: []
 };

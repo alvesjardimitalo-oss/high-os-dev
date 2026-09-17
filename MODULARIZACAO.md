@@ -6,12 +6,31 @@
 |---|---|---|
 | `modules/metricas-parser.js` | 7 funções do parser da planilha | 10.5.0 |
 | `modules/formatadores.js` | `esc`, `alvesNorm`, formatadores de data/duração/moeda | 10.7.0 |
-| `modules/estado.js` | `metricas`, `metricasCache`, `faccoes` | 10.8.0 / 10.9.0 |
+| `modules/estado.js` | os 10 arrays globais do sistema | 10.8.0 → 11.0.0 |
 
-Ainda no `app.js`, para migrar um por vez:
-`historico` (48 usos), `organizacoes` (34), `entregas` (29),
-`usuarios` (22), `solicitacoes` (20), `requestRecords` (10),
-`userSessions` (10).
+**Migração de estado concluída.** Os dez arrays globais vivem em
+`estado.js`: `metricas`, `metricasCache`, `faccoes`, `historico`,
+`organizacoes`, `entregas`, `usuarios`, `solicitacoes`,
+`requestRecords` e `userSessions`.
+
+A partir daqui, qualquer função que grave nesses arrays pode ser movida
+para um módulo — era isso que o corte destravava. Os próximos candidatos
+naturais são `boletim.js`, `chat.js` e `planejador-nuvem.js`.
+
+### Lição do caminho
+
+A primeira tentativa usou o analisador léxico do formatador para trocar
+só regiões de código. Ele falhou em silêncio: interpretou mal alguma
+região e pulou trechos, deixando `userSessions` metade migrado — pior
+que não ter migrado, porque leitura e escrita apontariam para lugares
+diferentes. A auditoria feita com o mesmo analisador confirmou um
+"tudo certo" falso.
+
+O que funcionou foi mais simples: percorrer linha a linha, pular linhas
+de comentário e exigir que o identificador não esteja colado a aspas ou
+ponto. Conferência final feita com `grep` puro, independente da
+ferramenta que fez a troca — que é o ponto: **a verificação não pode usar
+o mesmo mecanismo que executou a mudança.**
 
 O procedimento está automatizado e é sempre o mesmo: trocar as
 referências só em região de código (o analisador do formatador garante
