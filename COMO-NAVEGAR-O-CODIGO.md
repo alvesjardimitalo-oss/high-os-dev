@@ -2,12 +2,38 @@
 
 Guia para responder, antes de editar: **o que quebra se eu tirar isso?**
 
-## A ferramenta
+## Duas formas de usar — escolha a que couber
+
+### No navegador (sem instalar nada)
+
+```
+seu-site/tools/mapa-do-codigo.html
+```
+
+Ela baixa os próprios arquivos publicados, monta o grafo de chamadas e
+oferece um campo de busca. Digite o nome da função e veja quem a chama,
+o que ela chama e o que ficaria órfão se ela saísse. Os nomes listados
+são clicáveis, então dá para navegar pela cadeia de dependências.
+
+É a via recomendada para quem trabalha pelo GitHub web.
+
+### Verificação automática a cada push
+
+`.github/workflows/verificar.yml` roda no GitHub a cada commit, em
+qualquer branch. Confere a sintaxe de todos os arquivos, procura funções
+perdidas, procura referências órfãs ao estado antigo em templates (o bug
+do `${faccoes.length}`) e imprime o mapa do código.
+
+O resultado aparece na aba **Actions** e como check verde ou vermelho ao
+lado do commit. Se ficar vermelho, clique para ver qual passo falhou.
+
+### Na linha de comando (se algum dia instalar o Node)
 
 ```
 node tools/mapa-do-codigo.mjs                 panorama + o que dá para remover
 node tools/mapa-do-codigo.mjs --md            grava INDICE-DO-CODIGO.md
 node tools/mapa-do-codigo.mjs nomeDaFuncao    impacto de uma função
+node tools/verificar-integridade.mjs          funções perdidas
 ```
 
 A consulta por nome é a que importa no dia a dia. Exemplo real:
