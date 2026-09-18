@@ -6467,6 +6467,9 @@ function boletimTexto(){
   novos.forEach(x=>L.push(`• ${x.nome} — ${x.total.toLocaleString('pt-BR')} na primeira semana`));
   L.push('');
  }
+ L.push('');
+ L.push(triagemTexto());
+ L.push('');
  L.push(`_Gerado pelo High OS em ${new Date().toLocaleString('pt-BR')}_`);
  return L.join('\n');
 }
@@ -6485,9 +6488,131 @@ function boletimPartes(texto){
   : partes;
 }
 
+
+/* =====================================================================
+   HIGH OS V11.6 - TRIAGEM SEMANAL DAS FACCOES
+   ---------------------------------------------------------------------
+   Responde a pergunta que a operacao faz toda semana: quem precisa ser
+   recolhido, quem merece acompanhamento e quem esta indo bem.
+
+   Regra importante: so entra Group OCUPADO. Na semana analisada, 25 dos
+   56 Groups estavam zerados - quase todos vagos, sem faccao dentro.
+   Group vago nao e "para limpar", e vazio; misturar os dois faria a
+   lista de recolhimento nascer errada.
+
+   Os cortes vieram da distribuicao real: entre os Groups com atividade,
+   o topo passa de 50 por dia e o fundo fica abaixo de 1. A diferenca e
+   de cem vezes, entao a separacao e nitida.
+   ===================================================================== */
+const TRIAGEM_LIMITES={
+ limparDias:2,        // presenca de ate 2 dias em 7
+ limparMedia:1,       // ou media diaria abaixo de 1
+ acompanharDias:5,    // presenca de 3 a 5 dias
+ quedaGrave:40,       // ou queda acima de 40% contra a semana anterior
+ bemDias:6,           // presenca de 6 ou 7 dias
+ bemMedia:6           // e media acima de 6 por dia
+};
+
+function triagemSemanal(){
+ const base=boletimCalcular();
+ const ocupados=base.linhas.filter(l=>metricGroupOccupied(l.nome));
+ const fora=base.linhas.length-ocupados.length;
+
+ const classificar=l=>{
+  const media=l.total/7;
+  if(l.dias<=TRIAGEM_LIMITES.limparDias||media<TRIAGEM_LIMITES.limparMedia)return 'limpar';
+  if(l.dias<=TRIAGEM_LIMITES.acompanharDias)return 'acompanhar';
+  if(l.totalAnterior>0&&l.variacao<=-TRIAGEM_LIMITES.quedaGrave)return 'acompanhar';
+  if(l.dias>=TRIAGEM_LIMITES.bemDias&&media>TRIAGEM_LIMITES.bemMedia)return 'bem';
+  return 'acompanhar';
+ };
+
+ const grupos={limpar:[],acompanhar:[],bem:[]};
+ ocupados.forEach(l=>{
+  const item={...l,media:l.total/7,faixa:classificar(l)};
+  item.motivo=item.faixa==='limpar'
+   ? (l.dias<=TRIAGEM_LIMITES.limparDias?`presença em apenas ${l.dias} dia(s) dos 7`:`média de ${(l.total/7).toFixed(1)} por dia`)
+   : item.faixa==='acompanhar'
+     ? (l.totalAnterior>0&&l.variacao<=-TRIAGEM_LIMITES.quedaGrave?`queda de ${Math.abs(l.variacao).toFixed(0)}% na semana`:`presença em ${l.dias} dia(s) dos 7`)
+     : `${l.dias} dias de presença • média de ${(l.total/7).toFixed(1)} por dia`;
+  grupos[item.faixa].push(item);
+ });
+ grupos.limpar.sort((a,b)=>a.media-b.media);
+ grupos.acompanhar.sort((a,b)=>a.variacao-b.variacao);
+ grupos.bem.sort((a,b)=>b.media-a.media);
+ return {...grupos,janelas:base.janelas,ocupados:ocupados.length,fora};
+}
+
+function triagemTexto(){
+ const t=triagemSemanal();
+ const j=t.janelas;
+ const L=[];
+ L.push(`**TRIAGEM DAS FACÇÕES**`);
+ L.push(`Período: ${boletimDataBR(j.inicioAtual)} a ${boletimDataBR(j.fimAtual)} • ${t.ocupados} Group(s) ocupado(s)`);
+ L.push('');
+ if(t.limpar.length){
+  L.push(`**PRECISAM SER RECOLHIDOS (${t.limpar.length})**`);
+  t.limpar.forEach(x=>L.push(`• ${x.nome} — ${x.motivo}`));
+  L.push('');
+ }
+ if(t.acompanhar.length){
+  L.push(`**ACOMPANHAR (${t.acompanhar.length})**`);
+  t.acompanhar.forEach(x=>L.push(`• ${x.nome} — ${x.motivo}`));
+  L.push('');
+ }
+ if(t.bem.length){
+  L.push(`**ESTÃO BEM (${t.bem.length})**`);
+  t.bem.forEach(x=>L.push(`• ${x.nome} — ${x.motivo}`));
+  L.push('');
+ }
+ L.push(`_Group vago não entra nesta lista: ${t.fora} fora por não ter facção ocupando._`);
+ return L.join('\n');
+}
+
+function renderTriagem(){
+ const box=document.getElementById('metricTriagem');
+ if(!box)return;
+ const t=triagemSemanal();
+ const coluna=(titulo,itens,classe,descricao)=>`
+  <div class="triagem-col ${classe}">
+   <header><b>${titulo}</b><span>${itens.length}</span></header>
+   <small>${descricao}</small>
+   ${itens.length
+     ? itens.map(x=>`
+       <button type="button" class="triagem-item" data-group="${esc(x.nome)}">
+        <b>${esc(x.nome)}</b>
+        <small>${esc(x.motivo)}</small>
+        <i>${x.total.toLocaleString('pt-BR')} na semana${x.totalAnterior?` • ${boletimPct(x.variacao)}`:''}</i>
+       </button>`).join('')
+     : '<div class="triagem-vazio">Ninguém nesta faixa.</div>'}
+  </div>`;
+ box.innerHTML=`
+  <div class="triagem-head">
+   <div><b>TRIAGEM DAS FACÇÕES</b><span>${boletimDataBR(t.janelas.inicioAtual)} a ${boletimDataBR(t.janelas.fimAtual)} • ${t.ocupados} Group(s) ocupado(s) • ${t.fora} vago(s) fora da conta</span></div>
+   <button type="button" id="triagemCopiar">COPIAR PARA O DISCORD</button>
+  </div>
+  <div class="triagem-grid">
+   ${coluna('PRECISAM SER RECOLHIDOS',t.limpar,'limpar','até 2 dias de presença ou média abaixo de 1 por dia')}
+   ${coluna('ACOMPANHAR',t.acompanhar,'acompanhar','3 a 5 dias de presença ou queda acima de 40%')}
+   ${coluna('ESTÃO BEM',t.bem,'bem','6 ou 7 dias de presença e média acima de 6 por dia')}
+  </div>`;
+ document.getElementById('triagemCopiar')?.addEventListener('click',async()=>{
+  await copyText(triagemTexto());
+  window.highToast?.('Triagem copiada.','ok');
+ });
+ box.querySelectorAll('[data-group]').forEach(b=>b.addEventListener('click',()=>{
+  const f=estado.faccoes.find(x=>alvesNorm(x.group)===alvesNorm(b.dataset.group));
+  if(f)showGroupProfilePage(f);
+ }));
+}
+
 function renderBoletim(){
  const box=document.getElementById('metricViewBoletim');
  if(!box)return;
+ let alvoTriagem=document.getElementById('metricTriagem');
+ if(!alvoTriagem){alvoTriagem=document.createElement('div');
+alvoTriagem.id='metricTriagem';
+alvoTriagem.className='metric-triagem'}
  const texto=boletimTexto();
  const partes=boletimPartes(texto);
  box.innerHTML=`
@@ -6511,7 +6636,11 @@ function renderBoletim(){
      <pre>${esc(p)}</pre>
     </div>`).join('')}
   </div>`;
- document.getElementById('boletimGerar')?.addEventListener('click',renderBoletim);
+ /* V11.6 - o boletim reescreve o proprio container, entao a div da triagem
+    e recriada no topo depois da reescrita */
+ box.insertBefore(alvoTriagem,box.firstChild);
+ renderTriagem();
+ document.getElementById('boletimGerar')?.addEventListener('click',()=>{renderBoletim();renderTriagem()});
  document.getElementById('boletimCopiar')?.addEventListener('click',async()=>{
   await copyText(texto);
   window.highToast?.('Boletim copiado.','ok');

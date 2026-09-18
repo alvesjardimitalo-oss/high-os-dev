@@ -985,3 +985,52 @@ body.busca-aberta{overflow:hidden}
   border:1px dashed var(--hm-line-2,rgba(255,255,255,.13));border-radius:14px;
   color:var(--hm-text-3,#8a7f99);font-size:12.5px;
 }
+
+/* =========================================================
+   TRIAGEM DAS FACÇÕES (V11.6)
+   ========================================================= */
+.metric-triagem{margin-bottom:16px}
+.triagem-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  padding:15px 17px;margin-bottom:12px;
+  background:linear-gradient(180deg,#151020,#100c18);
+  border:1px solid var(--hm-line-2);border-radius:16px;
+}
+.triagem-head b{display:block;font-size:11px;letter-spacing:.13em;color:#fff}
+.triagem-head span{display:block;margin-top:4px;font-size:11px;color:var(--hm-text-3)}
+#triagemCopiar{
+  background:linear-gradient(135deg,#8d35ff,#6321b8);border:none;border-radius:9px;color:#fff;
+  padding:10px 15px;font-size:9.5px;font-weight:900;letter-spacing:.08em;cursor:pointer;
+}
+.triagem-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}
+.triagem-col{
+  border:1px solid var(--hm-line);border-radius:15px;padding:13px;
+  background:rgba(255,255,255,.022);border-top-width:3px;
+}
+.triagem-col header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.triagem-col header b{font-size:9.5px;letter-spacing:.11em}
+.triagem-col header span{
+  font-size:11px;font-weight:900;padding:2px 9px;border-radius:20px;
+  background:rgba(255,255,255,.08);color:#fff;
+}
+.triagem-col > small{display:block;margin:5px 0 10px;font-size:10px;color:var(--hm-text-3);line-height:1.45}
+.triagem-col.limpar{border-top-color:#ff5b76}
+.triagem-col.limpar header b{color:#ff8a9c}
+.triagem-col.limpar header span{background:rgba(255,91,118,.2);color:#ff8a9c}
+.triagem-col.acompanhar{border-top-color:#ffcf5c}
+.triagem-col.acompanhar header b{color:#ffcf5c}
+.triagem-col.acompanhar header span{background:rgba(255,207,92,.18);color:#ffcf5c}
+.triagem-col.bem{border-top-color:#50f5a0}
+.triagem-col.bem header b{color:#50f5a0}
+.triagem-col.bem header span{background:rgba(80,245,160,.16);color:#50f5a0}
+.triagem-item{
+  display:block;width:100%;text-align:left;cursor:pointer;margin-bottom:5px;
+  background:rgba(255,255,255,.03);border:1px solid var(--hm-line);border-radius:11px;
+  padding:9px 11px;color:var(--hm-text);
+  transition:background 130ms ease,transform 130ms ease;
+}
+.triagem-item:hover{background:rgba(141,53,255,.15);transform:translateX(2px)}
+.triagem-item b{display:block;font-size:12px}
+.triagem-item small{display:block;margin-top:2px;font-size:10.5px;color:var(--hm-text-3)}
+.triagem-item i{display:block;margin-top:3px;font-style:normal;font-size:10px;color:var(--hm-text-3);opacity:.8;font-variant-numeric:tabular-nums}
+.triagem-vazio{padding:14px 4px;font-size:11px;color:var(--hm-text-3);text-align:center}
