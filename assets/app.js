@@ -1506,7 +1506,7 @@ userPhotoEl=$('#userPhoto');
  }
 });
 
-document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$('#page-'+btn.dataset.page).classList.add('active');if(btn.dataset.page==='administracao'&&isAdmin()){loadUserAudit();setTimeout(renderSaudeSistema,0)}if(btn.dataset.page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60)}));
+document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$('#page-'+btn.dataset.page).classList.add('active');if(btn.dataset.page==='administracao'&&isAdmin()){loadUserAudit();setTimeout(()=>{renderSaudeSistema();moverInfraParaAdmin()},0)}if(btn.dataset.page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60)}));
 
 // HIGH OS V6.7 · o perfil do Group passa a abrir como página interna, não como modal.
 function activateAppPage(page){
@@ -5474,6 +5474,118 @@ box.className='metric-quota-panel';
  return box;
 
 }
+
+/* =====================================================================
+   HIGH OS V11.8 - SEPARAR OPERAÇÃO DE INFRAESTRUTURA
+   ---------------------------------------------------------------------
+   A tela de Metricas abria com tres blocos que nao sao metrica: o estado
+   da conexao com o Google Sheets, o consumo de cota do Firebase e os
+   botoes de configurar fonte e importar manualmente. Quem abre Metricas
+   quer ver numero de facção, nao estado de integracao.
+
+   Esses blocos sao MOVIDOS (nao recriados) para Administracao > Integracoes.
+   Mover o proprio elemento preserva todos os listeners ja ligados a ele -
+   recriar o HTML exigiria religar tudo e seria fonte de bug.
+
+   Na tela de Metricas fica so uma linha de status com a ultima
+   sincronizacao e o botao de sincronizar agora, que e operacao.
+   ===================================================================== */
+function moverInfraParaAdmin(){
+ const destino=document.querySelector('[data-admin-panel="integracoes"]');
+ if(!destino||document.getElementById('infraMetricas'))return;
+
+ const caixa=document.createElement('div');
+ caixa.id='infraMetricas';
+ caixa.className='infra-metricas';
+ caixa.innerHTML=`<div class="infra-head"><b>FONTE E CONSUMO DAS MÉTRICAS</b>
+   <span>Estado da planilha oficial e uso da cota diária do Firebase. Movido da tela de Métricas, que passou a mostrar só operação.</span></div>`;
+ destino.insertBefore(caixa,destino.firstChild);
+
+ // os elementos vão inteiros, com os listeners que já têm
+ const fonte=document.getElementById('metricSourceStatus');
+ const quota=document.getElementById('metricQuotaPanel');
+ const acoes=document.querySelector('.metric-head-actions');
+ [fonte,quota,acoes].forEach(el=>{if(el)caixa.appendChild(el)});
+
+ renderMetricQuotaPanel();
+}
+
+/* Linha enxuta que fica na tela de Metricas no lugar dos blocos movidos. */
+function renderResumoFonte(){
+ const alvo=document.getElementById('metricResumoFonte');
+ if(!alvo)return;
+ let quando='—';
+ try{
+  const t=Number(localStorage.getItem(METRIC_SYNC_LOCK)||0);
+  if(t)quando=new Date(t).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+ }catch(e){}
+ const origem=metricOrigem==='PLANILHA'?'planilha oficial'
+   :metricOrigem==='ESPELHO'?'espelho mensal'
+   :metricOrigem==='COLECAO_ANTIGA'?'base antiga'
+   :'carregando';
+ alvo.innerHTML=`
+  <span class="resumo-ponto ${metricOrigem==='PLANILHA'?'ok':'alerta'}"></span>
+  <span>Dados de <b>${esc(origem)}</b> • última sincronização ${esc(quando)}</span>
+  <button type="button" id="metricSyncTopo">SINCRONIZAR</button>
+  <a href="#" id="metricIrConfig">configurar fonte</a>`;
+ document.getElementById('metricSyncTopo')?.addEventListener('click',async ev=>{
+  const b=ev.currentTarget;b.disabled=true;b.textContent='SINCRONIZANDO...';
+  try{localStorage.setItem(METRIC_SYNC_LOCK,String(Date.now()))}catch(e){}
+  await runMetricAutoRecovery({quiet:false});
+  renderResumoFonte();
+ });
+ document.getElementById('metricIrConfig')?.addEventListener('click',ev=>{
+  ev.preventDefault();
+  activateAppPage('administracao');
+  setTimeout(()=>{
+   document.querySelector('[data-admin-tab="integracoes"]')?.click();
+   document.getElementById('infraMetricas')?.scrollIntoView({behavior:'smooth',block:'start'});
+  },120);
+ });
+}
+
+/* ---------------------------------------------------------------------
+   SELETOR DE PERÍODO OBJETIVO
+   Antes: dois campos de data e um botão aplicar, para qualquer consulta.
+   Na prática, quase toda pergunta é uma destas cinco. Os campos manuais
+   continuam para o caso específico.
+--------------------------------------------------------------------- */
+const PERIODOS_RAPIDOS=[
+ {id:'hoje',rotulo:'HOJE',dias:0},
+ {id:'7',rotulo:'7 DIAS',dias:6},
+ {id:'14',rotulo:'14 DIAS',dias:13},
+ {id:'30',rotulo:'30 DIAS',dias:29},
+ {id:'mes',rotulo:'ESTE MÊS',mes:0},
+ {id:'mesant',rotulo:'MÊS PASSADO',mes:-1}
+];
+function aplicarPeriodoRapido(def){
+ const hoje=new Date();hoje.setHours(12,0,0,0);
+ let inicio,fim;
+ if(def.mes!==undefined){
+  const base=new Date(hoje.getFullYear(),hoje.getMonth()+def.mes,1);
+  inicio=base;
+  fim=def.mes===0?hoje:new Date(hoje.getFullYear(),hoje.getMonth()+def.mes+1,0);
+ }else{
+  fim=hoje;
+  inicio=new Date(hoje);inicio.setDate(hoje.getDate()-def.dias);
+ }
+ const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+ metricDateStart=iso(inicio);metricDateEnd=iso(fim);
+ syncMetricDateInputs();
+ renderMetrics();
+ document.querySelectorAll('[data-periodo]').forEach(b=>b.classList.toggle('active',b.dataset.periodo===def.id));
+}
+function ensurePeriodosRapidos(){
+ const alvo=document.getElementById('metricPeriodosRapidos');
+ if(!alvo||alvo.dataset.pronto)return;
+ alvo.dataset.pronto='1';
+ alvo.innerHTML=PERIODOS_RAPIDOS.map(d=>`<button type="button" data-periodo="${d.id}">${d.rotulo}</button>`).join('');
+ alvo.querySelectorAll('[data-periodo]').forEach(b=>b.addEventListener('click',()=>{
+  const def=PERIODOS_RAPIDOS.find(x=>x.id===b.dataset.periodo);
+  if(def)aplicarPeriodoRapido(def);
+ }));
+}
+
 function renderMetricQuotaPanel(){
  const box=ensureMetricQuotaPanel()||document.getElementById('metricQuotaPanel');
 
@@ -5775,6 +5887,9 @@ async function loadMetrics(){
  await loadMetricSourceConfig();
 
  metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
+ setTimeout(()=>{moverInfraParaAdmin();
+ensurePeriodosRapidos();
+renderResumoFonte()},0);
 
  // 1) planilha publicada: nao consome cota do Firebase
  if(extractSpreadsheetId(metricSourceConfig.url)){
