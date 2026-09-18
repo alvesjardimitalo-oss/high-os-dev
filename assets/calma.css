@@ -217,3 +217,62 @@
 }
 .hm-empty b{font-size:14px;color:#fff;font-weight:600}
 .hm-empty span{font-size:12px;color:var(--hm-text-3);max-width:34ch;line-height:1.6}
+
+/* =========================================================
+   ORGANIZAÇÕES · TOPO CONSOLIDADO (V12.3.2)
+   ---------------------------------------------------------
+   A primeira tentativa falhou porque style.css tem regras que
+   valem para QUALQUER elemento dentro do resumo:
+       .org-v92-summary span{display:block}
+       .org-v92-summary b{font-size:28px}
+   Os meus spans viraram blocos e os números ficaram gigantes,
+   empilhando tudo em coluna. Aqui a especificidade é maior e
+   o display é reafirmado item a item.
+   ========================================================= */
+#page-faccoes #orgV92Summary{display:block!important;margin:10px 0 12px!important;gap:0!important}
+#page-faccoes #orgV92Summary > article{display:none!important}
+
+#page-faccoes #orgV92Summary .org-resumo-linha{
+  display:flex!important;align-items:center;gap:20px;flex-wrap:wrap;
+  padding:12px 16px;
+  background:rgba(255,255,255,.022);
+  border:1px solid var(--linha);border-radius:12px;
+}
+#page-faccoes #orgV92Summary .org-resumo-linha span{
+  display:inline-flex!important;align-items:center;gap:7px;
+  font-size:var(--f-mini)!important;letter-spacing:normal!important;
+  font-weight:500!important;color:var(--hm-text-3)!important;
+}
+#page-faccoes #orgV92Summary .org-resumo-linha b{
+  display:inline!important;margin:0!important;line-height:1.1!important;
+  font-variant-numeric:tabular-nums;
+}
+#page-faccoes #orgV92Summary .org-resumo-total b{font-size:22px!important;color:#fff!important}
+#page-faccoes #orgV92Summary .org-resumo-item b{font-size:15px!important}
+#page-faccoes #orgV92Summary .org-resumo-item::before{
+  content:"";width:7px;height:7px;border-radius:50%;flex:0 0 7px;
+}
+#page-faccoes #orgV92Summary .org-resumo-item.assumida::before{background:#50f5a0}
+#page-faccoes #orgV92Summary .org-resumo-item.assumida b{color:#50f5a0!important}
+#page-faccoes #orgV92Summary .org-resumo-item.disponivel::before{background:#b878ff}
+#page-faccoes #orgV92Summary .org-resumo-item.disponivel b{color:#c79cff!important}
+#page-faccoes #orgV92Summary .org-resumo-item.indisponivel::before{background:#ff5b76}
+#page-faccoes #orgV92Summary .org-resumo-item.indisponivel b{color:#ff8a9c!important}
+
+/* contagem dentro do chip: precisa de respiro e de peso próprio */
+#facStatusButtons button{display:inline-flex!important;align-items:center;gap:8px}
+#facStatusButtons .chip-contagem{
+  font-style:normal;
+  min-width:20px;padding:2px 7px;border-radius:20px;
+  font-size:9.5px!important;font-weight:800;
+  background:rgba(255,255,255,.12);color:inherit;
+  font-variant-numeric:tabular-nums;line-height:1.5;
+}
+#facStatusButtons button.active .chip-contagem{background:rgba(255,255,255,.24);color:#fff}
+
+#orgV92ListTitle{
+  font-size:var(--f-mini)!important;letter-spacing:.04em!important;
+  text-transform:none!important;color:var(--hm-text-3)!important;
+  font-weight:500!important;margin-bottom:8px!important;
+}
+#page-faccoes .org-v92-legend,#page-faccoes .fac-legend{display:none!important}
