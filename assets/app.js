@@ -6481,6 +6481,19 @@ function boletimPartes(texto){
    o topo passa de 50 por dia e o fundo fica abaixo de 1. A diferenca e
    de cem vezes, entao a separacao e nitida.
    ===================================================================== */
+const TRIAGEM_CARENCIA_DIAS=14;   // facção recém-entregue não é avaliada ainda
+
+/* A data vem do cadastro do Group no formato dd/mm/aaaa. */
+function diasDesdeEntrega(nomeGroup){
+ const f=estado.faccoes.find(x=>alvesNorm(x.group)===alvesNorm(nomeGroup));
+ const txt=String(f?.dataEntrega||f?.ocupacaoAtual?.dataEntrega||'').trim();
+ const m=txt.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+ if(!m)return null;                       // sem data registrada: não dá para saber
+ const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),12,0,0);
+ if(isNaN(d))return null;
+ return Math.floor((Date.now()-d.getTime())/86400000);
+}
+
 const TRIAGEM_LIMITES={
  limparDias:2,        // presenca de ate 2 dias em 7
  limparMedia:1,       // ou media diaria abaixo de 1
@@ -6497,6 +6510,9 @@ function triagemSemanal(){
 
  const classificar=l=>{
   const media=l.total/7;
+  const idade=diasDesdeEntrega(l.nome);
+  // entregue há pouco: ainda não dá para cobrar resultado
+  if(idade!==null&&idade<TRIAGEM_CARENCIA_DIAS)return 'carencia';
   if(l.dias<=TRIAGEM_LIMITES.limparDias||media<TRIAGEM_LIMITES.limparMedia)return 'limpar';
   if(l.dias<=TRIAGEM_LIMITES.acompanharDias)return 'acompanhar';
   if(l.totalAnterior>0&&l.variacao<=-TRIAGEM_LIMITES.quedaGrave)return 'acompanhar';
@@ -6504,10 +6520,14 @@ function triagemSemanal(){
   return 'acompanhar';
  };
 
- const grupos={limpar:[],acompanhar:[],bem:[]};
+ const grupos={limpar:[],acompanhar:[],bem:[],carencia:[]};
  ocupados.forEach(l=>{
   const item={...l,media:l.total/7,faixa:classificar(l)};
-  item.motivo=item.faixa==='limpar'
+  const idade=diasDesdeEntrega(l.nome);
+  item.idade=idade;
+  item.motivo=item.faixa==='carencia'
+   ? `assumiu há ${idade} dia(s) — avaliação a partir de ${TRIAGEM_CARENCIA_DIAS} dias`
+   : item.faixa==='limpar'
    ? (l.dias<=TRIAGEM_LIMITES.limparDias?`presença em apenas ${l.dias} dia(s) dos 7`:`média de ${(l.total/7).toFixed(1)} por dia`)
    : item.faixa==='acompanhar'
      ? (l.totalAnterior>0&&l.variacao<=-TRIAGEM_LIMITES.quedaGrave?`queda de ${Math.abs(l.variacao).toFixed(0)}% na semana`:`presença em ${l.dias} dia(s) dos 7`)
@@ -6517,6 +6537,7 @@ function triagemSemanal(){
  grupos.limpar.sort((a,b)=>a.media-b.media);
  grupos.acompanhar.sort((a,b)=>a.variacao-b.variacao);
  grupos.bem.sort((a,b)=>b.media-a.media);
+ grupos.carencia.sort((a,b)=>(a.idade??0)-(b.idade??0));
  return {...grupos,janelas:base.janelas,ocupados:ocupados.length,fora};
 }
 
@@ -6535,6 +6556,11 @@ function triagemTexto(){
  if(t.acompanhar.length){
   L.push(`**ACOMPANHAR (${t.acompanhar.length})**`);
   t.acompanhar.forEach(x=>L.push(`• ${x.nome} — ${x.motivo}`));
+  L.push('');
+ }
+ if(t.carencia.length){
+  L.push(`**EM CARÊNCIA (${t.carencia.length})**`);
+  t.carencia.forEach(x=>L.push(`• ${x.nome} — ${x.motivo}`));
   L.push('');
  }
  if(t.bem.length){
@@ -6572,6 +6598,7 @@ function renderTriagem(){
    ${coluna('PRECISAM SER RECOLHIDOS',t.limpar,'limpar','até 2 dias de presença ou média abaixo de 1 por dia')}
    ${coluna('ACOMPANHAR',t.acompanhar,'acompanhar','3 a 5 dias de presença ou queda acima de 40%')}
    ${coluna('ESTÃO BEM',t.bem,'bem','6 ou 7 dias de presença e média acima de 6 por dia')}
+   ${coluna('EM CARÊNCIA',t.carencia,'carencia',`entregues há menos de ${TRIAGEM_CARENCIA_DIAS} dias — ainda sem cobrança`)}
   </div>`;
  document.getElementById('triagemCopiar')?.addEventListener('click',async()=>{
   await copyText(triagemTexto());

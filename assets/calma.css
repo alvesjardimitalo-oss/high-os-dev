@@ -39,36 +39,36 @@
    1. HIERARQUIA TIPOGRÁFICA
    Caixa alta e espaçamento de letra só onde identificam seção.
 --------------------------------------------------------- */
-#page-metricas p, #page-faccoes p,
-#page-metricas td, #page-faccoes td,
-#page-metricas .page-subtitle, #page-faccoes .page-subtitle{
+/* V12.4 - o que era escopado em Métricas e Organizações passa a valer
+   para todas as páginas. A navegação e os modais ficam de fora: lá a
+   caixa alta cumpre função de rótulo. */
+.page p, .page td, .page .page-subtitle, .page li{
   text-transform:none!important;
   letter-spacing:normal!important;
   font-size:var(--f-base)!important;
   line-height:1.6!important;
 }
 /* nome de coisa é nome, não sigla */
-#page-metricas .metric-item b, #page-faccoes .fac-card b,
-#page-metricas .rh-ranking-row b, #page-faccoes .org-v92-row b{
+.page .metric-item b, .page .fac-card b, .page .user-row b,
+.page .rh-ranking-row b, .page .org-v92-row b, .page .req-card b,
+.page .mp-point-row b, .page .admin-group-row b{
   text-transform:none!important;
   letter-spacing:normal!important;
   font-size:var(--f-med)!important;
   font-weight:600!important;
 }
 /* rótulos de seção mantêm o padrão, mas num tamanho só */
-#page-metricas h3, #page-faccoes h3,
-#page-metricas .eyebrow, #page-faccoes .eyebrow,
-#page-metricas thead th, #page-faccoes thead th{
+.page h3, .page .eyebrow, .page thead th{
   font-size:var(--f-micro)!important;
   letter-spacing:.11em!important;
   font-weight:800!important;
 }
-#page-metricas h2, #page-faccoes h2{font-size:var(--f-hero)!important;letter-spacing:.01em!important}
-#page-metricas small, #page-faccoes small{font-size:var(--f-mini)!important;letter-spacing:normal!important}
+.page h2{font-size:var(--f-hero)!important;letter-spacing:.01em!important}
+.page small{font-size:var(--f-mini)!important;letter-spacing:normal!important}
 
 /* números grandes respiram e usam algarismo de largura fixa */
-#page-metricas .metric-kpi b, #page-metricas .mq-bar span b,
-#page-metricas .metric-month-value, #page-faccoes .fac-stats b{
+.page .metric-kpi b, .page .mq-bar span b, .page .mp-kpi b,
+.page .metric-month-value, .page .fac-stats b, .page .saude-card b{
   font-size:var(--f-big)!important;
   font-variant-numeric:tabular-nums;
   letter-spacing:-.01em!important;
@@ -78,15 +78,15 @@
    2. CAIXA DENTRO DE CAIXA
    O contorno interno some; a separação passa a ser pelo fundo.
 --------------------------------------------------------- */
-#page-metricas .card .card,
-#page-metricas .metric-center-view > div > div,
-#page-faccoes .card .card,
-#page-faccoes .org-v92-card .org-v92-row{
+.page .card .card,
+.page .metric-center-view > div > div,
+.page .org-v92-card .org-v92-row,
+.page .mp-card .mp-card{
   border:none!important;
   background:rgba(255,255,255,.02)!important;
   box-shadow:none!important;
 }
-#page-metricas .card, #page-faccoes .card{
+.page .card{
   border:1px solid var(--linha)!important;
   box-shadow:none!important;
   background:rgba(255,255,255,.018)!important;
@@ -96,11 +96,11 @@
    3. MENOS BRILHO, MAIS LEITURA
    Gradiente fica onde comunica estado; o resto vira fundo liso.
 --------------------------------------------------------- */
-#page-metricas .metric-center-tabs,
-#page-faccoes .fac-toolbar{background:transparent!important;border:none!important}
+.page .metric-center-tabs, .page .fac-toolbar,
+.page .admin-tab-bar, .page .mp-tabbar{background:transparent!important;border:none!important}
 
-#page-metricas .metric-center-tab,
-#page-faccoes .fac-filter-chip{
+.page .metric-center-tab, .page .fac-filter-chip,
+.page .admin-tab, .page .mp-tab{
   background:transparent!important;
   border:1px solid transparent!important;
   color:var(--hm-text-3)!important;
@@ -108,10 +108,10 @@
   letter-spacing:.09em!important;
   padding:9px 14px!important;
 }
-#page-metricas .metric-center-tab:hover,
-#page-faccoes .fac-filter-chip:hover{color:#fff!important;background:rgba(255,255,255,.05)!important}
-#page-metricas .metric-center-tab.active,
-#page-faccoes .fac-filter-chip.active{
+.page .metric-center-tab:hover, .page .fac-filter-chip:hover,
+.page .admin-tab:hover, .page .mp-tab:hover{color:#fff!important;background:rgba(255,255,255,.05)!important}
+.page .metric-center-tab.active, .page .fac-filter-chip.active,
+.page .admin-tab.active, .page .mp-tab.active{
   background:rgba(141,53,255,.16)!important;
   border-color:rgba(141,53,255,.42)!important;
   color:#e9dcfa!important;
@@ -119,7 +119,7 @@
 }
 
 /* linha divisória no lugar de moldura completa */
-#page-metricas .metric-row, #page-faccoes .org-v92-row{
+.page .metric-row, .page .org-v92-row, .page .user-row, .page .admin-group-row{
   border:none!important;
   border-bottom:1px solid var(--linha)!important;
   border-radius:0!important;
@@ -129,8 +129,12 @@
    4. RESPIRO
    Espaçamento consistente entre blocos, em vez de cada um o seu.
 --------------------------------------------------------- */
-#page-metricas .card, #page-faccoes .card{padding:18px!important;margin-bottom:14px!important}
-#page-metricas .metric-center-view > *, #page-faccoes .page-body > *{margin-bottom:14px}
+.page .card{padding:18px!important;margin-bottom:14px!important}
+.page .metric-center-view > *, .page .page-body > *{margin-bottom:14px}
+
+/* a navegação lateral e os modais mantêm o padrão antigo de propósito:
+   ali a caixa alta identifica destino, não descreve conteúdo */
+.sidebar *, .modal *, .topbar *{text-transform:inherit}
 
 /* =========================================================
    LOGS (antigo Histórico), agora dentro da Administração
@@ -276,3 +280,8 @@
   font-weight:500!important;margin-bottom:8px!important;
 }
 #page-faccoes .org-v92-legend,#page-faccoes .fac-legend{display:none!important}
+
+/* coluna de carência na triagem (V12.4) */
+.triagem-col.carencia{border-top-color:#7cc7ff}
+.triagem-col.carencia header b{color:#7cc7ff}
+.triagem-col.carencia header span{background:rgba(124,199,255,.16);color:#7cc7ff}
