@@ -19,6 +19,9 @@ export function definirGroupsConhecidos(lista = []) {
   groupsConhecidos = Array.isArray(lista) ? lista : [];
 }
 
+/* Copia local proposital: este modulo nao depende de formatadores.js para
+   continuar isolado e testavel sozinho. Se mudar a regra de normalizacao,
+   mude nos dois lugares - formatadores.js tem a versao usada pelo app. */
 function alvesNorm(v) {
   return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
