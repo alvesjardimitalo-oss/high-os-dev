@@ -151,7 +151,7 @@ for (const [nome, info] of funcoes) {
     // qualquer mencao conta: chamada direta, callback (setTimeout(fn,0)),
     // atribuicao a listener. Superestimar dependencia e melhor do que dizer
     // "pode remover" para algo que ainda e usado.
-    if (new RegExp('(?<![.\\w$])' + outro.replace(/\$/g, '\\$') + '(?![\\w$])').test(info.corpo)) {
+    if (new RegExp('(?<![\\w$])(?<!(?<!\\.)\\.)' + outro.replace(/\$/g, '\\$') + '(?![\\w$])').test(info.corpo)) {
       info.chama.add(outro);
     }
   }
@@ -175,7 +175,7 @@ for (const rel of ARQUIVOS) {
   for (const f of corpos) linhas.splice(f.linha - 1, f.fim - f.linha + 1);
   const topo = linhas.join('\n');
   for (const [nome, info] of funcoes) {
-    if (new RegExp('(?<![.\\w$])' + nome.replace(/\$/g, '\\$') + '(?![\\w$])').test(topo)) {
+    if (new RegExp('(?<![\\w$])(?<!(?<!\\.)\\.)' + nome.replace(/\$/g, '\\$') + '(?![\\w$])').test(topo)) {
       info.chamadaPor.add('(código de topo)');
     }
   }

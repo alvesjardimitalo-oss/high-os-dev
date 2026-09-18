@@ -121,7 +121,7 @@ function grafo(){
     for(const o of nomes){
       if(o===n)continue;
       // qualquer mencao conta: chamada, callback, atribuicao a listener
-      if(new RegExp('(?<![.\\w$])'+o.replace(/\$/g,'\\$')+'(?![\\w$])').test(i.corpo)) i.chama.add(o);
+      if(new RegExp('(?<![\\w$])(?<!(?<!\\.)\\.)'+o.replace(/\$/g,'\\$')+'(?![\\w$])').test(i.corpo)) i.chama.add(o);
     }
   }
   for(const [n,i] of funcoes){i.chamadaPor=new Set();for(const [o,i2] of funcoes) if(i2.chama.has(n)) i.chamadaPor.add(o)}
