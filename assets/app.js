@@ -1278,10 +1278,6 @@ desc:'Visão geral e indicadores'},
 label:'Organizações',
 desc:'Group permanente, ocupação, divulgação, entrega, estrutura, rota e histórico'},
 
- {id:'solicitacoes',
-label:'Solicitações',
-desc:'Modelos e solicitações técnicas'},
-
  {id:'metricas',
 label:'Métricas',
 desc:'Central de métricas e relatórios'},
@@ -11603,6 +11599,77 @@ renderChatMessages([]);
 subscribeChatConversation();
 toggleHmPicker(false);
 setTimeout(()=>$('#floatingChatInput')?.focus(),30)}
+
+/* =====================================================================
+   HIGH OS V12.2 - CHAT REPAGINADO
+   ---------------------------------------------------------------------
+   O que fazia o chat parecer amador:
+     - cada mensagem repetia avatar, nome, cargo e hora, mesmo dez
+       seguidas da mesma pessoa;
+     - nao havia separacao por dia: mensagens de ontem e de hoje coladas;
+     - ao enviar, a mensagem so aparecia depois do servidor confirmar,
+       entao havia um engasgo de meio segundo em cada envio.
+
+   Agora: bloco por autor, separador de dia, hora discreta so na ultima
+   do bloco e eco local imediato com marca de "enviando".
+   ===================================================================== */
+function chatDiaRotulo(m){
+ const d=m?.createdAt?.toDate?.()||(m?.createdAtText?new Date(m.createdAtText):null);
+ if(!d||isNaN(d))return '';
+ const hoje=new Date(),ontem=new Date();ontem.setDate(hoje.getDate()-1);
+ const mesmo=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+ if(mesmo(d,hoje))return 'Hoje';
+ if(mesmo(d,ontem))return 'Ontem';
+ return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'long'});
+}
+function chatMinutoDe(m){
+ const d=m?.createdAt?.toDate?.()||(m?.createdAtText?new Date(m.createdAtText):null);
+ return d&&!isNaN(d)?Math.floor(d.getTime()/60000):0;
+}
+
+/* Monta a conversa agrupando mensagens seguidas do mesmo autor. */
+function chatCorpoHtml(visible,me){
+ let html='',diaAtual='',autorAtual='',minutoAtual=0;
+ visible.forEach((m,i)=>{
+  const autor=String(m.email||'').toLowerCase();
+  const meu=autor===me;
+  const dia=chatDiaRotulo(m);
+  const minuto=chatMinutoDe(m);
+
+  if(dia&&dia!==diaAtual){
+   if(autorAtual)html+='</div></article>';
+   html+=`<div class="chat-dia"><span>${esc(dia)}</span></div>`;
+   diaAtual=dia;autorAtual='';
+  }
+
+  // mesmo autor, dentro de 5 minutos: continua o bloco
+  const continua=autor===autorAtual&&(minuto-minutoAtual)<=5;
+  if(!continua){
+   if(autorAtual)html+='</div></article>';
+   const foto=m.photoURL?`<img src="${esc(m.photoURL)}" alt="">`:esc(hmInitials(m.nome||m.email));
+   html+=`<article class="chat-bloco ${meu?'meu':''}">`
+       + `<div class="chat-bloco-avatar">${foto}</div>`
+       + `<div class="chat-bloco-corpo">`
+       + `<header><b>${esc(m.nome||m.email||'Usuário')}</b>${m.cargo?`<i>${esc(m.cargo)}</i>`:''}</header>`;
+   autorAtual=autor;
+  }
+  minutoAtual=minuto;
+
+  const ultima=i===visible.length-1
+    ||String(visible[i+1]?.email||'').toLowerCase()!==autor
+    ||chatMinutoDe(visible[i+1])-minuto>5;
+
+  html+=`<div class="chat-balao${m.__pendente?' pendente':''}">`
+     + (m.texto?`<p>${esc(m.texto)}</p>`:'')
+     + chatStickerHtml(m)+chatAttachmentHtml(m)+chatMeetingHtml(m)
+     + (ultima?`<time>${esc(chatTime(m.createdAt||m))}${m.__pendente?' • enviando':''}</time>`:'')
+     + (isAdmin()&&!m.__pendente?`<button type="button" class="chat-delete" data-chat-delete="${esc(m.id)}" title="Excluir mensagem">×</button>`:'')
+     + `</div>`;
+ });
+ if(autorAtual)html+='</div></article>';
+ return html;
+}
+
 function renderChatMessages(items=[]){chatItems=items;
 populateChatRecipients();
 const me=(currentUser?.email||'').toLowerCase(),
@@ -11614,7 +11681,11 @@ av=$('#hmActiveAvatar');
 if(title)title.textContent=target?hmUserName(target):'Selecione uma conversa';
 if(presence)presence.textContent=target?`${hmUserRole(target)} • mensagens disponíveis mesmo offline`:'Usuários cadastrados aparecem mesmo offline';
 if(av){av.innerHTML=target?.photoURL?`<img src="${esc(target.photoURL)}" alt="">`:esc(hmInitials(target?hmUserName(target):'High'));
-}const body=!chatRecipientEmail?'<div class="chat-empty hm-empty"><b>Mensagens diretas</b><span>Selecione um membro da equipe. A conversa fica salva mesmo quando ele estiver offline.</span></div>':visible.length?visible.map(m=>`<article class="chat-message ${String(m.email||'').toLowerCase()===me?'mine':''}"><div class="chat-message-avatar">${m.photoURL?`<img src="${esc(m.photoURL)}" alt="">`:esc(hmInitials(m.nome||m.email))}</div><div class="chat-message-bubble"><header><b>${esc(m.nome||m.email||'Usuário')}</b><small>${esc(m.cargo||'')} • ${esc(chatTime(m.createdAt||m))}</small></header>${m.texto?`<p>${esc(m.texto)}</p>`:''}${chatStickerHtml(m)}${chatAttachmentHtml(m)}${chatMeetingHtml(m)}${isAdmin()?`<button type="button" class="chat-delete" data-chat-delete="${esc(m.id)}" title="Excluir mensagem">×</button>`:''}</div></article>`).join(''):'<div class="chat-empty hm-empty"><b>Nenhuma mensagem ainda</b><span>Envie texto, emoji, GIF, figurinha, foto ou arquivo.</span></div>';
+}const body=!chatRecipientEmail
+  ? '<div class="chat-empty hm-empty"><b>Mensagens diretas</b><span>Selecione um membro da equipe. A conversa fica salva mesmo quando ele estiver offline.</span></div>'
+  : visible.length
+    ? chatCorpoHtml(visible,me)
+    : '<div class="chat-empty hm-empty"><b>Nenhuma mensagem ainda</b><span>Envie texto, emoji, GIF, figurinha, foto ou arquivo.</span></div>';
 ['#chatMessages',
 '#floatingChatMessages'].forEach(sel=>{const b=$(sel);if(!b)return;b.innerHTML=body;b.scrollTop=b.scrollHeight;b.querySelectorAll('[data-chat-delete]').forEach(x=>x.onclick=()=>deleteChatMessage(x.dataset.chatDelete))});
 renderHmContacts()}
@@ -11667,6 +11738,25 @@ const input=$(inputSelector),
 texto=input?.value.trim()||'';
 if(!texto&&!chatPendingAttachment&&!extra.sticker)return;
 if(texto.length>1000)return alert('Mensagem muito longa. Limite: 1000 caracteres.');
+
+/* V12.2 - eco local: a mensagem aparece imediatamente com marca de
+   "enviando" e o snapshot do servidor a substitui quando confirma.
+   Sem isso havia um engasgo visível a cada envio. */
+const eco={
+ __pendente:true,
+ id:'local_'+Date.now(),
+ texto,
+ sticker:extra.sticker||'',
+ anexo:chatPendingAttachment||null,
+ recipientEmail:chatRecipientEmail,
+ email:currentUser.email||'',
+ nome:currentProfile?.name||currentUser.displayName||currentUser.email,
+ cargo:currentProfile?.cargo||currentProfile?.role||'',
+ createdAtText:new Date().toISOString()
+};
+renderChatMessages([...chatItems,eco]);
+if(input)input.value='';
+
 try{await addDoc(chatCol,{texto,
 sticker:extra.sticker||'',
 anexo:chatPendingAttachment||null,

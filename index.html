@@ -15,13 +15,13 @@
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <title>High OS • Gestão do Ilegal</title>
-  <link rel="stylesheet" href="assets/style.css?v=12.1.0">
+  <link rel="stylesheet" href="assets/style.css?v=12.2.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="assets/mission-planner.css?v=12.1.0">
-  <link rel="stylesheet" href="assets/ui-kit.css?v=12.1.0">
-  <link rel="stylesheet" href="assets/high-refresh.css?v=12.1.0">
-  <link rel="stylesheet" href="assets/calma.css?v=12.1.0">
-  <link rel="icon" type="image/png" href="assets/high_logo.png?v=12.1.0">
+  <link rel="stylesheet" href="assets/mission-planner.css?v=12.2.0">
+  <link rel="stylesheet" href="assets/ui-kit.css?v=12.2.0">
+  <link rel="stylesheet" href="assets/high-refresh.css?v=12.2.0">
+  <link rel="stylesheet" href="assets/calma.css?v=12.2.0">
+  <link rel="icon" type="image/png" href="assets/high_logo.png?v=12.2.0">
 </head>
 <body>
   <div class="noise"></div>
@@ -80,12 +80,12 @@
         <nav>
           <button class="nav-item active" data-page="dashboard">⌂ <span>Dashboard</span></button>
           <button class="nav-item" data-page="faccoes">◆ <span>Organizações</span></button>
-          <button class="nav-item" data-page="solicitacoes">▤ <span>Solicitações</span></button>
+          
           <button class="nav-item" data-page="metricas">▥ <span>Métricas</span></button>
           
           
           <button class="nav-item" data-page="planejador">◎ <span>Planejador de Missões</span></button>
-          <button class="nav-item" data-page="chat">✉ <span>Chat da Equipe</span></button>
+          
           <button class="nav-item hidden" data-page="spotify">♫ <span>Spotify</span></button>
           
           <button class="nav-item admin-only" data-page="usuarios">♟ <span>Usuários</span></button>
@@ -94,7 +94,7 @@
       </aside>
       <div class="content">
         <section class="page active" id="page-dashboard">
-          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">V12.1.0</span></div>
+          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">V12.2.0</span></div>
           <div id="commandDashboard" class="command-dashboard"><div class="placeholder"><b>◆</b><h3>CARREGANDO CENTRAL DE COMANDO</h3></div></div>
           <span id="dashEmail" class="hidden">—</span><span id="dashRole" class="hidden">—</span>
         </section>
@@ -171,12 +171,7 @@
           <div class="delivery-toolbar"><input id="deliverySearch" placeholder="Buscar Group, facção, líder ou staff..."><select id="deliveryStatus"><option value="">TODAS</option><option value="ATIVA">ATIVAS</option><option value="RECOLHIDA">RECOLHIDAS</option></select></div>
           <div id="deliveryStats" class="fac-stats"></div><div id="deliveryList" class="delivery-list"><div class="placeholder"><b>◇</b><h3>CARREGANDO ENTREGAS</h3></div></div>
         </section>
-        <section class="page" id="page-solicitacoes">
-          <div class="page-head"><div><div class="eyebrow">BASE DE REFERÊNCIA • PADRÃO HIGH</div><h2>BIBLIOTECA DE SOLICITAÇÕES</h2><p class="page-subtitle">Modelos já utilizados para consultar, gerar, adaptar e copiar solicitações para o Discord.</p></div><button id="newRequestBtn" class="btn-primary compact">NOVO MODELO</button></div>
-          <div class="req-toolbar"><input id="reqSearch" placeholder="Buscar modelo, assunto, categoria, Group..."><select id="reqTypeFilter"><option value="">TODAS AS CATEGORIAS</option></select></div>
-          <div id="reqStats" class="fac-stats"></div>
-          <div id="reqList" class="req-list"><div class="placeholder"><b>▤</b><h3>CARREGANDO MODELOS</h3></div></div>
-        </section>
+        
         <section class="page" id="page-metricas">
           <div class="page-head"><div><div class="eyebrow">CENTRAL RH • PRESENÇA • 14H / 16H / 21H / 23H</div><h2>CENTRAL DE MÉTRICAS</h2><p class="page-subtitle">Base histórica por data, Group e facção. O RH consulta somente esta central e pode emitir relatórios mensais sem acesso aos demais módulos operacionais.</p></div><div class="metric-head-actions"><button id="syncMetricBtn" class="btn-primary compact admin-only">ATUALIZAR CENTRAL</button><button id="metricSourceBtn" class="btn-secondary compact admin-only">FONTE</button><button id="openMetricImportBtn" class="btn-secondary compact admin-only">IMPORTAÇÃO MANUAL</button></div></div>
           <div id="metricResumoFonte" class="metric-resumo-fonte"></div>
@@ -234,7 +229,7 @@
         </section>
         
         <section class="page" id="page-planejador">
-          <div class="page-head"><div><div class="eyebrow">MAPA GTA V • EVENTOS • MISSÕES</div><h2>PLANEJADOR DE MISSÕES</h2><p class="page-subtitle">Crie novos locais de evento, gere spawns em círculo, valide CDS uma a uma e mantenha cada missão salva com o último print do mapa.</p></div><span class="dev-badge">V12.1.0</span></div>
+          <div class="page-head"><div><div class="eyebrow">MAPA GTA V • EVENTOS • MISSÕES</div><h2>PLANEJADOR DE MISSÕES</h2><p class="page-subtitle">Crie novos locais de evento, gere spawns em círculo, valide CDS uma a uma e mantenha cada missão salva com o último print do mapa.</p></div><span class="dev-badge">V12.2.0</span></div>
 
           <section id="mpCentralV954" class="mp-central-v952" aria-label="Central de Missões"></section>
 
@@ -809,9 +804,9 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="assets/ui-kit.js?v=12.1.0"></script>
-  <script src="assets/mission-planner.js?v=12.1.0"></script>
-  <script type="module" src="assets/app.js?v=12.1.0"></script>
+  <script src="assets/ui-kit.js?v=12.2.0"></script>
+  <script src="assets/mission-planner.js?v=12.2.0"></script>
+  <script type="module" src="assets/app.js?v=12.2.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
