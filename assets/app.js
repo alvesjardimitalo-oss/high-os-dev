@@ -6196,42 +6196,56 @@ return `<section class="metric-daily-card"><header><div><span>${esc(title)}</spa
 
    Agora: 12% de folga no topo, pontos marcados em cada leitura, faixa
    sombreada nos dias ainda sem lancamento e o valor no hover. */
+/* V11.7 - ALINHAMENTO COM A REGUA DE DIAS
+   O grafico tinha margem lateral fixa e os pontos eram distribuidos entre
+   essas margens, enquanto a regua de dias abaixo ocupa a largura inteira do
+   card em 7 colunas iguais. Resultado: o ponto de segunda caia antes da
+   coluna de segunda e o de quinta ficava no meio do card - o grafico nao
+   acompanhava o dia.
+
+   Agora cada leitura fica no CENTRO da sua coluna, exatamente como a regua:
+   coluna i ocupa de i*L ate (i+1)*L, e o ponto vai em (i+0.5)*L. A area de
+   desenho tambem cresceu, para os valores nao ficarem espremidos. */
 function metricWeekSvg(days=[]){
  const hours=['14H','16H','21H','23H'];
  const all=days.flatMap(d=>hours.map(h=>d.slots[h]).filter(Number.isFinite));
  if(!all.length)return '<div class="metric-empty-chart">Nenhuma coleta nesta semana ainda.</div>';
 
- const max=Math.max(1,...all)*1.12;           // folga para o pico nao colar no topo
- const W=920,H=250,pad=38;
- const step=days.length>1?(W-pad*2)/(days.length-1):0;
- const y=v=>H-pad-(v/max)*(H-pad*2);
- const x=i=>pad+i*step;
+ const max=Math.max(1,...all)*1.12;        // folga para o pico nao colar no topo
+ const W=1000,H=320,topo=26,base=26;       // mais alto que antes
+ const L=W/Math.max(1,days.length);        // largura de cada coluna, igual a regua
+ const x=i=>(i+0.5)*L;                     // centro da coluna
+ const y=v=>H-base-(v/max)*(H-topo-base);
 
  const temDado=i=>hours.some(h=>Number.isFinite(days[i]?.slots[h]));
  const primeiroVazio=days.findIndex((d,i)=>!temDado(i));
+ const todosVaziosDepois=primeiroVazio>=0&&days.slice(primeiroVazio).every((d,k)=>!temDado(primeiroVazio+k));
 
- // faixa sombreada cobrindo os dias ainda sem lancamento
- const faixa=primeiroVazio>=0&&days.slice(primeiroVazio).every((d,k)=>!temDado(primeiroVazio+k))
-   ? `<rect class="metric-week-pending" x="${x(primeiroVazio)-step/2}" y="${pad-10}" width="${W-pad-(x(primeiroVazio)-step/2)+8}" height="${H-pad*2+20}"></rect>`
+ // faixa dos dias ainda sem lancamento, casando com o limite da coluna
+ const faixa=todosVaziosDepois
+   ? `<rect class="metric-week-pending" x="${primeiroVazio*L}" y="0" width="${W-primeiroVazio*L}" height="${H}"></rect>`
    : '';
 
+ // divisorias nas mesmas posicoes da regua de dias
+ const divisorias=days.map((d,i)=>i?`<line class="metric-week-col" x1="${i*L}" x2="${i*L}" y1="0" y2="${H}"></line>`:'').join('');
+
  const grade=[0,.25,.5,.75,1].map(t=>
-   `<line class="metric-week-grid" x1="${pad}" x2="${W-pad}" y1="${y(max*t)}" y2="${y(max*t)}"></line>`
-   +`<text class="metric-week-axis" x="${pad-8}" y="${y(max*t)+4}" text-anchor="end">${Math.round(max*t)}</text>`
+   `<line class="metric-week-grid" x1="0" x2="${W}" y1="${y(max*t)}" y2="${y(max*t)}"></line>`
+   +`<text class="metric-week-axis" x="6" y="${y(max*t)-5}">${Math.round(max*t)}</text>`
  ).join('');
 
  const lines=hours.map((h,idx)=>{
-  const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?{x:x(i),y:y(d.slots[h]),v:d.slots[h],i}:null);
+  const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?{x:x(i),y:y(d.slots[h]),v:d.slots[h]}:null);
   const segs=[];let cur=[];
   pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});
   if(cur.length)segs.push(cur);
-  const traco=segs.map(seg=>`<polyline points="${seg.map(p=>`${p.x},${p.y.toFixed(1)}`).join(' ')}"></polyline>`).join('');
+  const traco=segs.map(seg=>`<polyline points="${seg.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')}"></polyline>`).join('');
   const bolas=pts.filter(Boolean).map(p=>
-    `<circle cx="${p.x}" cy="${p.y.toFixed(1)}" r="3.5"><title>${esc(h)} • ${p.v}</title></circle>`).join('');
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4"><title>${esc(h)} • ${p.v}</title></circle>`).join('');
   return `<g class="metric-line line-${idx}">${traco}${bolas}</g>`;
  }).join('');
 
- return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Leituras por horário na semana">${faixa}${grade}${lines}</svg>`;
+ return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Leituras por horário na semana">${faixa}${divisorias}${grade}${lines}</svg>`;
 }
 function renderMetricIntelligence(rows=[],raw=[],seg=''){
  const daily=$('#metricDailyIntel'),
