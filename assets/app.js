@@ -1286,21 +1286,9 @@ desc:'Modelos e solicitações técnicas'},
 label:'Métricas',
 desc:'Central de métricas e relatórios'},
 
- {id:'economia',
-label:'Economia',
-desc:'Tabela, pista e referências econômicas'},
-
- {id:'historico',
-label:'Histórico',
-desc:'Movimentações e auditoria operacional'},
-
  {id:'planejador',
 label:'Planejador de Missões',
 desc:'Mapa GTA V, spawns, áreas e distribuição de equipes'},
-
- {id:'alvesinho',
-label:'Alvesinho',
-desc:'Assistente do High OS'},
 
  {id:'chat',
 label:'Chat da Equipe',
@@ -1496,7 +1484,7 @@ userPhotoEl=$('#userPhoto');
   startMetricAutoRecovery();
   if(canViewModule('spotify'))await loadSpotifyConfig();
   if(canViewModule('chat')){startChat();startCallInbox();}
-  if(canViewModule('economia'))loadMarketCatalog();
+
   if(role==='ADMIN') await loadUsers();
  }catch(e){
   show(deniedView);
@@ -1506,7 +1494,16 @@ userPhotoEl=$('#userPhoto');
  }
 });
 
-document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$('#page-'+btn.dataset.page).classList.add('active');if(btn.dataset.page==='administracao'&&isAdmin()){loadUserAudit();setTimeout(()=>{renderSaudeSistema();moverInfraParaAdmin()},0)}if(btn.dataset.page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60)}));
+document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));$('#page-'+btn.dataset.page).classList.add('active');if(btn.dataset.page==='administracao'&&isAdmin()){loadUserAudit();
+setTimeout(()=>{
+ /* V12.1 - o Histórico virou LOGS e mora na Administração: é ferramenta
+    administrativa, não operacional. Como a Administração já é restrita a
+    ADMIN, o acesso fica limitado por consequência. */
+ document.querySelector('[data-admin-tab="logs"]')?.addEventListener('click',()=>{
+  if(!estado.historico.length)loadHistory();
+  else renderHistory();
+ },{once:false});
+},0);setTimeout(()=>{renderSaudeSistema();moverInfraParaAdmin()},0)}if(btn.dataset.page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60)}));
 
 // HIGH OS V6.7 · o perfil do Group passa a abrir como página interna, não como modal.
 function activateAppPage(page){
@@ -4858,158 +4855,9 @@ await loadOrganizations()};
 
 // ===== HIGH OS V5.4 · ALVESINHO OPERACIONAL =====
 
-function alvesFindGroup(text=''){
- const n=alvesNorm(text);
-return estado.faccoes.find(f=>n.includes(alvesNorm(f.group)))||estado.faccoes.find(f=>n.includes(alvesNorm(f.qg||''))&&String(f.qg||'').length>2)||null;
 
-}
-function alvesFindOrg(text=''){
- const n=alvesNorm(text);
-return estado.organizacoes.find(o=>n.includes(alvesNorm(o.nome)))||estado.faccoes.map(f=>({nome:f.faccao,
-groupAtual:f.group,
-segmentoAtual:f.segmento,
-qgAtual:f.qg,
-lider:f.lider,
-status:f.status==='ATIVA'?'ATIVA':'SEM_GROUP'})).find(o=>o.nome&&n.includes(alvesNorm(o.nome)))||null;
 
-}
-function alvesInstalledLines(f){
- const b=f?.beneficios||{};
-const lines=[];
 
- INSTALLATIONS.forEach(([k,
-n])=>{if(isInstalled(b,k))lines.push(`${n}: ${installedValue(b,k)||'SIM'}`)});
-
- if(b.garagemVipBlip||b.garagemVipSpawn)lines.push(`Garagem VIP: Blip ${b.garagemVipBlip||'—'} | Spawn ${b.garagemVipSpawn||'—'}`);
-
- if(b.garagemPublicaBlip||b.garagemPublicaSpawn)lines.push(`Garagem Pública: Blip ${b.garagemPublicaBlip||'—'} | Spawn ${b.garagemPublicaSpawn||'—'}`);
-
- if(b.helipontoBlip||b.helipontoSpawn)lines.push(`Heliponto: Blip ${b.helipontoBlip||'—'} | Spawn ${b.helipontoSpawn||'—'}`);
-
- return [...new Set(lines)];
-
-}
-function alvesLastHistory(group,limit=5){return estado.historico.filter(h=>alvesNorm(h.group)===alvesNorm(group)).slice(0,limit)}
-function alvesDateFromDelivery(d){return d?.dataEntrega||(()=>{try{return d?.createdAt?.toDate?.().toLocaleDateString('pt-BR')||''}catch{return''}})()||'—'}
-function alvesAnswer(question=''){
- const q=alvesNorm(question),
-g=alvesFindGroup(question),
-o=alvesFindOrg(question);
-
- if(!q)return {text:'Digite uma pergunta sobre a base operacional.'};
-
- if(q.includes('resumo')&&(q.includes('operacional')||q.includes('geral'))){
-  const occupied=estado.faccoes.filter(f=>f.status==='ATIVA').length,
-vagos=estado.faccoes.length-occupied,
-ativas=estado.organizacoes.filter(x=>x.status==='ATIVA').length,
-sem=estado.organizacoes.filter(x=>x.status==='SEM_GROUP').length,
-del=estado.entregas.filter(x=>x.status==='ATIVA').length;
-
-  return {text:`Resumo operacional atual:\n• ${estado.faccoes.length} Groups cadastrados: ${occupied} ocupados e ${vagos} vagos.\n• ${estado.organizacoes.length} facções cadastradas: ${ativas} ativas e ${sem} sem Group.\n• ${del} estado.entregas ativas registradas.\n• ${estado.historico.length} eventos no histórico.`,
-refs:['Groups/QGs',
-'Facções',
-'Entregas',
-'Histórico']};
-
- }
- if((q.includes('group')||q.includes('groups'))&&(q.includes('vago')||q.includes('livre'))){
-  const list=estado.faccoes.filter(f=>f.status!=='ATIVA');
-return {text:list.length?`Groups vagos (${list.length}):\n${list.map(f=>`• ${f.group} — ${f.qg||'sem QG informado'} (${f.segmento||'OUTROS'})`).join('\n')}`:'Não há Groups vagos cadastrados.',
-refs:['Groups/QGs']};
-
- }
- if(q.includes('facc')&&(q.includes('sem group')||q.includes('sem qg')||q.includes('sem local'))){
-  const list=estado.organizacoes.filter(x=>x.status==='SEM_GROUP'||!x.groupAtual);
-return {text:list.length?`Facções sem Group (${list.length}):\n${list.map(x=>`• ${x.nome}${x.lider?' — líder: '+x.lider:''}`).join('\n')}`:'Não há facções sem Group cadastradas.',
-refs:['Facções']};
-
- }
- if((q.includes('ultima')||q.includes('recent'))&&q.includes('entrega')){
-  const list=estado.entregas.slice(0,6);
-return {text:list.length?`Últimas estado.entregas registradas:\n${list.map(d=>`• ${d.group} → ${d.faccao||'—'} | ${alvesDateFromDelivery(d)} | ${d.status||'—'}`).join('\n')}`:'Ainda não há estado.entregas registradas.',
-refs:['Entregas']};
-
- }
- if(g&&(q.includes('quem ocupa')||q.includes('ocupante')||q.includes('qual fac')||q.includes('faccao'))){
-  return {text:g.status==='ATIVA'&&g.faccao?`${g.group} está ocupado por ${g.faccao}.${g.lider?` Líder cadastrado: ${g.lider}.`:''}${g.qg?` QG/local: ${g.qg}.`:''}`:`${g.group} está vago no momento.${g.qg?` Local cadastrado: ${g.qg}.`:''}`,
-refs:[g.group,
-'Groups/QGs']};
-
- }
- if(g&&(q.includes('instalad')||q.includes('estrutura')||q.includes('beneficio')||q.includes('tem no')||q.includes('possui')||q.startsWith('o que'))){
-  const lines=alvesInstalledLines(g);
-return {text:`${g.group} — ${g.qg||'QG sem nome'}\nStatus: ${g.status==='ATIVA'?'ocupado por '+(g.faccao||'—'):'vago'}\n${lines.length?'Estrutura/setagens cadastradas:\n'+lines.map(x=>'• '+x).join('\n'):'Nenhuma instalação/setagem foi cadastrada nesse Group ainda.'}`,
-refs:[g.group,
-'Perfil Técnico']};
-
- }
- if((g||o)&&q.includes('radio')){
-  const target=g||estado.faccoes.find(f=>alvesNorm(f.faccao)===alvesNorm(o?.nome));
-const radio=target?.beneficios?.radio||'';
-
-  return {text:target?(radio?`O rádio cadastrado para ${target.faccao||target.group} no ${target.group} é ${radio}.`:`${target.group}${target.faccao?' / '+target.faccao:''} não possui número de rádio cadastrado no Perfil Técnico.`):`Encontrei a facção ${o?.nome||''}, mas ela não está vinculada a um Group com rádio cadastrado.`,
-refs:[target?.group||o?.nome,
-'Perfil Técnico']};
-
- }
- if(g&&(q.includes('histor')||q.includes('mudanc')||q.includes('alterac'))){
-  const hs=alvesLastHistory(g.group,6);
-return {text:hs.length?`Histórico recente de ${g.group}:\n${hs.map(h=>`• ${formatHistoryDate(h)} — ${historyTitle(h)}${h.usuario?' — '+h.usuario:''}`).join('\n')}`:`Ainda não há eventos no histórico de ${g.group}.`,
-refs:[g.group,
-'Histórico']};
-
- }
- if(g&&q.includes('solicit')){
-  const ds=estado.entregas.filter(d=>d.group===g.group&&Array.isArray(d.solicitacoesGeradas)&&d.solicitacoesGeradas.length).slice(0,3);
-const reqs=ds.flatMap(d=>d.solicitacoesGeradas.map(r=>({d,
-r}))).slice(0,8);
-
-  return {text:reqs.length?`Solicitações recentes geradas para ${g.group}:\n${reqs.map(x=>`• ${x.r.titulo||x.r.tipo||'Solicitação'} — entrega ${x.d.faccao||'—'}`).join('\n')}`:`Não encontrei solicitações geradas em estado.entregas do ${g.group}. A Biblioteca de Solicitações continua disponível para modelos manuais.`,
-refs:[g.group,
-'Entregas',
-'Biblioteca de Solicitações']};
-
- }
- if(g&&q.includes('entrega')){
-  const ds=estado.entregas.filter(d=>d.group===g.group).slice(0,5);
-return {text:ds.length?`Entregas registradas para ${g.group}:\n${ds.map(d=>`• ${alvesDateFromDelivery(d)} — ${d.faccao||'—'} — ${d.status||'—'}${d.lider?' — líder: '+d.lider:''}`).join('\n')}`:`Não há estado.entregas registradas para ${g.group}.`,
-refs:[g.group,
-'Entregas']};
-
- }
- if(o){
-  const target=estado.faccoes.find(f=>alvesNorm(f.faccao)===alvesNorm(o.nome));
-return {text:`${o.nome}\nStatus: ${o.status||'—'}\nGroup atual: ${o.groupAtual||target?.group||'SEM GROUP'}\nSegmento: ${o.segmentoAtual||target?.segmento||'—'}\nQG: ${o.qgAtual||target?.qg||'—'}\nLíder: ${o.lider||target?.lider||'—'}${o.contato?`\nContato: ${o.contato}`:''}`,
-refs:[o.nome,
-'Facções']};
-
- }
- if(g){return {text:`${g.group} — ${g.qg||'QG sem nome'}\nSegmento: ${g.segmento||'—'}\nStatus: ${g.status==='ATIVA'?'OCUPADO':'VAGO'}\nFacção atual: ${g.faccao||'—'}\nLíder: ${g.lider||'—'}\nInstalações/setagens cadastradas: ${installedCount(g)}.`,
-refs:[g.group,
-'Groups/QGs']};
-}
- return {text:'Não encontrei um Group ou facção correspondente na base para responder com segurança. Tente informar o Group (ex.: Armas02) ou o nome exato da facção.',
-refs:['Base High OS']};
-
-}
-function alvesAddMessage(role,text,refs=[]){
- const box=$('#alvesMessages');
-if(!box)return;
-const div=document.createElement('div');
-div.className=`alves-msg ${role}`;
-div.innerHTML=`<div class="alves-bubble"><b>${role==='user'?'VOCÊ':'ALVESINHO'}</b><p>${esc(text)}</p>${refs?.length?`<div class="alves-ref">${refs.filter(Boolean).map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:''}</div>`;
-box.appendChild(div);
-box.scrollTop=box.scrollHeight;
-
-}
-function askAlvesinho(q){if(!q?.trim())return;
-alvesAddMessage('user',q);
-const a=alvesAnswer(q);
-setTimeout(()=>alvesAddMessage('bot',a.text,a.refs||[]),60)}
-$('#alvesForm')?.addEventListener('submit',e=>{e.preventDefault();const input=$('#alvesInput'),
-q=input.value;input.value='';askAlvesinho(q)});
-
-document.querySelectorAll('#alvesQuick [data-q]').forEach(b=>b.addEventListener('click',()=>askAlvesinho(b.dataset.q)));
 
 // ===== HIGH OS V5.8 · PARSER DA PLANILHA OFICIAL + GOOGLE SHEETS SOMENTE LEITURA =====
 let 
@@ -5024,9 +4872,7 @@ lastSync:null,
 count:0,
 activeCount:0,
 error:''},
-sheetsAccessToken='',
-mercadoCatalogo=[],
-mercadoStatus='CARREGANDO';
+sheetsAccessToken='';
 
 let metricLiveUnsub=null,
 metricLiveLastAt=0;
@@ -5035,7 +4881,6 @@ const metricCol=collection(db,'highos','data','metricas');
 
 const metricConfigDoc=doc(db,'highos','metricas_config');
 
-const MARKET_CATALOG_URL='https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/catalogo.json';
 
 const SHEETS_SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
 
@@ -7491,90 +7336,11 @@ $('#metricSourceTest')?.addEventListener('click',testMetricSource);
 $('#metricSourceSave')?.addEventListener('click',saveMetricSource);
 $('#syncMetricBtn')?.addEventListener('click',()=>requestServerMetricSync({quiet:false}));
 
-function marketFlatten(node,path='',out=[]){
- if(Array.isArray(node)){node.forEach((v,i)=>marketFlatten(v,path,out));
-return out}
- if(!node||typeof node!=='object')return out;
-const name=node.nome||node.item||node.produto||node.name||node.ITEM||node.NOME||node.PRODUTO;
 
- if(name){out.push({...node,
-__name:String(name),
-__path:path})}
- Object.entries(node).forEach(([k,
-v])=>{if(v&&typeof v==='object')marketFlatten(v,path?path+' / '+k:k,out)});
-return out;
 
-}
-function marketPriceFields(x){
- const pick=(...ks)=>{for(const k of ks)if(x[k]!==undefined&&x[k]!==null&&String(x[k]).trim()!=='')return x[k];
-return ''};
 
- return {pista:pick('pista','preco_pista','precoPista','sell','sell_min','venda','VALOR PISTA','PISTA'),
-parceria:pick('parceria','preco_parceria','precoParceria','buy','buy_min','compra','VALOR PARCERIA','PARCERIA'),
-categoria:pick('categoria','category','CATEGORIA')||x.__path||''};
 
-}
-async function loadMarketCatalog(){
- mercadoStatus='CARREGANDO';
-renderMarket();
-try{const r=await fetch(MARKET_CATALOG_URL,{cache:'no-store'});
-if(!r.ok)throw new Error('HTTP '+r.status);
-const json=await r.json();
-mercadoCatalogo=marketFlatten(json).filter((x,i,a)=>a.findIndex(y=>alvesNorm(y.__name)===alvesNorm(x.__name))===i);
-mercadoStatus='ONLINE';
-renderMarket()}catch(e){mercadoCatalogo=[];
-mercadoStatus='INDISPONÍVEL';
-renderMarket(e)}
-}
 
-function marketFind(question=''){const n=alvesNorm(question);
-return mercadoCatalogo.filter(x=>n.includes(alvesNorm(x.__name))||alvesNorm(x.__name).includes(n)).sort((a,b)=>b.__name.length-a.__name.length)[0]||null}
-function renderMarket(err){
- const st=$('#marketStatus'),
-box=$('#marketResults'),
-cnt=$('#marketCount');
-if(!st||!box)return;
-st.innerHTML=mercadoStatus==='ONLINE'?`<span class="online">● CATÁLOGO ONLINE</span>`:(mercadoStatus==='CARREGANDO'?'Carregando catálogo público...':`<span class="danger">● CATÁLOGO INDISPONÍVEL</span>${err?' • '+esc(err.message):''}`);
-if(cnt)cnt.textContent=mercadoStatus==='ONLINE'?String(mercadoCatalogo.length):'—';
-
- const q=alvesNorm($('#marketSearch')?.value||'');
-const list=(q?mercadoCatalogo.filter(x=>alvesNorm([x.__name,
-x.__path].join(' ')).includes(q)):mercadoCatalogo.slice(0,8)).slice(0,20);
-box.innerHTML=list.map(x=>{const p=marketPriceFields(x);return `<div class="market-item"><div><b>${esc(x.__name)}</b><small>${esc(p.categoria||'Mercado Negro')}</small></div><span>Pista <b>${esc(fmtMoneyMaybe(p.pista))}</b><br>Parceria <b>${esc(fmtMoneyMaybe(p.parceria))}</b></span></div>`}).join('')||'<div class="delivery-no-change">Nenhum item encontrado.</div>';
-
-}
-$('#marketSearch')?.addEventListener('input',renderMarket);
-
-const _alvesAnswerV54=alvesAnswer;
-
-alvesAnswer=function(question=''){
- const q=alvesNorm(question),
-g=alvesFindGroup(question),
-o=alvesFindOrg(question);
-const metricTarget=g?.group||o?.groupAtual||estado.faccoes.find(f=>o&&alvesNorm(f.faccao)===alvesNorm(o.nome))?.group;
-
- if(metricTarget&&(q.includes('media')||q.includes('pico')||q.includes('predomin')||q.includes('metrica'))){const a=metricAnalysis(metricTarget);
-if(!a)return {text:`Não encontrei métricas cadastradas para ${metricTarget}.`,
-refs:['Métricas',
-metricTarget]};
-let parts=[`${metricTarget} — ${metricPeriodLabel(metricPeriodKey)} — ${a.rows.length} dia(s) com métricas.`,
-`Média dos quatro horários: ${a.avg.toFixed(1)}.` ,
-`Pico: ${a.peak.value} às ${a.peak.hour} em ${a.peak.date}.`,
-`Horário predominante: ${a.predominant}.`];
-return {text:parts.join('\n'),
-refs:['Métricas',
-metricTarget]}}
- if(q.includes('abaixo da media')||q.includes('ranking')||q.includes('melhor media')){const rows=metricSummaryRows();
-if(rows.length)return {text:`Ranking de ${metricPeriodLabel(metricPeriodKey)} por média:\n${rows.slice(0,10).map((x,i)=>`${i+1}. ${x.f.group}${x.f.faccao?' — '+x.f.faccao:''}: ${x.a.avg.toFixed(1)}`).join('\n')}`,
-refs:['Métricas']}}
- if(q.includes('quanto custa')||q.includes('preco')||q.includes('pista')||q.includes('parceria')){const item=marketFind(question);
-if(item){const p=marketPriceFields(item);
-return {text:`${item.__name}\nPreço de pista: ${fmtMoneyMaybe(p.pista)}\nPreço de parceria: ${fmtMoneyMaybe(p.parceria)}${p.categoria?'\nCategoria: '+p.categoria:''}`,
-refs:['Mercado Negro']}}if(mercadoStatus!=='ONLINE')return {text:'O catálogo público do Mercado Negro não está disponível neste momento, então não vou estimar o preço.',
-refs:['Mercado Negro']}}
- return _alvesAnswerV54(question);
-
-};
 
 // ===== HIGH OS V6.5 · CDS CONFIRMADAS / GROUPS REMOVIDOS · 07/09/2026 =====
 const GROUP_PROFILE_SOURCE={"Armas01":{"LOCAL":"Favela da Barragem",
@@ -9415,42 +9181,8 @@ $('#fRotaExclusiva')?.addEventListener('change',renderRouteOverview);
 document.querySelectorAll('.tech-tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tech-tab').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('.tech-panel').forEach(p=>p.classList.toggle('active',p.dataset.techPanel===b.dataset.techTab));if(b.dataset.techTab==='farm')renderRouteOverview();if(b.dataset.techTab==='estrutura')renderStructureSnapshot(currentFactionFromForm());if(b.dataset.techTab==='solicitacoes')renderConnectedRequests()}));
 
 // Alvesinho usa o mesmo perfil do Group — sem base paralela.
-const _alvesAnswerV63Base=alvesAnswer;
-alvesAnswer=function(question=''){
- const q=alvesNorm(question),
-g=alvesFindGroup(question);
-if(g){const t=mergedTechProfile(g);
 
-  if(q.includes('craft')||q.includes('fabric')||q.includes('receita')){const rs=t.craft?.receitas||[];
-const hit=rs.find(r=>q.includes(alvesNorm(r.nome))||q.includes(alvesNorm(r.spawn)));
-if(hit)return {text:`${hit.nome}${hit.spawn?' ('+hit.spawn+')':''}\n${hit.nivel?'Nível: '+hit.nivel+' • ':''}${hit.max?'Máx.: '+hit.max:''}\nReceita / insumos:\n${(hit.insumos||[]).map(x=>`• ${x.nome||x.spawn} x${x.qtd}`).join('\n')||'• Sem insumos cadastrados'}`,
-refs:[g.group,
-'Perfil Técnico',
-'Craft']};
-return {text:rs.length?`Craft de ${g.group} (${rs.length} receita(s)):\n${rs.map(r=>`• ${r.nome}${r.spawn?' ('+r.spawn+')':''}`).join('\n')}`:`${g.group} não possui receitas de Craft cadastradas.`,
-refs:[g.group,
-'Perfil Técnico',
-'Craft']};
-}
-  if((q.includes('farm')||q.includes('insumo'))&&!q.includes('receita')){const xs=t.farm?.itens||[];
-return {text:xs.length?`Farm / Insumos de ${g.group}:\n${xs.map(x=>`• ${x.nome||x.spawn}${x.spawn?' ('+x.spawn+')':''}${x.qtd?' — '+x.qtd:''}${x.detalhe?' — '+x.detalhe:''}`).join('\n')}`:`Nenhum insumo de Craft está disponível na rota de ${g.group}.`,
-refs:[g.group,
-'Perfil Técnico',
-'Farm']};
-}
-  if(q.includes('rota')){const xs=t.farm?.itens||[],
-exclusive=!!g.beneficios?.rotaExclusiva,
-pts=routePointList(t.rota?.pontos||g.beneficios?.rotaBlips||'');
-return {text:`Rota de ${g.group}:\nTipo: ${exclusive?'EXCLUSIVA':'PADRÃO'}\n${t.rota?.inicio?`Início: ${t.rota.inicio}\n`:''}${exclusive?`CDS da rota exclusiva: ${pts.length} ponto(s) cadastrado(s).\n`:''}Itens coletados para o Craft:\n${xs.length?xs.map(x=>`• ${x.nome||x.spawn}${x.spawn?' ('+x.spawn+')':''}`).join('\n'):'• Nenhum insumo de Craft vinculado.'}`,
-refs:[g.group,
-'Perfil Técnico',
-'Rota',
-'Craft']};
-}
- }
- return _alvesAnswerV63Base(question);
 
-};
 
 // HIGH OS V6.4 · ação de atualização da base técnica
 $('#updateProfilesBtn')?.addEventListener('click',updateOfficialGroupProfiles);
@@ -9818,26 +9550,8 @@ OP_INPUT_IDS.forEach(id=>$('#'+id)?.addEventListener('input',()=>{syncOperationa
 $('#fOpTelaoTipo')?.addEventListener('change',()=>{syncOperationalLegacy();getTechProfileFromForm();try{renderConnectedRequests();updateDeliveryPreview()}catch{}});
 
 // Perfil operacional também passa a responder no Alvesinho.
-const _alvesAnswerV71=alvesAnswer;
-alvesAnswer=function(question=''){const q=alvesNorm(question),
-g=alvesFindGroup(question);
-if(g){const o=mergedTechProfile(g).operacional||opBlank();
-if(q.includes('garagem')){const xs=o.garagens||[];
-return {text:xs.length?`Garagens de ${g.group}:\n${xs.map(x=>`• ${x.tipo}: Blip ${x.blip||'—'} | Spawn ${x.spawn||'—'}${x.veiculos?' | Veículos '+x.veiculos:''}`).join('\n')}`:`${g.group} não possui garagem cadastrada.`,
-refs:[g.group,
-'Perfil Operacional',
-'Garagens']};
-}if(q.includes('telao')||q.includes('telão')){const t=o.telao||{};
-return {text:t.ativo?`Telão de ${g.group}:\n• Tipo: ${t.tipo||'—'}\n• Modelo: ${t.modelo||'—'}\n• Post-it: ${t.postit||'—'}\n• CDS: ${t.cds||'—'}\n• Sons: ${(t.sons||[]).filter(Boolean).length} ponto(s)\n${(t.sons||[]).filter(Boolean).map((x,i)=>`  Som ${i+1}: ${x}`).join('\n')}`:`${g.group} não possui telão cadastrado.`,
-refs:[g.group,
-'Perfil Operacional',
-'Telão']};
-}if(q.includes('mapa')||q.includes('localizacao')||q.includes('localização')||q.includes('qg')){return {text:`${g.group} — ${o.localizacao?.nome||g.qg||'QG sem nome'}\nCDS principal do mapa: ${o.localizacao?.cdsPrincipal||g.cds||'—'}`,
-refs:[g.group,
-'Perfil Operacional',
-'Mapa']};
-}}
- return _alvesAnswerV71(question)};
+
+
 
 // HIGH OS V7.5 · Benefícios e Setagens realmente isolados em página própria.
 let groupBenefitsHome=null;
