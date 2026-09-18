@@ -37,7 +37,11 @@ const amarelo = t => `\x1b[33m${t}\x1b[0m`;
 function funcoesDe(codigo) {
   const nomes = new Set();
   for (const m of codigo.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g)) nomes.add(m[1]);
-  for (const m of codigo.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>)/g)) nomes.add(m[1]);
+  // arrow com parenteses: const f = (a,b) => ...
+  for (const m of codigo.matchAll(/(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\([^)]*\)\s*=>)/g)) nomes.add(m[1]);
+  // arrow de parametro unico, sem parenteses: const esc = v => ...
+  // ficava de fora e o `esc`, usado 537 vezes, nao era vigiado por ninguem
+  for (const m of codigo.matchAll(/(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?[A-Za-z_$][\w$]*\s*=>/g)) nomes.add(m[1]);
   return nomes;
 }
 
