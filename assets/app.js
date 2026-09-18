@@ -2703,6 +2703,8 @@ nome])=>({
 }));
 
 function initRequestUi(){
+ if(!document.getElementById('reqList')&&!document.getElementById('reqTypeFilter'))return;   // V12.3.1 - tela de Solicitações removida
+
   const opts=REQUEST_TYPES.map(([v,
 n])=>`<option value="${v}">${n}</option>`).join('');
 
@@ -3248,6 +3250,8 @@ $('#reqModal').classList.remove('hidden');
 
 }
 async function loadRequests(){
+ if(!document.getElementById('reqList')&&!document.getElementById('reqTypeFilter'))return;   // V12.3.1 - tela de Solicitações removida
+
  try{
    const qs=await getDocsCached(reqCol,'solicitacoes'),
 all=qs.docs.map(d=>({id:d.id,
@@ -3268,6 +3272,9 @@ all=qs.docs.map(d=>({id:d.id,
 function allRequestModels(){return [...BUILTIN_REQUEST_MODELS,
 ...solicitacoes]}
 function renderRequests(){
+ if(!document.getElementById('reqList')&&!document.getElementById('reqTypeFilter'))return;   // V12.3.1 - tela de Solicitações removida
+
+ if(!document.getElementById('reqList'))return;   // tela removida na V12
  const q=($('#reqSearch').value||'').toLowerCase(),
 tp=$('#reqTypeFilter').value;
 
@@ -13845,6 +13852,21 @@ if(g.includes('ilegalmec')||g.includes('ilegalmedic'))return 'APOIO';
 return 'OUTROS';
 
 }
+
+/* Leva a contagem para dentro dos chips de situação, que já existem.
+   Assim o número aparece onde a pessoa vai clicar, e não num cartão
+   separado que repete a mesma informação. */
+function aplicarContagemNosChips(cont){
+ const mapa={'':cont.todas,'ASSUMIDA':cont.assumida,'DISPONIVEL':cont.disponivel,'INDISPONIVEL':cont.indisponivel};
+ document.querySelectorAll('#facStatusButtons [data-value]').forEach(b=>{
+  const n=mapa[b.dataset.value??''];
+  if(n===undefined)return;
+  let badge=b.querySelector('.chip-contagem');
+  if(!badge){badge=document.createElement('i');badge.className='chip-contagem';b.appendChild(badge)}
+  badge.textContent=String(n);
+ });
+}
+
 function orgV92Rows(){return estado.faccoes.filter(f=>!f.removido).map(f=>({...f,
 __orgStatus:orgV92Status(f),
 __orgSegment:orgV92Segment(f)}))}
@@ -13916,14 +13938,30 @@ renderFacSegmentChips();
 
  const c=s=>all.filter(f=>f.__orgStatus===s).length;
 
- const summary=$('#orgV92Summary');
-if(summary)summary.innerHTML=`<article><span>TOTAL</span><b>${all.length}</b><small>Groups administrativos</small></article><article class="assumed"><span>ASSUMIDAS</span><b>${c('ASSUMIDA')}</b><small>com facção ocupante</small></article><article class="available"><span>DISPONÍVEIS</span><b>${c('DISPONIVEL')}</b><small>livres com QG/Favela</small></article><article class="unavailable"><span>INDISPONÍVEIS</span><b>${c('INDISPONIVEL')}</b><small>ausência de QG/Favela</small></article>`;
+ /* V12.3 - os quatro cartões viram uma linha só. A contagem migra para
+   os próprios chips de filtro logo abaixo, que já existiam: ver
+   aplicarContagemNosChips(). */
+const summary=$('#orgV92Summary');
+if(summary)summary.innerHTML=`<div class="org-resumo-linha">`
+ +`<span class="org-resumo-total"><b>${all.length}</b> Groups</span>`
+ +`<span class="org-resumo-item assumida"><b>${c('ASSUMIDA')}</b> assumidas</span>`
+ +`<span class="org-resumo-item disponivel"><b>${c('DISPONIVEL')}</b> disponíveis</span>`
+ +`<span class="org-resumo-item indisponivel"><b>${c('INDISPONIVEL')}</b> sem QG</span>`
+ +`</div>`;
+aplicarContagemNosChips({todas:all.length,assumida:c('ASSUMIDA'),disponivel:c('DISPONIVEL'),indisponivel:c('INDISPONIVEL')});
+if(false)summary.innerHTML=`<article><span>TOTAL</span><b>${all.length}</b><small>Groups administrativos</small></article><article class="assumed"><span>ASSUMIDAS</span><b>${c('ASSUMIDA')}</b><small>com facção ocupante</small></article><article class="available"><span>DISPONÍVEIS</span><b>${c('DISPONIVEL')}</b><small>livres com QG/Favela</small></article><article class="unavailable"><span>INDISPONÍVEIS</span><b>${c('INDISPONIVEL')}</b><small>ausência de QG/Favela</small></article>`;
 
  const st=$('#facStatus')?.value||'',
 seg=$('#facSegment')?.value||'';
-if($('#orgV92ListTitle'))$('#orgV92ListTitle').textContent=[st?orgV92StatusLabel(st):'TODAS AS ORGANIZAÇÕES',
-seg].filter(Boolean).join(' • ');
-if($('#facStats'))$('#facStats').textContent=`${rows.length} exibida(s) de ${all.length}`;
+/* V12.3 - título e contador ocupavam duas linhas dizendo quase o mesmo.
+   Viram uma linha só, e só aparece quando há filtro ativo. */
+if($('#orgV92ListTitle')){
+ const filtro=[st?orgV92StatusLabel(st):'',seg].filter(Boolean).join(' • ');
+ $('#orgV92ListTitle').textContent=filtro
+  ? `${filtro} — ${rows.length} de ${all.length}`
+  : `${rows.length} organizações`;
+}
+if($('#facStats'))$('#facStats').textContent='';
 
  const box=$('#facList');
 if(!box)return;
