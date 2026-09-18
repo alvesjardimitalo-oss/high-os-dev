@@ -2,7 +2,7 @@
 
 Gerado por `node tools/mapa-do-codigo.mjs --md`. Não edite à mão.
 
-811 funções, 37 categorias.
+810 funções, 37 categorias.
 
 Para ver o impacto de remover uma função:
 
@@ -24,16 +24,16 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `adminGroupStatus` | assets/app.js:11147 | 1 | 2 | 0 |
-| `renameAdminGroup` | assets/app.js:11176 | 48 | 1 | 12 |
-| `renderAdminGroupManager` | assets/app.js:11148 | 28 | 3 | 8 |
+| `adminGroupStatus` | assets/app.js:11168 | 1 | 2 | 0 |
+| `renameAdminGroup` | assets/app.js:11197 | 48 | 1 | 12 |
+| `renderAdminGroupManager` | assets/app.js:11169 | 28 | 3 | 8 |
 
 ## ADMINISTRAÇÃO ORGANIZADA
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `normalizeOccupationStatusV820` | assets/app.js:11245 | 31 | 1 | 9 |
-| `openAdminTab` | assets/app.js:11228 | 4 | 1 | 4 |
+| `normalizeOccupationStatusV820` | assets/app.js:11266 | 31 | 1 | 9 |
+| `openAdminTab` | assets/app.js:11249 | 4 | 1 | 4 |
 
 ## Alvesinho
 
@@ -45,14 +45,14 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `alvesAddMessage` | assets/app.js:4974 | 10 | 1 | 2 |
-| `alvesAnswer` | assets/app.js:4873 | 101 | 2 | 12 |
-| `alvesDateFromDelivery` | assets/app.js:4872 | 1 | 1 | 0 |
-| `alvesFindGroup` | assets/app.js:4840 | 5 | 2 | 2 |
-| `alvesFindOrg` | assets/app.js:4845 | 10 | 2 | 2 |
-| `alvesInstalledLines` | assets/app.js:4855 | 16 | 1 | 4 |
-| `alvesLastHistory` | assets/app.js:4871 | 1 | 1 | 1 |
-| `askAlvesinho` | assets/app.js:4984 | 4 | 1 | 2 |
+| `alvesAddMessage` | assets/app.js:4995 | 10 | 1 | 2 |
+| `alvesAnswer` | assets/app.js:4894 | 101 | 2 | 12 |
+| `alvesDateFromDelivery` | assets/app.js:4893 | 1 | 1 | 0 |
+| `alvesFindGroup` | assets/app.js:4861 | 5 | 2 | 2 |
+| `alvesFindOrg` | assets/app.js:4866 | 10 | 2 | 2 |
+| `alvesInstalledLines` | assets/app.js:4876 | 16 | 1 | 4 |
+| `alvesLastHistory` | assets/app.js:4892 | 1 | 1 | 1 |
+| `askAlvesinho` | assets/app.js:5005 | 4 | 1 | 2 |
 
 ## Autenticação e sessão
 
@@ -74,32 +74,32 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `boletimAgregar` | assets/app.js:6288 | 17 | 1 | 4 |
-| `boletimCalcular` | assets/app.js:6326 | 21 | 1 | 3 |
-| `boletimDataBR` | assets/app.js:6275 | 3 | 1 | 1 |
-| `boletimJanelas` | assets/app.js:6307 | 8 | 1 | 0 |
-| `boletimParseData` | assets/app.js:6278 | 4 | 1 | 1 |
-| `boletimPartes` | assets/app.js:6404 | 12 | 1 | 1 |
-| `boletimPct` | assets/app.js:6320 | 5 | 1 | 1 |
-| `boletimTexto` | assets/app.js:6348 | 54 | 1 | 4 |
-| `boletimTotalLinha` | assets/app.js:6282 | 4 | 1 | 1 |
-| `boletimVariacao` | assets/app.js:6316 | 4 | 1 | 0 |
-| `iso` | assets/app.js:6783 | 1 | 3 | 1 |
-| `loadMetricSourceConfig` | assets/app.js:6815 | 7 | 1 | 1 |
-| `metricAdvancedStats` | assets/app.js:6552 | 40 | 4 | 6 |
-| `movement` | assets/app.js:6512 | 1 | 1 | 2 |
-| `openMetricSource` | assets/app.js:6791 | 14 | 1 | 1 |
-| `parseMetricImport` | assets/app.js:6708 | 47 | 1 | 5 |
-| `renderBoletim` | assets/app.js:6417 | 36 | 1 | 6 |
-| `renderMetricAdvancedRanking` | assets/app.js:6592 | 25 | 3 | 7 |
-| `renderMetricComparison` | assets/app.js:6624 | 33 | 3 | 5 |
-| `renderMetrics` | assets/app.js:6454 | 98 | 6 | 26 |
-| `renderRhFactionInsights` | assets/app.js:6657 | 8 | 1 | 3 |
-| `saveMetricImport` | assets/app.js:6755 | 21 | 1 | 9 |
-| `split` | assets/app.js:6712 | 1 | 1 | 0 |
-| `switchMetricCenterView` | assets/app.js:6672 | 11 | 3 | 8 |
-| `syncMetricCompareSelectors` | assets/app.js:6617 | 7 | 2 | 3 |
-| `testMetricSource` | assets/app.js:6805 | 7 | 1 | 2 |
+| `boletimAgregar` | assets/app.js:6309 | 17 | 1 | 4 |
+| `boletimCalcular` | assets/app.js:6347 | 21 | 1 | 3 |
+| `boletimDataBR` | assets/app.js:6296 | 3 | 1 | 1 |
+| `boletimJanelas` | assets/app.js:6328 | 8 | 1 | 0 |
+| `boletimParseData` | assets/app.js:6299 | 4 | 1 | 1 |
+| `boletimPartes` | assets/app.js:6425 | 12 | 1 | 1 |
+| `boletimPct` | assets/app.js:6341 | 5 | 1 | 1 |
+| `boletimTexto` | assets/app.js:6369 | 54 | 1 | 4 |
+| `boletimTotalLinha` | assets/app.js:6303 | 4 | 1 | 1 |
+| `boletimVariacao` | assets/app.js:6337 | 4 | 1 | 0 |
+| `iso` | assets/app.js:6804 | 1 | 3 | 1 |
+| `loadMetricSourceConfig` | assets/app.js:6836 | 7 | 1 | 1 |
+| `metricAdvancedStats` | assets/app.js:6573 | 40 | 4 | 6 |
+| `movement` | assets/app.js:6533 | 1 | 1 | 2 |
+| `openMetricSource` | assets/app.js:6812 | 14 | 1 | 1 |
+| `parseMetricImport` | assets/app.js:6729 | 47 | 1 | 5 |
+| `renderBoletim` | assets/app.js:6438 | 36 | 1 | 6 |
+| `renderMetricAdvancedRanking` | assets/app.js:6613 | 25 | 3 | 7 |
+| `renderMetricComparison` | assets/app.js:6645 | 33 | 3 | 5 |
+| `renderMetrics` | assets/app.js:6475 | 98 | 6 | 26 |
+| `renderRhFactionInsights` | assets/app.js:6678 | 8 | 1 | 3 |
+| `saveMetricImport` | assets/app.js:6776 | 21 | 1 | 9 |
+| `split` | assets/app.js:6733 | 1 | 1 | 0 |
+| `switchMetricCenterView` | assets/app.js:6693 | 11 | 3 | 8 |
+| `syncMetricCompareSelectors` | assets/app.js:6638 | 7 | 2 | 3 |
+| `testMetricSource` | assets/app.js:6826 | 7 | 1 | 2 |
 
 ## BUSCA GLOBAL (Ctrl+K)
 
@@ -124,7 +124,7 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
 | `add` | assets/app.js:2054 | 3 | 11 | 0 |
-| `addDoc` | assets/app.js:1612 | 1 | 38 | 0 |
+| `addDoc` | assets/app.js:1612 | 1 | 37 | 0 |
 | `autoDeliveryRequests` | assets/app.js:2118 | 128 | 4 | 7 |
 | `benefitLines` | assets/app.js:1986 | 35 | 1 | 2 |
 | `buildDeliveryExtract` | assets/app.js:2021 | 22 | 2 | 2 |
@@ -155,7 +155,7 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 | `sairModoLocal` | assets/app.js:1760 | 13 | 1 | 1 |
 | `samePlain` | assets/app.js:2044 | 1 | 2 | 1 |
 | `selectedDefaultBenefits` | assets/app.js:1960 | 1 | 2 | 0 |
-| `setDoc` | assets/app.js:1611 | 1 | 41 | 0 |
+| `setDoc` | assets/app.js:1611 | 1 | 39 | 0 |
 | `setFormBenefits` | assets/app.js:1920 | 1 | 1 | 0 |
 | `setRecollectPrint` | assets/app.js:2500 | 6 | 1 | 3 |
 | `snapshot` | assets/app.js:2590 | 4 | 4 | 0 |
@@ -163,96 +163,96 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 | `unpackCache` | assets/app.js:1685 | 19 | 1 | 0 |
 | `updateDeliveryPreview` | assets/app.js:2250 | 2 | 6 | 3 |
 | `updateRecollectUi` | assets/app.js:2464 | 3 | 3 | 2 |
-| `writeBatch` | assets/app.js:1615 | 10 | 9 | 2 |
+| `writeBatch` | assets/app.js:1615 | 10 | 10 | 2 |
 
 ## CAMADA DO GOOGLE SHEETS RESTAURADA
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `authorizeSheets` | assets/app.js:6843 | 20 | 1 | 0 |
-| `compareMetricSources` | assets/app.js:6924 | 22 | 1 | 3 |
-| `getSheetTitles` | assets/app.js:6863 | 6 | 1 | 2 |
-| `loadMarketCatalog` | assets/app.js:7188 | 12 | 1 | 4 |
-| `marketFind` | assets/app.js:7201 | 2 | 1 | 1 |
-| `marketFlatten` | assets/app.js:7165 | 14 | 1 | 1 |
-| `marketPriceFields` | assets/app.js:7179 | 9 | 2 | 1 |
-| `metricLatestInfo` | assets/app.js:6909 | 15 | 1 | 5 |
-| `metricRowKey` | assets/app.js:6908 | 1 | 2 | 0 |
-| `metricTimeout` | assets/app.js:6946 | 6 | 2 | 1 |
-| `pick` | assets/app.js:7180 | 2 | 1 | 0 |
-| `podeSincronizarAgora` | assets/app.js:7080 | 14 | 1 | 0 |
-| `readMetricsDirect` | assets/app.js:6876 | 3 | 1 | 0 |
-| `readMetricSheet` | assets/app.js:6869 | 7 | 1 | 4 |
-| `readMetricsWithoutPopup` | assets/app.js:6953 | 32 | 2 | 7 |
-| `recoverMetricsAutomatically` | assets/app.js:6985 | 1 | 1 | 0 |
-| `refreshMetricServerConfig` | assets/app.js:6902 | 6 | 1 | 1 |
-| `renderMarket` | assets/app.js:7203 | 14 | 2 | 6 |
-| `requestServerMetricSync` | assets/app.js:7112 | 1 | 1 | 0 |
-| `runMetricAutoRecovery` | assets/app.js:7062 | 1 | 2 | 0 |
-| `saveMetricSource` | assets/app.js:7141 | 17 | 1 | 3 |
-| `sheetsFetch` | assets/app.js:6833 | 10 | 3 | 1 |
-| `startMetricAutoRecovery` | assets/app.js:7098 | 14 | 1 | 3 |
-| `stopMetricAutoRecovery` | assets/app.js:7094 | 4 | 1 | 0 |
+| `authorizeSheets` | assets/app.js:6864 | 20 | 1 | 0 |
+| `compareMetricSources` | assets/app.js:6945 | 22 | 1 | 3 |
+| `getSheetTitles` | assets/app.js:6884 | 6 | 1 | 2 |
+| `loadMarketCatalog` | assets/app.js:7209 | 12 | 1 | 4 |
+| `marketFind` | assets/app.js:7222 | 2 | 1 | 1 |
+| `marketFlatten` | assets/app.js:7186 | 14 | 1 | 1 |
+| `marketPriceFields` | assets/app.js:7200 | 9 | 2 | 1 |
+| `metricLatestInfo` | assets/app.js:6930 | 15 | 1 | 5 |
+| `metricRowKey` | assets/app.js:6929 | 1 | 2 | 0 |
+| `metricTimeout` | assets/app.js:6967 | 6 | 2 | 1 |
+| `pick` | assets/app.js:7201 | 2 | 1 | 0 |
+| `podeSincronizarAgora` | assets/app.js:7101 | 14 | 1 | 0 |
+| `readMetricsDirect` | assets/app.js:6897 | 3 | 1 | 0 |
+| `readMetricSheet` | assets/app.js:6890 | 7 | 1 | 4 |
+| `readMetricsWithoutPopup` | assets/app.js:6974 | 32 | 2 | 7 |
+| `recoverMetricsAutomatically` | assets/app.js:7006 | 1 | 1 | 0 |
+| `refreshMetricServerConfig` | assets/app.js:6923 | 6 | 1 | 1 |
+| `renderMarket` | assets/app.js:7224 | 14 | 2 | 6 |
+| `requestServerMetricSync` | assets/app.js:7133 | 1 | 1 | 0 |
+| `runMetricAutoRecovery` | assets/app.js:7083 | 1 | 2 | 0 |
+| `saveMetricSource` | assets/app.js:7162 | 17 | 1 | 3 |
+| `sheetsFetch` | assets/app.js:6854 | 10 | 3 | 1 |
+| `startMetricAutoRecovery` | assets/app.js:7119 | 14 | 1 | 3 |
+| `stopMetricAutoRecovery` | assets/app.js:7115 | 4 | 1 | 0 |
 
 ## CDS CONFIRMADAS / GROUPS REMOVIDOS · 07/09/2026
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `cleanProfileValue` | assets/app.js:7857 | 1 | 2 | 0 |
-| `profileCoordLike` | assets/app.js:7850 | 1 | 1 | 0 |
-| `sourceToGroupPatch` | assets/app.js:7858 | 81 | 2 | 8 |
-| `splitCoordPair` | assets/app.js:7851 | 6 | 1 | 0 |
-| `updateOfficialGroupProfiles` | assets/app.js:7939 | 32 | 1 | 7 |
+| `cleanProfileValue` | assets/app.js:7878 | 1 | 2 | 0 |
+| `profileCoordLike` | assets/app.js:7871 | 1 | 1 | 0 |
+| `sourceToGroupPatch` | assets/app.js:7879 | 81 | 2 | 8 |
+| `splitCoordPair` | assets/app.js:7872 | 6 | 1 | 0 |
+| `updateOfficialGroupProfiles` | assets/app.js:7960 | 32 | 1 | 7 |
 
 ## CENTRAL DE COMANDO + PERFIL DE FACÇÃO EM PÁGINA
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `activityButtons` | assets/app.js:10933 | 13 | 2 | 2 |
-| `allSegmentNames` | assets/app.js:10887 | 5 | 1 | 2 |
-| `applyCoreSegmentMap` | assets/app.js:11108 | 25 | 1 | 5 |
-| `assignSegment` | assets/app.js:11058 | 27 | 1 | 8 |
-| `availableAnnouncementText` | assets/app.js:10591 | 45 | 3 | 2 |
-| `availableDiscordState` | assets/app.js:10709 | 10 | 7 | 1 |
-| `availablePosted` | assets/app.js:10719 | 1 | **ninguém** | 2 |
-| `beginEditSegment` | assets/app.js:10997 | 9 | 1 | 4 |
-| `buildCraftRequestText` | assets/app.js:10372 | 1 | 1 | 0 |
-| `closeCraftRequestModal` | assets/app.js:10449 | 1 | 1 | 1 |
-| `closeOrganizationProfilePage` | assets/app.js:10204 | 1 | 1 | 1 |
-| `craftRecipeKey` | assets/app.js:10354 | 1 | 1 | 0 |
-| `createSegment` | assets/app.js:11006 | 52 | 1 | 12 |
-| `dashboardGo` | assets/app.js:10279 | 1 | 1 | 1 |
-| `deleteSegment` | assets/app.js:11085 | 23 | 1 | 12 |
-| `downloadFreeFacCsv` | assets/app.js:10839 | 30 | 1 | 4 |
-| `farmItemKey` | assets/app.js:10355 | 1 | 1 | 0 |
-| `freeFaccoesForReport` | assets/app.js:10820 | 6 | 3 | 2 |
-| `freeFacReportText` | assets/app.js:10826 | 13 | 2 | 4 |
-| `ingredientDisplay` | assets/app.js:10356 | 1 | 1 | 0 |
-| `isLaundryMachineRecipe` | assets/app.js:10366 | 1 | 1 | 0 |
-| `isoDay` | assets/app.js:10215 | 1 | 2 | 1 |
-| `openCraftRequestModal` | assets/app.js:10435 | 14 | 1 | 2 |
-| `openMetricForGroup` | assets/app.js:10280 | 13 | 1 | 8 |
-| `persistCurrentTechProfile` | assets/app.js:10466 | 1 | 1 | 0 |
-| `refreshSegmentAssignEntities` | assets/app.js:10960 | 12 | 2 | 5 |
-| `renderAvailableFaccoes` | assets/app.js:10720 | 57 | 5 | 12 |
-| `renderAvailableSegmentCards` | assets/app.js:10923 | 10 | 1 | 3 |
-| `renderCommandDashboard` | assets/app.js:10293 | 48 | 6 | 20 |
-| `renderOrgActivityButtons` | assets/app.js:10946 | 9 | 1 | 2 |
-| `renderSegmentAdmin` | assets/app.js:10972 | 14 | 4 | 10 |
-| `renderVisualSegmentFilter` | assets/app.js:10896 | 1 | 2 | 0 |
-| `same` | assets/app.js:10232 | 3 | 2 | 2 |
-| `saveAvailableContingent` | assets/app.js:10672 | 37 | 1 | 5 |
-| `saveAvailableImageLink` | assets/app.js:10637 | 35 | 1 | 4 |
-| `saveSegmentRegistry` | assets/app.js:10986 | 9 | 2 | 8 |
-| `segmentCardMarkup` | assets/app.js:10892 | 4 | 1 | 4 |
-| `segmentUsage` | assets/app.js:10957 | 3 | 2 | 6 |
-| `segmentVisual` | assets/app.js:10884 | 3 | 1 | 2 |
-| `setAvailableDiscordState` | assets/app.js:10777 | 43 | 2 | 6 |
-| `showFreeFacReport` | assets/app.js:10869 | 11 | 1 | 8 |
-| `showOrganizationProfilePage` | assets/app.js:10186 | 1 | 1 | 0 |
-| `startOfWeekMonday` | assets/app.js:10207 | 8 | 2 | 0 |
-| `vacantMetricAnomalies` | assets/app.js:10262 | 17 | 1 | 6 |
-| `weeklyContingentAlerts` | assets/app.js:10216 | 46 | 1 | 9 |
+| `activityButtons` | assets/app.js:10954 | 13 | 2 | 2 |
+| `allSegmentNames` | assets/app.js:10908 | 5 | 1 | 2 |
+| `applyCoreSegmentMap` | assets/app.js:11129 | 25 | 1 | 5 |
+| `assignSegment` | assets/app.js:11079 | 27 | 1 | 8 |
+| `availableAnnouncementText` | assets/app.js:10612 | 45 | 3 | 2 |
+| `availableDiscordState` | assets/app.js:10730 | 10 | 7 | 1 |
+| `availablePosted` | assets/app.js:10740 | 1 | **ninguém** | 2 |
+| `beginEditSegment` | assets/app.js:11018 | 9 | 1 | 4 |
+| `buildCraftRequestText` | assets/app.js:10393 | 1 | 1 | 0 |
+| `closeCraftRequestModal` | assets/app.js:10470 | 1 | 1 | 1 |
+| `closeOrganizationProfilePage` | assets/app.js:10225 | 1 | 1 | 1 |
+| `craftRecipeKey` | assets/app.js:10375 | 1 | 1 | 0 |
+| `createSegment` | assets/app.js:11027 | 52 | 1 | 12 |
+| `dashboardGo` | assets/app.js:10300 | 1 | 1 | 1 |
+| `deleteSegment` | assets/app.js:11106 | 23 | 1 | 12 |
+| `downloadFreeFacCsv` | assets/app.js:10860 | 30 | 1 | 4 |
+| `farmItemKey` | assets/app.js:10376 | 1 | 1 | 0 |
+| `freeFaccoesForReport` | assets/app.js:10841 | 6 | 3 | 2 |
+| `freeFacReportText` | assets/app.js:10847 | 13 | 2 | 4 |
+| `ingredientDisplay` | assets/app.js:10377 | 1 | 1 | 0 |
+| `isLaundryMachineRecipe` | assets/app.js:10387 | 1 | 1 | 0 |
+| `isoDay` | assets/app.js:10236 | 1 | 4 | 1 |
+| `openCraftRequestModal` | assets/app.js:10456 | 14 | 1 | 2 |
+| `openMetricForGroup` | assets/app.js:10301 | 13 | 1 | 8 |
+| `persistCurrentTechProfile` | assets/app.js:10487 | 1 | 1 | 0 |
+| `refreshSegmentAssignEntities` | assets/app.js:10981 | 12 | 2 | 5 |
+| `renderAvailableFaccoes` | assets/app.js:10741 | 57 | 5 | 12 |
+| `renderAvailableSegmentCards` | assets/app.js:10944 | 10 | 1 | 3 |
+| `renderCommandDashboard` | assets/app.js:10314 | 48 | 6 | 20 |
+| `renderOrgActivityButtons` | assets/app.js:10967 | 9 | 1 | 2 |
+| `renderSegmentAdmin` | assets/app.js:10993 | 14 | 4 | 10 |
+| `renderVisualSegmentFilter` | assets/app.js:10917 | 1 | 2 | 0 |
+| `same` | assets/app.js:10253 | 3 | 2 | 2 |
+| `saveAvailableContingent` | assets/app.js:10693 | 37 | 1 | 5 |
+| `saveAvailableImageLink` | assets/app.js:10658 | 35 | 1 | 4 |
+| `saveSegmentRegistry` | assets/app.js:11007 | 9 | 2 | 8 |
+| `segmentCardMarkup` | assets/app.js:10913 | 4 | 1 | 4 |
+| `segmentUsage` | assets/app.js:10978 | 3 | 2 | 6 |
+| `segmentVisual` | assets/app.js:10905 | 3 | 1 | 2 |
+| `setAvailableDiscordState` | assets/app.js:10798 | 43 | 2 | 6 |
+| `showFreeFacReport` | assets/app.js:10890 | 11 | 1 | 8 |
+| `showOrganizationProfilePage` | assets/app.js:10207 | 1 | 1 | 0 |
+| `startOfWeekMonday` | assets/app.js:10228 | 8 | 2 | 0 |
+| `vacantMetricAnomalies` | assets/app.js:10283 | 17 | 1 | 6 |
+| `weeklyContingentAlerts` | assets/app.js:10237 | 46 | 1 | 9 |
 
 ## CENTRAL DE SOLICITAÇÕES · PADRÕES OFICIAIS HIGH
 
@@ -285,57 +285,57 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `base64url` | assets/app.js:11330 | 1 | 1 | 1 |
-| `chatAttachmentHtml` | assets/app.js:11518 | 4 | 1 | 2 |
-| `chatConversationId` | assets/app.js:11526 | 2 | 5 | 0 |
-| `chatConversationQuery` | assets/app.js:11580 | 12 | 1 | 1 |
-| `chatMeetingHtml` | assets/app.js:11523 | 3 | 1 | 2 |
-| `chatParticipants` | assets/app.js:11532 | 2 | 2 | 0 |
-| `chatStickerHtml` | assets/app.js:11522 | 1 | 1 | 2 |
-| `chatTime` | assets/app.js:11511 | 2 | 1 | 0 |
-| `deleteChatMessage` | assets/app.js:11644 | 7 | 1 | 3 |
-| `hmInitials` | assets/app.js:11513 | 2 | 2 | 0 |
-| `hmLastMessageFor` | assets/app.js:11545 | 2 | 1 | 1 |
-| `hmUser` | assets/app.js:11515 | 1 | 4 | 0 |
-| `hmUserName` | assets/app.js:11516 | 1 | 6 | 0 |
-| `hmUserRole` | assets/app.js:11517 | 1 | 3 | 0 |
-| `loadSpotifyConfig` | assets/app.js:11287 | 5 | 2 | 3 |
-| `populateChatRecipients` | assets/app.js:11534 | 8 | 1 | 5 |
-| `prepareChatAttachment` | assets/app.js:11665 | 8 | 1 | 2 |
-| `privateChatItems` | assets/app.js:11542 | 3 | 1 | 1 |
-| `renderChatAttachmentPreview` | assets/app.js:11657 | 8 | 2 | 2 |
-| `renderChatMessages` | assets/app.js:11563 | 15 | 2 | 15 |
-| `renderHmContacts` | assets/app.js:11547 | 8 | 4 | 8 |
-| `renderSpotify` | assets/app.js:11292 | 9 | 3 | 5 |
-| `renderSpotifyAuthUI` | assets/app.js:11473 | 8 | 3 | 3 |
-| `saveSpotifyClient` | assets/app.js:11319 | 11 | 1 | 5 |
-| `saveSpotifyConfig` | assets/app.js:11301 | 18 | 1 | 7 |
-| `selectChatRecipient` | assets/app.js:11555 | 8 | 2 | 4 |
-| `sendChatMessage` | assets/app.js:11621 | 1 | 2 | 0 |
-| `spotifyApi` | assets/app.js:11399 | 1 | 7 | 0 |
-| `spotifyCreatePlayer` | assets/app.js:11457 | 16 | 1 | 7 |
-| `spotifyEmbedUrl` | assets/app.js:11282 | 4 | 2 | 2 |
-| `spotifyHandleCallback` | assets/app.js:11352 | 23 | 1 | 2 |
-| `spotifyLoadPlaylists` | assets/app.js:11495 | 8 | 2 | 4 |
-| `spotifyLoadProfile` | assets/app.js:11408 | 5 | 1 | 2 |
-| `spotifyLoadSDK` | assets/app.js:11413 | 7 | 1 | 1 |
-| `spotifyLogin` | assets/app.js:11331 | 21 | 2 | 2 |
-| `spotifyPlayContext` | assets/app.js:11503 | 3 | 1 | 1 |
-| `spotifyPlayUri` | assets/app.js:11490 | 3 | 1 | 1 |
-| `spotifyQueueUri` | assets/app.js:11493 | 2 | 1 | 1 |
-| `spotifyRedirectUri` | assets/app.js:11286 | 1 | 4 | 1 |
-| `spotifyRefreshToken` | assets/app.js:11375 | 15 | 1 | 0 |
-| `spotifyRenderState` | assets/app.js:11426 | 22 | 1 | 3 |
-| `spotifyRestoreSession` | assets/app.js:11390 | 9 | 2 | 4 |
-| `spotifySearch` | assets/app.js:11481 | 9 | 1 | 5 |
-| `spotifySetTab` | assets/app.js:11506 | 4 | 1 | 4 |
-| `spotifyStartProgress` | assets/app.js:11454 | 3 | 1 | 1 |
-| `spotifyTime` | assets/app.js:11424 | 2 | 1 | 1 |
-| `spotifyUpdateProgress` | assets/app.js:11448 | 6 | 3 | 3 |
-| `startChat` | assets/app.js:11618 | 3 | 2 | 3 |
-| `stopChat` | assets/app.js:11592 | 1 | 2 | 0 |
-| `subscribeChatConversation` | assets/app.js:11593 | 25 | 2 | 7 |
-| `toggleFloatingChat` | assets/app.js:11651 | 6 | 1 | 3 |
+| `base64url` | assets/app.js:11351 | 1 | 1 | 1 |
+| `chatAttachmentHtml` | assets/app.js:11539 | 4 | 1 | 2 |
+| `chatConversationId` | assets/app.js:11547 | 2 | 5 | 0 |
+| `chatConversationQuery` | assets/app.js:11601 | 12 | 1 | 1 |
+| `chatMeetingHtml` | assets/app.js:11544 | 3 | 1 | 2 |
+| `chatParticipants` | assets/app.js:11553 | 2 | 2 | 0 |
+| `chatStickerHtml` | assets/app.js:11543 | 1 | 1 | 2 |
+| `chatTime` | assets/app.js:11532 | 2 | 1 | 0 |
+| `deleteChatMessage` | assets/app.js:11665 | 7 | 1 | 3 |
+| `hmInitials` | assets/app.js:11534 | 2 | 2 | 0 |
+| `hmLastMessageFor` | assets/app.js:11566 | 2 | 1 | 1 |
+| `hmUser` | assets/app.js:11536 | 1 | 4 | 0 |
+| `hmUserName` | assets/app.js:11537 | 1 | 6 | 0 |
+| `hmUserRole` | assets/app.js:11538 | 1 | 3 | 0 |
+| `loadSpotifyConfig` | assets/app.js:11308 | 5 | 2 | 3 |
+| `populateChatRecipients` | assets/app.js:11555 | 8 | 1 | 5 |
+| `prepareChatAttachment` | assets/app.js:11686 | 8 | 1 | 2 |
+| `privateChatItems` | assets/app.js:11563 | 3 | 1 | 1 |
+| `renderChatAttachmentPreview` | assets/app.js:11678 | 8 | 2 | 2 |
+| `renderChatMessages` | assets/app.js:11584 | 15 | 2 | 15 |
+| `renderHmContacts` | assets/app.js:11568 | 8 | 4 | 8 |
+| `renderSpotify` | assets/app.js:11313 | 9 | 3 | 5 |
+| `renderSpotifyAuthUI` | assets/app.js:11494 | 8 | 3 | 3 |
+| `saveSpotifyClient` | assets/app.js:11340 | 11 | 1 | 5 |
+| `saveSpotifyConfig` | assets/app.js:11322 | 18 | 1 | 7 |
+| `selectChatRecipient` | assets/app.js:11576 | 8 | 2 | 4 |
+| `sendChatMessage` | assets/app.js:11642 | 1 | 2 | 0 |
+| `spotifyApi` | assets/app.js:11420 | 1 | 7 | 0 |
+| `spotifyCreatePlayer` | assets/app.js:11478 | 16 | 1 | 7 |
+| `spotifyEmbedUrl` | assets/app.js:11303 | 4 | 2 | 2 |
+| `spotifyHandleCallback` | assets/app.js:11373 | 23 | 1 | 2 |
+| `spotifyLoadPlaylists` | assets/app.js:11516 | 8 | 2 | 4 |
+| `spotifyLoadProfile` | assets/app.js:11429 | 5 | 1 | 2 |
+| `spotifyLoadSDK` | assets/app.js:11434 | 7 | 1 | 1 |
+| `spotifyLogin` | assets/app.js:11352 | 21 | 2 | 2 |
+| `spotifyPlayContext` | assets/app.js:11524 | 3 | 1 | 1 |
+| `spotifyPlayUri` | assets/app.js:11511 | 3 | 1 | 1 |
+| `spotifyQueueUri` | assets/app.js:11514 | 2 | 1 | 1 |
+| `spotifyRedirectUri` | assets/app.js:11307 | 1 | 4 | 1 |
+| `spotifyRefreshToken` | assets/app.js:11396 | 15 | 1 | 0 |
+| `spotifyRenderState` | assets/app.js:11447 | 22 | 1 | 3 |
+| `spotifyRestoreSession` | assets/app.js:11411 | 9 | 2 | 4 |
+| `spotifySearch` | assets/app.js:11502 | 9 | 1 | 5 |
+| `spotifySetTab` | assets/app.js:11527 | 4 | 1 | 4 |
+| `spotifyStartProgress` | assets/app.js:11475 | 3 | 1 | 1 |
+| `spotifyTime` | assets/app.js:11445 | 2 | 1 | 1 |
+| `spotifyUpdateProgress` | assets/app.js:11469 | 6 | 3 | 3 |
+| `startChat` | assets/app.js:11639 | 3 | 2 | 3 |
+| `stopChat` | assets/app.js:11613 | 1 | 2 | 0 |
+| `subscribeChatConversation` | assets/app.js:11614 | 25 | 2 | 7 |
+| `toggleFloatingChat` | assets/app.js:11672 | 6 | 1 | 3 |
 
 ## Dashboard
 
@@ -351,47 +351,47 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `facSheetApplyConfirmed` | assets/app.js:10082 | 42 | 1 | 8 |
-| `facSheetAuthorize` | assets/app.js:9976 | 18 | 2 | 2 |
-| `facSheetCheckForChanges` | assets/app.js:10058 | 16 | 1 | 6 |
-| `facSheetClean` | assets/app.js:9939 | 1 | 2 | 0 |
-| `facSheetComparable` | assets/app.js:9940 | 3 | 1 | 2 |
-| `facSheetDiffForRecord` | assets/app.js:10039 | 19 | 1 | 3 |
-| `facSheetFetch` | assets/app.js:9994 | 3 | 2 | 0 |
-| `facSheetNorm` | assets/app.js:9936 | 1 | 3 | 0 |
-| `facSheetPatchFromRow` | assets/app.js:9955 | 12 | 1 | 2 |
-| `facSheetPushAll` | assets/app.js:10158 | 15 | 1 | 6 |
-| `facSheetReadAll` | assets/app.js:10021 | 1 | 2 | 0 |
-| `facSheetRenderStatus` | assets/app.js:9967 | 7 | 4 | 2 |
-| `facSheetResolveTitle` | assets/app.js:10009 | 12 | 2 | 2 |
-| `facSheetRowFromGroup` | assets/app.js:9943 | 1 | 1 | 0 |
-| `facSheetSetLastCheck` | assets/app.js:9974 | 2 | 2 | 1 |
-| `facSheetStatus` | assets/app.js:9937 | 2 | 2 | 0 |
-| `renderFacSheetDiffModal` | assets/app.js:10074 | 8 | 1 | 3 |
-| `syncGroupsToOfficialSheet` | assets/app.js:10124 | 2 | 3 | 0 |
+| `facSheetApplyConfirmed` | assets/app.js:10103 | 42 | 1 | 8 |
+| `facSheetAuthorize` | assets/app.js:9997 | 18 | 2 | 2 |
+| `facSheetCheckForChanges` | assets/app.js:10079 | 16 | 1 | 6 |
+| `facSheetClean` | assets/app.js:9960 | 1 | 2 | 0 |
+| `facSheetComparable` | assets/app.js:9961 | 3 | 1 | 2 |
+| `facSheetDiffForRecord` | assets/app.js:10060 | 19 | 1 | 3 |
+| `facSheetFetch` | assets/app.js:10015 | 3 | 2 | 0 |
+| `facSheetNorm` | assets/app.js:9957 | 1 | 3 | 0 |
+| `facSheetPatchFromRow` | assets/app.js:9976 | 12 | 1 | 2 |
+| `facSheetPushAll` | assets/app.js:10179 | 15 | 1 | 6 |
+| `facSheetReadAll` | assets/app.js:10042 | 1 | 2 | 0 |
+| `facSheetRenderStatus` | assets/app.js:9988 | 7 | 4 | 2 |
+| `facSheetResolveTitle` | assets/app.js:10030 | 12 | 2 | 2 |
+| `facSheetRowFromGroup` | assets/app.js:9964 | 1 | 1 | 0 |
+| `facSheetSetLastCheck` | assets/app.js:9995 | 2 | 2 | 1 |
+| `facSheetStatus` | assets/app.js:9958 | 2 | 2 | 0 |
+| `renderFacSheetDiffModal` | assets/app.js:10095 | 8 | 1 | 3 |
+| `syncGroupsToOfficialSheet` | assets/app.js:10145 | 2 | 3 | 0 |
 
 ## ECONOMIA DE COTA DAS METRICAS
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `applyMetricSnapshot` | assets/app.js:5409 | 1 | 3 | 0 |
-| `ensureMetricQuotaPanel` | assets/app.js:5441 | 15 | 1 | 0 |
-| `enterQuotaMode` | assets/app.js:5299 | 21 | 4 | 5 |
-| `isQuotaError` | assets/app.js:5292 | 7 | 4 | 1 |
-| `metricReadCount` | assets/app.js:5438 | 3 | 2 | 0 |
-| `metricRealtimeAtivo` | assets/app.js:5520 | 3 | 2 | 0 |
-| `metricRowsPendentes` | assets/app.js:5322 | 25 | 1 | 3 |
-| `persistMetricRows` | assets/app.js:5348 | 1 | 1 | 0 |
-| `proximo` | assets/app.js:5468 | 8 | 1 | 1 |
-| `renderMetricQuotaPanel` | assets/app.js:5456 | 59 | 6 | 8 |
-| `setMetricRealtime` | assets/app.js:5523 | 8 | 1 | 2 |
-| `startMetricRealtime` | assets/app.js:5531 | 18 | 2 | 8 |
+| `applyMetricSnapshot` | assets/app.js:5430 | 1 | 3 | 0 |
+| `ensureMetricQuotaPanel` | assets/app.js:5462 | 15 | 1 | 0 |
+| `enterQuotaMode` | assets/app.js:5320 | 21 | 4 | 5 |
+| `isQuotaError` | assets/app.js:5313 | 7 | 4 | 1 |
+| `metricReadCount` | assets/app.js:5459 | 3 | 2 | 0 |
+| `metricRealtimeAtivo` | assets/app.js:5541 | 3 | 2 | 0 |
+| `metricRowsPendentes` | assets/app.js:5343 | 25 | 1 | 3 |
+| `persistMetricRows` | assets/app.js:5369 | 1 | 1 | 0 |
+| `proximo` | assets/app.js:5489 | 8 | 1 | 1 |
+| `renderMetricQuotaPanel` | assets/app.js:5477 | 59 | 6 | 8 |
+| `setMetricRealtime` | assets/app.js:5544 | 8 | 1 | 2 |
+| `startMetricRealtime` | assets/app.js:5552 | 18 | 2 | 8 |
 
 ## Formatação e utilidades
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `$` | assets/app.js:50 | 1 | 370 | 0 |
+| `$` | assets/app.js:50 | 1 | 368 | 0 |
 | `copyText` | assets/mission-planner.js:1728 | 1 | 12 | 0 |
 | `esc` | assets/modules/formatadores.js:12 | 5 | 100 | 0 |
 | `fmtBackupData` | assets/mission-planner.js:1934 | 3 | 1 | 1 |
@@ -403,7 +403,7 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 | `normalizeMetricSlotKey` | assets/modules/metricas-parser.js:48 | 11 | 4 | 1 |
 | `normalizePoint` | assets/mission-planner.js:668 | 9 | 5 | 2 |
 | `normalizeText` | assets/mission-planner.js:739 | 1 | 4 | 0 |
-| `num` | assets/mission-planner.js:532 | 1 | 7 | 0 |
+| `num` | assets/mission-planner.js:532 | 1 | 8 | 0 |
 | `parseBulk` | assets/mission-planner.js:1519 | 4 | 1 | 3 |
 | `parseCds` | assets/mission-planner.js:619 | 30 | 4 | 2 |
 | `parseCsvRows` | assets/modules/metricas-parser.js:205 | 19 | 2 | 1 |
@@ -453,7 +453,7 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 | `renderFacSegmentChips` | assets/app.js:3987 | 10 | 1 | 6 |
 | `renderOrganizations` | assets/app.js:4142 | 34 | 6 | 11 |
 | `renderOrgSegmentChips` | assets/app.js:4119 | 23 | 2 | 6 |
-| `saveNewDelivery` | assets/app.js:4465 | 69 | 1 | 13 |
+| `saveNewDelivery` | assets/app.js:4465 | 90 | 1 | 14 |
 | `selectedDeliveryBenefits` | assets/app.js:4320 | 1 | 3 | 0 |
 | `syncOrgOptions` | assets/app.js:4100 | 3 | 1 | 3 |
 | `updateNewDeliveryPreview` | assets/app.js:4456 | 4 | 3 | 4 |
@@ -463,35 +463,35 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `acceptIncomingCall` | assets/app.js:11780 | 18 | 1 | 13 |
-| `bindRemoteStream` | assets/app.js:11713 | 4 | 1 | 1 |
-| `callDocRef` | assets/app.js:11678 | 1 | 5 | 0 |
-| `callUiStatus` | assets/app.js:11682 | 2 | 5 | 1 |
-| `closeTeamMeeting` | assets/app.js:11807 | 20 | 5 | 4 |
-| `createPeer` | assets/app.js:11717 | 22 | 2 | 7 |
-| `prepareLocalMedia` | assets/app.js:11699 | 14 | 2 | 3 |
-| `rejectIncomingCall` | assets/app.js:11798 | 3 | 1 | 3 |
-| `rtcCandidate` | assets/app.js:11681 | 1 | 1 | 0 |
-| `rtcDesc` | assets/app.js:11679 | 2 | 2 | 0 |
-| `setCallButtons` | assets/app.js:11684 | 7 | 4 | 1 |
-| `showCallOverlay` | assets/app.js:11691 | 8 | 2 | 2 |
-| `startCallInbox` | assets/app.js:11801 | 6 | 1 | 7 |
-| `startTeamMeeting` | assets/app.js:11742 | 38 | 1 | 16 |
-| `toggleCallCam` | assets/app.js:11830 | 3 | 1 | 1 |
-| `toggleCallMic` | assets/app.js:11827 | 3 | 1 | 1 |
-| `toggleHmPicker` | assets/app.js:11833 | 38 | 2 | 3 |
-| `watchActiveCall` | assets/app.js:11739 | 3 | 2 | 6 |
+| `acceptIncomingCall` | assets/app.js:11801 | 18 | 1 | 13 |
+| `bindRemoteStream` | assets/app.js:11734 | 4 | 1 | 1 |
+| `callDocRef` | assets/app.js:11699 | 1 | 5 | 0 |
+| `callUiStatus` | assets/app.js:11703 | 2 | 5 | 1 |
+| `closeTeamMeeting` | assets/app.js:11828 | 20 | 5 | 4 |
+| `createPeer` | assets/app.js:11738 | 22 | 2 | 7 |
+| `prepareLocalMedia` | assets/app.js:11720 | 14 | 2 | 3 |
+| `rejectIncomingCall` | assets/app.js:11819 | 3 | 1 | 3 |
+| `rtcCandidate` | assets/app.js:11702 | 1 | 1 | 0 |
+| `rtcDesc` | assets/app.js:11700 | 2 | 2 | 0 |
+| `setCallButtons` | assets/app.js:11705 | 7 | 4 | 1 |
+| `showCallOverlay` | assets/app.js:11712 | 8 | 2 | 2 |
+| `startCallInbox` | assets/app.js:11822 | 6 | 1 | 7 |
+| `startTeamMeeting` | assets/app.js:11763 | 38 | 1 | 16 |
+| `toggleCallCam` | assets/app.js:11851 | 3 | 1 | 1 |
+| `toggleCallMic` | assets/app.js:11848 | 3 | 1 | 1 |
+| `toggleHmPicker` | assets/app.js:11854 | 38 | 2 | 3 |
+| `watchActiveCall` | assets/app.js:11760 | 3 | 2 | 6 |
 
 ## HISTORICO PAGINADO
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `buscarHistoricoCompleto` | assets/app.js:4734 | 12 | 1 | 4 |
-| `loadHistory` | assets/app.js:4663 | 1 | 3 | 0 |
-| `openRecollectEvidence` | assets/app.js:4712 | 14 | 1 | 4 |
-| `renderGroupProfileMemory` | assets/app.js:4810 | 14 | 1 | 6 |
-| `renderHistory` | assets/app.js:4776 | 34 | 2 | 9 |
-| `renderHistoryFooter` | assets/app.js:4746 | 30 | 1 | 4 |
+| `buscarHistoricoCompleto` | assets/app.js:4755 | 12 | 1 | 4 |
+| `loadHistory` | assets/app.js:4684 | 1 | 3 | 0 |
+| `openRecollectEvidence` | assets/app.js:4733 | 14 | 1 | 4 |
+| `renderGroupProfileMemory` | assets/app.js:4831 | 14 | 1 | 6 |
+| `renderHistory` | assets/app.js:4797 | 34 | 2 | 9 |
+| `renderHistoryFooter` | assets/app.js:4767 | 30 | 1 | 4 |
 
 ## LEITURA DO CADASTRO COM DIAGNOSTICO
 
@@ -508,150 +508,149 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `agruparPorMes` | assets/app.js:5599 | 15 | 1 | 1 |
-| `aplicarLinhasMetricas` | assets/app.js:5736 | 16 | 1 | 4 |
-| `assinaturaMes` | assets/app.js:5614 | 10 | 1 | 1 |
-| `buildMetricReportHtml` | assets/app.js:5952 | 13 | 2 | 6 |
-| `compactarLinhas` | assets/app.js:5587 | 6 | 1 | 0 |
-| `downloadMetricCsv` | assets/app.js:5982 | 24 | 1 | 6 |
-| `expandirLinhas` | assets/app.js:5593 | 6 | 1 | 0 |
-| `lerEspelhoMensal` | assets/app.js:5704 | 31 | 1 | 5 |
-| `loadMetrics` | assets/app.js:5753 | 67 | 3 | 17 |
-| `metricAggregateDays` | assets/app.js:6121 | 10 | 2 | 4 |
-| `metricCalendarRange31` | assets/app.js:6022 | 53 | 1 | 4 |
-| `metricCurrentScope` | assets/app.js:5886 | 1 | 4 | 1 |
-| `metricDailyBars` | assets/app.js:6075 | 14 | 1 | 4 |
-| `metricDailyCard` | assets/app.js:6140 | 11 | 1 | 2 |
-| `metricDailyReportText` | assets/app.js:6195 | 20 | 1 | 7 |
-| `metricDailySummary` | assets/app.js:6089 | 12 | 1 | 0 |
-| `metricDateLabel` | assets/app.js:5869 | 2 | 3 | 1 |
-| `metricDayAverage` | assets/app.js:5871 | 2 | 4 | 1 |
-| `metricFmtDay` | assets/app.js:6139 | 1 | 2 | 1 |
-| `metricIdentity` | assets/app.js:5820 | 10 | 6 | 2 |
-| `metricMainSortValue` | assets/app.js:6243 | 9 | 1 | 1 |
-| `metricMesDe` | assets/app.js:5579 | 6 | 1 | 1 |
-| `metricModeValue` | assets/app.js:5876 | 3 | 1 | 0 |
-| `metricPeriodRange` | assets/app.js:5873 | 3 | 2 | 2 |
-| `metricReportData` | assets/app.js:5935 | 17 | 1 | 5 |
-| `metricScopeTitle` | assets/app.js:6114 | 7 | 2 | 3 |
-| `metricSegmentSummary` | assets/app.js:6101 | 12 | 1 | 3 |
-| `metricSelectedGroup` | assets/app.js:5888 | 1 | 1 | 2 |
-| `metricSnapshot` | assets/app.js:5830 | 1 | 2 | 0 |
-| `metricSortLabel` | assets/app.js:6237 | 6 | 1 | 1 |
-| `metricSortRows` | assets/app.js:5879 | 7 | 2 | 3 |
-| `metricSummaryRows` | assets/app.js:5841 | 28 | 8 | 9 |
-| `metricTimeline` | assets/app.js:6009 | 13 | 2 | 4 |
-| `metricTimeMinutes` | assets/app.js:6007 | 2 | 1 | 0 |
-| `metricWeekBounds` | assets/app.js:6131 | 8 | 2 | 0 |
-| `metricWeekSvg` | assets/app.js:6151 | 14 | 1 | 3 |
-| `name` | assets/app.js:5881 | 2 | 35 | 2 |
-| `printMetricDailyReport` | assets/app.js:6215 | 5 | 1 | 3 |
-| `printMetricReport` | assets/app.js:5973 | 9 | 1 | 5 |
-| `renderMetricExecutiveVisuals` | assets/app.js:6221 | 16 | 1 | 8 |
-| `renderMetricFactionDetail` | assets/app.js:5913 | 22 | 4 | 9 |
-| `renderMetricIntelligence` | assets/app.js:6165 | 30 | 1 | 11 |
-| `renderMetricQuickRanking` | assets/app.js:6252 | 9 | 1 | 4 |
-| `renderMetricReport` | assets/app.js:5965 | 8 | 3 | 3 |
-| `salvarEspelhoMensal` | assets/app.js:5627 | 75 | 2 | 11 |
-| `syncMetricSelectors` | assets/app.js:5889 | 24 | 3 | 3 |
-| `y` | assets/app.js:6161 | 1 | 28 | 0 |
+| `agruparPorMes` | assets/app.js:5620 | 15 | 1 | 1 |
+| `aplicarLinhasMetricas` | assets/app.js:5757 | 16 | 1 | 4 |
+| `assinaturaMes` | assets/app.js:5635 | 10 | 1 | 1 |
+| `buildMetricReportHtml` | assets/app.js:5973 | 13 | 2 | 6 |
+| `compactarLinhas` | assets/app.js:5608 | 6 | 1 | 0 |
+| `downloadMetricCsv` | assets/app.js:6003 | 24 | 1 | 6 |
+| `expandirLinhas` | assets/app.js:5614 | 6 | 1 | 0 |
+| `lerEspelhoMensal` | assets/app.js:5725 | 31 | 1 | 5 |
+| `loadMetrics` | assets/app.js:5774 | 67 | 3 | 17 |
+| `metricAggregateDays` | assets/app.js:6142 | 10 | 2 | 4 |
+| `metricCalendarRange31` | assets/app.js:6043 | 53 | 1 | 4 |
+| `metricCurrentScope` | assets/app.js:5907 | 1 | 4 | 1 |
+| `metricDailyBars` | assets/app.js:6096 | 14 | 1 | 4 |
+| `metricDailyCard` | assets/app.js:6161 | 11 | 1 | 2 |
+| `metricDailyReportText` | assets/app.js:6216 | 20 | 1 | 7 |
+| `metricDailySummary` | assets/app.js:6110 | 12 | 1 | 0 |
+| `metricDateLabel` | assets/app.js:5890 | 2 | 3 | 1 |
+| `metricDayAverage` | assets/app.js:5892 | 2 | 4 | 1 |
+| `metricFmtDay` | assets/app.js:6160 | 1 | 2 | 1 |
+| `metricIdentity` | assets/app.js:5841 | 10 | 6 | 2 |
+| `metricMainSortValue` | assets/app.js:6264 | 9 | 1 | 1 |
+| `metricMesDe` | assets/app.js:5600 | 6 | 1 | 1 |
+| `metricModeValue` | assets/app.js:5897 | 3 | 1 | 0 |
+| `metricPeriodRange` | assets/app.js:5894 | 3 | 2 | 2 |
+| `metricReportData` | assets/app.js:5956 | 17 | 1 | 5 |
+| `metricScopeTitle` | assets/app.js:6135 | 7 | 2 | 3 |
+| `metricSegmentSummary` | assets/app.js:6122 | 12 | 1 | 3 |
+| `metricSelectedGroup` | assets/app.js:5909 | 1 | 1 | 2 |
+| `metricSnapshot` | assets/app.js:5851 | 1 | 2 | 0 |
+| `metricSortLabel` | assets/app.js:6258 | 6 | 1 | 1 |
+| `metricSortRows` | assets/app.js:5900 | 7 | 2 | 3 |
+| `metricSummaryRows` | assets/app.js:5862 | 28 | 8 | 9 |
+| `metricTimeline` | assets/app.js:6030 | 13 | 2 | 4 |
+| `metricTimeMinutes` | assets/app.js:6028 | 2 | 1 | 0 |
+| `metricWeekBounds` | assets/app.js:6152 | 8 | 2 | 0 |
+| `metricWeekSvg` | assets/app.js:6172 | 14 | 1 | 3 |
+| `name` | assets/app.js:5902 | 2 | 35 | 2 |
+| `printMetricDailyReport` | assets/app.js:6236 | 5 | 1 | 3 |
+| `printMetricReport` | assets/app.js:5994 | 9 | 1 | 5 |
+| `renderMetricExecutiveVisuals` | assets/app.js:6242 | 16 | 1 | 8 |
+| `renderMetricFactionDetail` | assets/app.js:5934 | 22 | 4 | 9 |
+| `renderMetricIntelligence` | assets/app.js:6186 | 30 | 1 | 11 |
+| `renderMetricQuickRanking` | assets/app.js:6273 | 9 | 1 | 4 |
+| `renderMetricReport` | assets/app.js:5986 | 8 | 3 | 3 |
+| `salvarEspelhoMensal` | assets/app.js:5648 | 75 | 2 | 11 |
+| `syncMetricSelectors` | assets/app.js:5910 | 24 | 3 | 3 |
+| `y` | assets/app.js:6182 | 1 | 28 | 0 |
 
 ## ORGANIZAÇÕES UNIFICADAS + ROTA PADRÃO IMPLÍCITA
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `addPoint` | assets/app.js:12934 | 14 | 1 | 6 |
-| `c` | assets/app.js:13661 | 1 | 34 | 0 |
-| `fmt` | assets/app.js:12668 | 1 | 3 | 2 |
-| `grConfirmRouteRemovalV836` | assets/app.js:12298 | 41 | 1 | 10 |
-| `gsAdd` | assets/app.js:12454 | 6 | 1 | 4 |
-| `gsCardCoord` | assets/app.js:12793 | 1 | 1 | 2 |
-| `gsCleanRow` | assets/app.js:12766 | 4 | 1 | 0 |
-| `gsCoord` | assets/app.js:12386 | 1 | 7 | 1 |
-| `gsEnsureMap` | assets/app.js:12402 | 19 | 2 | 2 |
-| `gsIcon` | assets/app.js:12387 | 15 | 1 | 1 |
-| `gsImportArmas01` | assets/app.js:12477 | 65 | 2 | 2 |
-| `gsLegacyCatalog` | assets/app.js:12589 | 1 | 1 | 0 |
-| `gsMergeLegacy` | assets/app.js:12635 | 16 | 2 | 4 |
-| `gsMigrateCurrent` | assets/app.js:12651 | 7 | 1 | 7 |
-| `gsModalHtml` | assets/app.js:12805 | 1 | 1 | 0 |
-| `gsNorm` | assets/app.js:12588 | 1 | 5 | 0 |
-| `gsOpenEditor` | assets/app.js:12807 | 43 | 2 | 10 |
-| `gsPersist` | assets/app.js:12770 | 19 | 2 | 7 |
-| `gsRender` | assets/app.js:12438 | 16 | 9 | 11 |
-| `gsRenderKpis` | assets/app.js:12794 | 5 | 1 | 3 |
-| `gsRenderMap` | assets/app.js:12421 | 17 | 4 | 11 |
-| `gsRequestText` | assets/app.js:12665 | 7 | 2 | 5 |
-| `gsRows` | assets/app.js:12383 | 3 | 14 | 2 |
-| `gsSave` | assets/app.js:12460 | 17 | 1 | 8 |
-| `gsSetView` | assets/app.js:12799 | 6 | 1 | 3 |
-| `gsStatusText` | assets/app.js:12789 | 4 | 2 | 0 |
-| `isOperational` | assets/app.js:12233 | 4 | 1 | 5 |
-| `isRegisteredAvailable` | assets/app.js:12229 | 3 | 2 | 2 |
-| `key` | assets/app.js:12640 | 4 | 19 | 1 |
-| `mgmtAction` | assets/app.js:13632 | 6 | 3 | 0 |
-| `mgmtBarSvg` | assets/app.js:13682 | 3 | 1 | 3 |
-| `mgmtBuild` | assets/app.js:13587 | 44 | 4 | 6 |
-| `mgmtDayKey` | assets/app.js:13554 | 1 | 2 | 1 |
-| `mgmtDownloadGeneralReport` | assets/app.js:13713 | 8 | 1 | 3 |
-| `mgmtEscHtml` | assets/app.js:13678 | 4 | 2 | 0 |
-| `mgmtFiltered` | assets/app.js:13643 | 6 | 1 | 2 |
-| `mgmtGeneralReportText` | assets/app.js:13662 | 16 | 3 | 9 |
-| `mgmtLabel` | assets/app.js:13631 | 1 | 3 | 0 |
-| `mgmtMedian` | assets/app.js:13583 | 4 | 1 | 0 |
-| `mgmtMessage` | assets/app.js:13638 | 5 | 1 | 3 |
-| `mgmtOpenMessage` | assets/app.js:13742 | 5 | 1 | 3 |
-| `mgmtOpenRichReport` | assets/app.js:13706 | 7 | 1 | 2 |
-| `mgmtPct` | assets/app.js:13580 | 1 | 3 | 0 |
-| `mgmtPeriodStats` | assets/app.js:13560 | 20 | 1 | 5 |
-| `mgmtPrintGeneralReport` | assets/app.js:13721 | 7 | 1 | 3 |
-| `mgmtRichReportHtml` | assets/app.js:13685 | 21 | 1 | 9 |
-| `mgmtRowsFor` | assets/app.js:13559 | 1 | 1 | 2 |
-| `mgmtSegmentReport` | assets/app.js:13658 | 4 | 1 | 2 |
-| `mgmtStart` | assets/app.js:13555 | 4 | 1 | 0 |
-| `mgmtSummaryText` | assets/app.js:13649 | 9 | 1 | 3 |
-| `mgmtTrendText` | assets/app.js:13581 | 2 | 5 | 1 |
-| `norm` | assets/app.js:13792 | 1 | 1 | 0 |
-| `orgV92ActionMarkup` | assets/app.js:13839 | 12 | 1 | 3 |
-| `orgV92Audit` | assets/app.js:13791 | 15 | 1 | 2 |
-| `orgV92Filtered` | assets/app.js:13806 | 15 | 1 | 4 |
-| `orgV92HasOccupant` | assets/app.js:13761 | 1 | **ninguém** | 0 |
-| `orgV92HasQG` | assets/app.js:13762 | 1 | 1 | 0 |
-| `orgV92OpenReport` | assets/app.js:13890 | 15 | 1 | 8 |
-| `orgV92ReportRows` | assets/app.js:13887 | 2 | 1 | 2 |
-| `orgV92ReportTitle` | assets/app.js:13889 | 1 | 1 | 0 |
-| `orgV92Rows` | assets/app.js:13788 | 3 | 4 | 3 |
-| `orgV92Segment` | assets/app.js:13772 | 1 | 1 | 0 |
-| `orgV92Status` | assets/app.js:13768 | 1 | 1 | 0 |
-| `orgV92StatusClass` | assets/app.js:13771 | 1 | 1 | 0 |
-| `orgV92StatusLabel` | assets/app.js:13770 | 1 | 2 | 0 |
-| `pullMissionsFromCloud` | assets/app.js:13921 | 19 | 1 | 1 |
-| `pushMissionsToCloud` | assets/app.js:13940 | 25 | 1 | 4 |
-| `renderFacActivityButtons` | assets/app.js:13821 | 12 | 1 | 2 |
-| `renderIllegalManagement` | assets/app.js:13728 | 14 | 3 | 9 |
-| `setMode` | assets/app.js:12817 | 4 | 1 | 2 |
-| `speakerRows` | assets/app.js:13080 | 1 | 1 | 0 |
-| `sync` | assets/app.js:12452 | 1 | 7 | 3 |
-| `syncType` | assets/app.js:13072 | 4 | 1 | 1 |
-| `v8361CardImageUrl` | assets/app.js:12549 | 8 | 1 | 1 |
-| `v836ApplyUnifiedUi` | assets/app.js:12283 | 10 | 1 | 1 |
-| `v836CardImage` | assets/app.js:12219 | 2 | 2 | 3 |
-| `v836Occupied` | assets/app.js:12211 | 1 | 3 | 1 |
-| `v836RenderOrganizations` | assets/app.js:12221 | 58 | 1 | 21 |
-| `v836RouteLabel` | assets/app.js:12215 | 4 | 1 | 3 |
-| `v836RoutePoints` | assets/app.js:12212 | 3 | 2 | 4 |
-| `v9010CommitStructure` | assets/app.js:13461 | 81 | 1 | 14 |
-| `v908EditorHtml` | assets/app.js:13333 | 1 | 1 | 0 |
-| `v909CommitStructure` | assets/app.js:13257 | 76 | 1 | 15 |
-| `v9CleanRows` | assets/app.js:12964 | 8 | 4 | 0 |
-| `v9Clone` | assets/app.js:12962 | 1 | 4 | 0 |
-| `v9Diff` | assets/app.js:12984 | 16 | 3 | 3 |
-| `v9EditorHtml` | assets/app.js:13046 | 1 | 1 | 0 |
-| `v9MarkDirty` | assets/app.js:12972 | 10 | 1 | 3 |
-| `v9QGCds` | assets/app.js:12982 | 2 | 1 | 2 |
-| `v9SaveAll` | assets/app.js:13194 | 24 | 1 | 12 |
-| `v9ShowRequest` | assets/app.js:13040 | 6 | 3 | 3 |
-| `v9StructureRequest` | assets/app.js:13000 | 40 | 3 | 3 |
+| `addPoint` | assets/app.js:12955 | 14 | 1 | 6 |
+| `c` | assets/app.js:13609 | 1 | 33 | 0 |
+| `fmt` | assets/app.js:12689 | 1 | 3 | 2 |
+| `grConfirmRouteRemovalV836` | assets/app.js:12319 | 41 | 1 | 10 |
+| `gsAdd` | assets/app.js:12475 | 6 | 1 | 4 |
+| `gsCardCoord` | assets/app.js:12814 | 1 | 1 | 2 |
+| `gsCleanRow` | assets/app.js:12787 | 4 | 1 | 0 |
+| `gsCoord` | assets/app.js:12407 | 1 | 7 | 1 |
+| `gsEnsureMap` | assets/app.js:12423 | 19 | 2 | 2 |
+| `gsIcon` | assets/app.js:12408 | 15 | 1 | 1 |
+| `gsImportArmas01` | assets/app.js:12498 | 65 | 2 | 2 |
+| `gsLegacyCatalog` | assets/app.js:12610 | 1 | 1 | 0 |
+| `gsMergeLegacy` | assets/app.js:12656 | 16 | 2 | 4 |
+| `gsMigrateCurrent` | assets/app.js:12672 | 7 | 1 | 7 |
+| `gsModalHtml` | assets/app.js:12826 | 1 | 1 | 0 |
+| `gsNorm` | assets/app.js:12609 | 1 | 5 | 0 |
+| `gsOpenEditor` | assets/app.js:12828 | 43 | 2 | 10 |
+| `gsPersist` | assets/app.js:12791 | 19 | 2 | 7 |
+| `gsRender` | assets/app.js:12459 | 16 | 8 | 11 |
+| `gsRenderKpis` | assets/app.js:12815 | 5 | 1 | 3 |
+| `gsRenderMap` | assets/app.js:12442 | 17 | 4 | 11 |
+| `gsRequestText` | assets/app.js:12686 | 7 | 2 | 5 |
+| `gsRows` | assets/app.js:12404 | 3 | 13 | 2 |
+| `gsSave` | assets/app.js:12481 | 17 | 1 | 8 |
+| `gsSetView` | assets/app.js:12820 | 6 | 1 | 3 |
+| `gsStatusText` | assets/app.js:12810 | 4 | 2 | 0 |
+| `isOperational` | assets/app.js:12254 | 4 | 1 | 5 |
+| `isRegisteredAvailable` | assets/app.js:12250 | 3 | 2 | 2 |
+| `key` | assets/app.js:12661 | 4 | 19 | 1 |
+| `mgmtAction` | assets/app.js:13580 | 6 | 3 | 0 |
+| `mgmtBarSvg` | assets/app.js:13630 | 3 | 1 | 3 |
+| `mgmtBuild` | assets/app.js:13535 | 44 | 4 | 6 |
+| `mgmtDayKey` | assets/app.js:13502 | 1 | 2 | 1 |
+| `mgmtDownloadGeneralReport` | assets/app.js:13661 | 8 | 1 | 3 |
+| `mgmtEscHtml` | assets/app.js:13626 | 4 | 2 | 0 |
+| `mgmtFiltered` | assets/app.js:13591 | 6 | 1 | 2 |
+| `mgmtGeneralReportText` | assets/app.js:13610 | 16 | 3 | 9 |
+| `mgmtLabel` | assets/app.js:13579 | 1 | 3 | 0 |
+| `mgmtMedian` | assets/app.js:13531 | 4 | 1 | 0 |
+| `mgmtMessage` | assets/app.js:13586 | 5 | 1 | 3 |
+| `mgmtOpenMessage` | assets/app.js:13690 | 5 | 1 | 3 |
+| `mgmtOpenRichReport` | assets/app.js:13654 | 7 | 1 | 2 |
+| `mgmtPct` | assets/app.js:13528 | 1 | 3 | 0 |
+| `mgmtPeriodStats` | assets/app.js:13508 | 20 | 1 | 5 |
+| `mgmtPrintGeneralReport` | assets/app.js:13669 | 7 | 1 | 3 |
+| `mgmtRichReportHtml` | assets/app.js:13633 | 21 | 1 | 9 |
+| `mgmtRowsFor` | assets/app.js:13507 | 1 | 1 | 2 |
+| `mgmtSegmentReport` | assets/app.js:13606 | 4 | 1 | 2 |
+| `mgmtStart` | assets/app.js:13503 | 4 | 1 | 0 |
+| `mgmtSummaryText` | assets/app.js:13597 | 9 | 1 | 3 |
+| `mgmtTrendText` | assets/app.js:13529 | 2 | 5 | 1 |
+| `norm` | assets/app.js:13740 | 1 | 1 | 0 |
+| `orgV92ActionMarkup` | assets/app.js:13787 | 12 | 1 | 3 |
+| `orgV92Audit` | assets/app.js:13739 | 15 | 1 | 2 |
+| `orgV92Filtered` | assets/app.js:13754 | 15 | 1 | 4 |
+| `orgV92HasOccupant` | assets/app.js:13709 | 1 | **ninguém** | 0 |
+| `orgV92HasQG` | assets/app.js:13710 | 1 | 1 | 0 |
+| `orgV92OpenReport` | assets/app.js:13838 | 15 | 1 | 8 |
+| `orgV92ReportRows` | assets/app.js:13835 | 2 | 1 | 2 |
+| `orgV92ReportTitle` | assets/app.js:13837 | 1 | 1 | 0 |
+| `orgV92Rows` | assets/app.js:13736 | 3 | 4 | 3 |
+| `orgV92Segment` | assets/app.js:13720 | 1 | 1 | 0 |
+| `orgV92Status` | assets/app.js:13716 | 1 | 1 | 0 |
+| `orgV92StatusClass` | assets/app.js:13719 | 1 | 1 | 0 |
+| `orgV92StatusLabel` | assets/app.js:13718 | 1 | 2 | 0 |
+| `pullMissionsFromCloud` | assets/app.js:13869 | 19 | 1 | 1 |
+| `pushMissionsToCloud` | assets/app.js:13888 | 25 | 1 | 4 |
+| `renderFacActivityButtons` | assets/app.js:13769 | 12 | 1 | 2 |
+| `renderIllegalManagement` | assets/app.js:13676 | 14 | 3 | 9 |
+| `setMode` | assets/app.js:12838 | 4 | 1 | 2 |
+| `speakerRows` | assets/app.js:13101 | 1 | 1 | 0 |
+| `sync` | assets/app.js:12473 | 1 | 7 | 3 |
+| `syncType` | assets/app.js:13093 | 4 | 1 | 1 |
+| `v8361CardImageUrl` | assets/app.js:12570 | 8 | 1 | 1 |
+| `v836ApplyUnifiedUi` | assets/app.js:12304 | 10 | 1 | 1 |
+| `v836CardImage` | assets/app.js:12240 | 2 | 2 | 3 |
+| `v836Occupied` | assets/app.js:12232 | 1 | 3 | 1 |
+| `v836RenderOrganizations` | assets/app.js:12242 | 58 | 1 | 21 |
+| `v836RouteLabel` | assets/app.js:12236 | 4 | 1 | 3 |
+| `v836RoutePoints` | assets/app.js:12233 | 3 | 2 | 4 |
+| `v9010CommitStructure` | assets/app.js:13407 | 81 | 1 | 14 |
+| `v908EditorHtml` | assets/app.js:13279 | 1 | 1 | 0 |
+| `v9CleanRows` | assets/app.js:12985 | 8 | 3 | 0 |
+| `v9Clone` | assets/app.js:12983 | 1 | 3 | 0 |
+| `v9Diff` | assets/app.js:13005 | 16 | 2 | 3 |
+| `v9EditorHtml` | assets/app.js:13067 | 1 | 1 | 0 |
+| `v9MarkDirty` | assets/app.js:12993 | 10 | 1 | 3 |
+| `v9QGCds` | assets/app.js:13003 | 2 | 1 | 2 |
+| `v9SaveAll` | assets/app.js:13215 | 24 | 1 | 12 |
+| `v9ShowRequest` | assets/app.js:13061 | 6 | 2 | 3 |
+| `v9StructureRequest` | assets/app.js:13021 | 40 | 2 | 3 |
 
 ## PAINEL DE SAUDE DO SISTEMA
 
@@ -666,94 +665,94 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `a1SheetName` | assets/app.js:5238 | 1 | 1 | 2 |
-| `activeMetricRows` | assets/app.js:5078 | 9 | 6 | 7 |
-| `currentMetricMonthKey` | assets/app.js:5065 | 2 | 7 | 1 |
-| `extractSpreadsheetId` | assets/app.js:5225 | 13 | 5 | 2 |
-| `f` | assets/app.js:5087 | 2 | 109 | 1 |
-| `isPublishedSheetUrl` | assets/app.js:5186 | 4 | 2 | 0 |
-| `metricActivePeriodLabel` | assets/app.js:5087 | 3 | 4 | 4 |
-| `metricAnalysis` | assets/app.js:5138 | 43 | 5 | 4 |
-| `metricDateValue` | assets/app.js:5021 | 11 | 12 | 2 |
-| `metricGroupOccupied` | assets/app.js:5077 | 1 | 3 | 2 |
-| `metricGroupRecords` | assets/app.js:5107 | 1 | 1 | 3 |
-| `metricMonthKey` | assets/app.js:5059 | 6 | 2 | 2 |
-| `metricPeriodLabel` | assets/app.js:5067 | 8 | 6 | 3 |
-| `metricPredominanceRange` | assets/app.js:5108 | 30 | 2 | 1 |
-| `metricSlotKeys` | assets/app.js:5057 | 1 | 3 | 2 |
-| `metricSlotMinutes` | assets/app.js:5033 | 5 | 4 | 1 |
-| `metricSlots` | assets/app.js:5038 | 19 | 19 | 2 |
-| `metricTsToDate` | assets/app.js:5240 | 8 | 1 | 0 |
-| `occupied` | assets/app.js:5079 | 1 | 5 | 1 |
-| `parseIsoMetricDate` | assets/app.js:5075 | 2 | 4 | 1 |
-| `publishedCsvUrl` | assets/app.js:5190 | 35 | 1 | 1 |
-| `refreshMetricPeriodOptions` | assets/app.js:5095 | 12 | 3 | 5 |
-| `renderMetricSourceStatus` | assets/app.js:5248 | 27 | 7 | 4 |
-| `syncMetricDateInputs` | assets/app.js:5090 | 4 | 3 | 1 |
+| `a1SheetName` | assets/app.js:5259 | 1 | 1 | 2 |
+| `activeMetricRows` | assets/app.js:5099 | 9 | 6 | 7 |
+| `currentMetricMonthKey` | assets/app.js:5086 | 2 | 7 | 1 |
+| `extractSpreadsheetId` | assets/app.js:5246 | 13 | 5 | 2 |
+| `f` | assets/app.js:5108 | 2 | 108 | 1 |
+| `isPublishedSheetUrl` | assets/app.js:5207 | 4 | 2 | 0 |
+| `metricActivePeriodLabel` | assets/app.js:5108 | 3 | 4 | 4 |
+| `metricAnalysis` | assets/app.js:5159 | 43 | 5 | 4 |
+| `metricDateValue` | assets/app.js:5042 | 11 | 12 | 2 |
+| `metricGroupOccupied` | assets/app.js:5098 | 1 | 3 | 2 |
+| `metricGroupRecords` | assets/app.js:5128 | 1 | 1 | 3 |
+| `metricMonthKey` | assets/app.js:5080 | 6 | 2 | 2 |
+| `metricPeriodLabel` | assets/app.js:5088 | 8 | 6 | 3 |
+| `metricPredominanceRange` | assets/app.js:5129 | 30 | 2 | 1 |
+| `metricSlotKeys` | assets/app.js:5078 | 1 | 3 | 2 |
+| `metricSlotMinutes` | assets/app.js:5054 | 5 | 4 | 1 |
+| `metricSlots` | assets/app.js:5059 | 19 | 19 | 2 |
+| `metricTsToDate` | assets/app.js:5261 | 8 | 1 | 0 |
+| `occupied` | assets/app.js:5100 | 1 | 5 | 1 |
+| `parseIsoMetricDate` | assets/app.js:5096 | 2 | 4 | 1 |
+| `publishedCsvUrl` | assets/app.js:5211 | 35 | 1 | 1 |
+| `refreshMetricPeriodOptions` | assets/app.js:5116 | 12 | 3 | 5 |
+| `renderMetricSourceStatus` | assets/app.js:5269 | 27 | 7 | 4 |
+| `syncMetricDateInputs` | assets/app.js:5111 | 4 | 3 | 1 |
 
 ## PERFIL TÉCNICO + MEMÓRIA OPERACIONAL DO GROUP
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `changedSummary` | assets/app.js:4594 | 49 | 1 | 1 |
-| `formatHistoryDate` | assets/app.js:4552 | 6 | 5 | 1 |
-| `historyDateValue` | assets/app.js:4543 | 9 | 6 | 0 |
-| `historyFamily` | assets/app.js:4558 | 16 | 3 | 0 |
-| `historyTitle` | assets/app.js:4574 | 20 | 5 | 2 |
+| `changedSummary` | assets/app.js:4615 | 49 | 1 | 1 |
+| `formatHistoryDate` | assets/app.js:4573 | 6 | 5 | 1 |
+| `historyDateValue` | assets/app.js:4564 | 9 | 6 | 0 |
+| `historyFamily` | assets/app.js:4579 | 16 | 3 | 0 |
+| `historyTitle` | assets/app.js:4595 | 20 | 5 | 2 |
 
 ## PERFIL TÉCNICO INTEGRADO AO GROUP
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `addFarmItem` | assets/app.js:8859 | 6 | 1 | 1 |
-| `addRecipe` | assets/app.js:8828 | 3 | 1 | 2 |
-| `archiveTechnicalRequest` | assets/app.js:9013 | 1 | 4 | 0 |
-| `canonicalProductImage` | assets/app.js:8625 | 12 | 2 | 1 |
-| `clonePlain` | assets/app.js:8568 | 1 | 12 | 0 |
-| `closeFarmEditor` | assets/app.js:8840 | 1 | 1 | 1 |
-| `closeGroupSettingsPage` | assets/app.js:9546 | 15 | 1 | 3 |
-| `closeRecipeEditor` | assets/app.js:8815 | 1 | 1 | 1 |
-| `copyArchivedRequest` | assets/app.js:9050 | 6 | 1 | 0 |
-| `defaultTechProfile` | assets/app.js:8695 | 1 | 1 | 0 |
-| `editFarmItem` | assets/app.js:8841 | 18 | 2 | 3 |
-| `editRecipe` | assets/app.js:8816 | 12 | 2 | 3 |
-| `ensureBenefitsHome` | assets/app.js:9516 | 9 | 2 | 1 |
-| `farmItemCard` | assets/app.js:8831 | 2 | 1 | 3 |
-| `farmItemsFromCraft` | assets/app.js:8661 | 20 | 1 | 2 |
-| `fmtRequestWhen` | assets/app.js:9048 | 1 | 1 | 0 |
-| `getTechProfileFromForm` | assets/app.js:8766 | 23 | 4 | 4 |
-| `ingredientEditorRow` | assets/app.js:8801 | 1 | 1 | 0 |
-| `itemImg` | assets/app.js:8637 | 2 | 6 | 2 |
-| `mergedTechProfile` | assets/app.js:8722 | 1 | 19 | 0 |
-| `mergeRecipeLists` | assets/app.js:8546 | 12 | 1 | 2 |
-| `opBlank` | assets/app.js:9178 | 26 | 1 | 0 |
-| `openGroupSettingsPage` | assets/app.js:9525 | 21 | 1 | 5 |
-| `operationalFromExisting` | assets/app.js:9227 | 1 | 1 | 0 |
-| `operationalFromForm` | assets/app.js:9288 | 56 | 2 | 1 |
-| `opGet` | assets/app.js:9287 | 1 | 1 | 1 |
-| `opMerge` | assets/app.js:9204 | 1 | 1 | 0 |
-| `opPair` | assets/app.js:9175 | 3 | 1 | 0 |
-| `readIngredientEditor` | assets/app.js:8811 | 4 | 2 | 1 |
-| `recipeCard` | assets/app.js:8789 | 2 | 1 | 3 |
-| `recipeNormalize` | assets/app.js:8639 | 1 | 3 | 0 |
-| `renderConnectedRequests` | assets/app.js:9056 | 17 | 5 | 8 |
-| `renderCraftRecipes` | assets/app.js:8791 | 10 | 2 | 7 |
-| `renderFarmItems` | assets/app.js:8833 | 7 | 4 | 5 |
-| `renderIngredientEditor` | assets/app.js:8803 | 8 | 2 | 5 |
-| `renderOperationalProfile` | assets/app.js:9346 | 1 | 1 | 0 |
-| `renderRouteOverview` | assets/app.js:8888 | 26 | 4 | 4 |
-| `renderStructureSnapshot` | assets/app.js:8921 | 32 | 2 | 7 |
-| `renderTechProfile` | assets/app.js:8750 | 16 | 5 | 9 |
-| `requestFingerprint` | assets/app.js:9012 | 1 | 2 | 0 |
-| `routePointList` | assets/app.js:8865 | 11 | 6 | 0 |
-| `segmentKey` | assets/app.js:8515 | 1 | 16 | 1 |
-| `setOpVal` | assets/app.js:9344 | 2 | 2 | 1 |
-| `setRouteExclusive` | assets/app.js:8876 | 12 | 1 | 4 |
-| `standardRecipesForGroup` | assets/app.js:8516 | 1 | 1 | 0 |
-| `syncFarmWithCraft` | assets/app.js:8681 | 14 | 4 | 1 |
-| `syncOperationalLegacy` | assets/app.js:9422 | 29 | 1 | 3 |
-| `techAutoRequests` | assets/app.js:8953 | 49 | 1 | 5 |
-| `toggleRoutePoints` | assets/app.js:8914 | 7 | 1 | 1 |
+| `addFarmItem` | assets/app.js:8880 | 6 | 1 | 1 |
+| `addRecipe` | assets/app.js:8849 | 3 | 1 | 2 |
+| `archiveTechnicalRequest` | assets/app.js:9034 | 1 | 4 | 0 |
+| `canonicalProductImage` | assets/app.js:8646 | 12 | 2 | 1 |
+| `clonePlain` | assets/app.js:8589 | 1 | 11 | 0 |
+| `closeFarmEditor` | assets/app.js:8861 | 1 | 1 | 1 |
+| `closeGroupSettingsPage` | assets/app.js:9567 | 15 | 1 | 3 |
+| `closeRecipeEditor` | assets/app.js:8836 | 1 | 1 | 1 |
+| `copyArchivedRequest` | assets/app.js:9071 | 6 | 1 | 0 |
+| `defaultTechProfile` | assets/app.js:8716 | 1 | 1 | 0 |
+| `editFarmItem` | assets/app.js:8862 | 18 | 2 | 3 |
+| `editRecipe` | assets/app.js:8837 | 12 | 2 | 3 |
+| `ensureBenefitsHome` | assets/app.js:9537 | 9 | 2 | 1 |
+| `farmItemCard` | assets/app.js:8852 | 2 | 1 | 3 |
+| `farmItemsFromCraft` | assets/app.js:8682 | 20 | 1 | 2 |
+| `fmtRequestWhen` | assets/app.js:9069 | 1 | 1 | 0 |
+| `getTechProfileFromForm` | assets/app.js:8787 | 23 | 4 | 4 |
+| `ingredientEditorRow` | assets/app.js:8822 | 1 | 1 | 0 |
+| `itemImg` | assets/app.js:8658 | 2 | 6 | 2 |
+| `mergedTechProfile` | assets/app.js:8743 | 1 | 18 | 0 |
+| `mergeRecipeLists` | assets/app.js:8567 | 12 | 1 | 2 |
+| `opBlank` | assets/app.js:9199 | 26 | 1 | 0 |
+| `openGroupSettingsPage` | assets/app.js:9546 | 21 | 1 | 5 |
+| `operationalFromExisting` | assets/app.js:9248 | 1 | 1 | 0 |
+| `operationalFromForm` | assets/app.js:9309 | 56 | 2 | 1 |
+| `opGet` | assets/app.js:9308 | 1 | 1 | 1 |
+| `opMerge` | assets/app.js:9225 | 1 | 1 | 0 |
+| `opPair` | assets/app.js:9196 | 3 | 1 | 0 |
+| `readIngredientEditor` | assets/app.js:8832 | 4 | 2 | 1 |
+| `recipeCard` | assets/app.js:8810 | 2 | 1 | 3 |
+| `recipeNormalize` | assets/app.js:8660 | 1 | 3 | 0 |
+| `renderConnectedRequests` | assets/app.js:9077 | 17 | 5 | 8 |
+| `renderCraftRecipes` | assets/app.js:8812 | 10 | 2 | 7 |
+| `renderFarmItems` | assets/app.js:8854 | 7 | 4 | 5 |
+| `renderIngredientEditor` | assets/app.js:8824 | 8 | 2 | 5 |
+| `renderOperationalProfile` | assets/app.js:9367 | 1 | 1 | 0 |
+| `renderRouteOverview` | assets/app.js:8909 | 26 | 4 | 4 |
+| `renderStructureSnapshot` | assets/app.js:8942 | 32 | 2 | 7 |
+| `renderTechProfile` | assets/app.js:8771 | 16 | 5 | 9 |
+| `requestFingerprint` | assets/app.js:9033 | 1 | 2 | 0 |
+| `routePointList` | assets/app.js:8886 | 11 | 6 | 0 |
+| `segmentKey` | assets/app.js:8536 | 1 | 16 | 1 |
+| `setOpVal` | assets/app.js:9365 | 2 | 2 | 1 |
+| `setRouteExclusive` | assets/app.js:8897 | 12 | 1 | 4 |
+| `standardRecipesForGroup` | assets/app.js:8537 | 1 | 1 | 0 |
+| `syncFarmWithCraft` | assets/app.js:8702 | 14 | 4 | 1 |
+| `syncOperationalLegacy` | assets/app.js:9443 | 29 | 1 | 3 |
+| `techAutoRequests` | assets/app.js:8974 | 49 | 1 | 5 |
+| `toggleRoutePoints` | assets/app.js:8935 | 7 | 1 | 1 |
 
 ## PERMISSÕES GRANULARES POR MÓDULO
 
@@ -781,31 +780,31 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `put` | assets/app.js:9573 | 2 | 1 | 1 |
-| `renderGroupOverview` | assets/app.js:9568 | 30 | 1 | 5 |
+| `put` | assets/app.js:9594 | 2 | 1 | 1 |
+| `renderGroupOverview` | assets/app.js:9589 | 30 | 1 | 5 |
 
 ## ROTA EXCLUSIVA + MAPA OPERACIONAL DO GROUP
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `grCollectStructures` | assets/app.js:11986 | 54 | 2 | 7 |
-| `grCurrent` | assets/app.js:11937 | 3 | 19 | 2 |
-| `grDeleteRoute` | assets/app.js:12155 | 29 | 1 | 12 |
-| `grEnsureMap` | assets/app.js:12040 | 20 | 1 | 2 |
-| `grFmtPoint` | assets/app.js:11936 | 1 | 4 | 1 |
-| `grMapPng` | assets/app.js:12184 | 9 | 1 | 3 |
-| `grParseCoord` | assets/app.js:11921 | 11 | 5 | 1 |
-| `grParseRoute` | assets/app.js:11932 | 4 | 5 | 1 |
-| `grRenderMap` | assets/app.js:12072 | 16 | 3 | 10 |
-| `grRenderRouteUi` | assets/app.js:12098 | 15 | 5 | 8 |
-| `grRenderRows` | assets/app.js:12088 | 10 | 2 | 5 |
-| `grRequestText` | assets/app.js:11941 | 41 | 3 | 6 |
-| `grRouteIcon` | assets/app.js:12060 | 6 | 3 | 1 |
-| `grSavedPoints` | assets/app.js:11940 | 1 | 6 | 4 |
-| `grSaveRoute` | assets/app.js:12113 | 42 | 1 | 16 |
-| `grShowRequest` | assets/app.js:11982 | 4 | 3 | 2 |
-| `grStructIcon` | assets/app.js:12066 | 6 | 1 | 1 |
-| `walk` | assets/app.js:12033 | 3 | 1 | 2 |
+| `grCollectStructures` | assets/app.js:12007 | 54 | 2 | 7 |
+| `grCurrent` | assets/app.js:11958 | 3 | 18 | 2 |
+| `grDeleteRoute` | assets/app.js:12176 | 29 | 1 | 12 |
+| `grEnsureMap` | assets/app.js:12061 | 20 | 1 | 2 |
+| `grFmtPoint` | assets/app.js:11957 | 1 | 4 | 1 |
+| `grMapPng` | assets/app.js:12205 | 9 | 1 | 3 |
+| `grParseCoord` | assets/app.js:11942 | 11 | 5 | 1 |
+| `grParseRoute` | assets/app.js:11953 | 4 | 5 | 1 |
+| `grRenderMap` | assets/app.js:12093 | 16 | 3 | 10 |
+| `grRenderRouteUi` | assets/app.js:12119 | 15 | 5 | 8 |
+| `grRenderRows` | assets/app.js:12109 | 10 | 2 | 5 |
+| `grRequestText` | assets/app.js:11962 | 41 | 3 | 6 |
+| `grRouteIcon` | assets/app.js:12081 | 6 | 3 | 1 |
+| `grSavedPoints` | assets/app.js:11961 | 1 | 6 | 4 |
+| `grSaveRoute` | assets/app.js:12134 | 42 | 1 | 16 |
+| `grShowRequest` | assets/app.js:12003 | 4 | 3 | 2 |
+| `grStructIcon` | assets/app.js:12087 | 6 | 1 | 1 |
+| `walk` | assets/app.js:12054 | 3 | 1 | 2 |
 
 ## Sem categoria
 
@@ -984,12 +983,12 @@ node tools/mapa-do-codigo.mjs nomeDaFuncao
 
 | Função | Arquivo:linha | Linhas | Chamada por | Chama |
 |---|---|---|---|---|
-| `adminWipe` | assets/app.js:9831 | 33 | 1 | 5 |
-| `cleanSnapshot` | assets/app.js:9652 | 4 | 1 | 1 |
-| `isAdmin` | assets/app.js:9647 | 4 | 18 | 0 |
-| `movementOpen` | assets/app.js:9657 | 37 | 1 | 6 |
-| `movementPreview` | assets/app.js:9695 | 12 | 2 | 2 |
-| `wipeCollection` | assets/app.js:9814 | 16 | 2 | 4 |
+| `adminWipe` | assets/app.js:9852 | 33 | 1 | 5 |
+| `cleanSnapshot` | assets/app.js:9673 | 4 | 1 | 1 |
+| `isAdmin` | assets/app.js:9668 | 4 | 18 | 0 |
+| `movementOpen` | assets/app.js:9678 | 37 | 1 | 6 |
+| `movementPreview` | assets/app.js:9716 | 12 | 2 | 2 |
+| `wipeCollection` | assets/app.js:9835 | 16 | 2 | 4 |
 
 ## UI KIT (script classico, carregado antes do app.js)
 

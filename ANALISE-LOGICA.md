@@ -109,3 +109,63 @@ que é o jeito bom de falhar.
 2. Unificar `isoDay` e `mgmtDayKey`.
 3. Decidir sobre a Economia (cinco funções isoladas, remoção limpa).
 4. Só então pensar em unificar `gs*`/`gr*` — e isso é projeto, não faxina.
+
+---
+
+## 5. Correções aplicadas na 11.4.0
+
+### Entrega passou a ser atômica — a mais importante
+
+A troca de ocupante fazia três escritas separadas, em sequência:
+
+1. recolher a ocupação anterior,
+2. gravar a nova entrega,
+3. atualizar o Group.
+
+Se a segunda ou a terceira falhasse — queda de conexão, cota estourada,
+regra negando —, a primeira já tinha valido. O Group ficava **sem
+ocupante ativo e com a anterior recolhida**: um estado que não existe na
+operação real e que só daria para consertar documento por documento, na
+mão.
+
+Agora as três vão num único `writeBatch`. Simulei os dois cenários:
+
+```
+SEM FALHA:  3 documentos gravados  (troca completa)
+COM FALHA:  0 documentos gravados  (nada mudou — a ocupação anterior segue ativa)
+```
+
+O que vem depois do lote — sincronizar a planilha oficial e atualizar o
+cadastro da organização — é **consequência, não definição**. Se falhar, a
+entrega continua válida e o aviso diz exatamente o que ficou pendente,
+em vez de dar erro genérico sobre uma operação que já aconteceu.
+
+### 75 linhas mortas removidas
+
+`v909CommitStructure` era sobrescrita por `v9010CommitStructure` logo
+abaixo da própria declaração. Os dois chamadores foram redirecionados
+para a função que de fato executa, a declaração antiga saiu e o apelido
+deixou de existir.
+
+Aconteceu um erro no caminho que vale registrar: a primeira tentativa
+redirecionou os chamadores **antes** de remover a declaração, e acabou
+renomeando a própria declaração antiga — criando duas funções com o mesmo
+nome. O `node --check` pegou na hora. A ordem correta é remover primeiro,
+redirecionar depois.
+
+### `mgmtDayKey` virou apelido de `isoDay`
+
+Os corpos eram idênticos. Agora existe uma implementação só; a outra
+delega. Se a regra de data mudar, muda em um lugar.
+
+---
+
+## 6. O que continua de pé
+
+As gerações empilhadas (`v836*`, `v9*`, `orgV92*`, `gs*`/`gr*`)
+permanecem. Todas ainda são invocadas, então não são código morto — são
+caminhos paralelos para a mesma tela.
+
+Limpar isso não é decisão técnica: exige escolher qual versão de
+Organizações e Estrutura fica. Com essa escolha feita, some código de
+verdade — centenas de linhas. Sem ela, qualquer remoção é aposta.

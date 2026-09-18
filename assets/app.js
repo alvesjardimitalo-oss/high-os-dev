@@ -4490,14 +4490,27 @@ createdAtText:new Date().toISOString(),
 createdBy:currentUser.email};
 
  try{
-  // encerra logicamente a ocupação anterior no Group e mantém a estrutura física do local.
+  /* V11.4 - ENTREGA ATOMICA
+     Antes: a ocupacao anterior era recolhida em uma chamada, a nova entrega
+     gravada em outra e o Group atualizado em uma terceira. Se a segunda ou a
+     terceira falhasse, o Group ficava SEM ocupante ativo e com a anterior ja
+     recolhida - um estado que nao existe na operacao real e que so daria para
+     consertar na mao, documento por documento.
+
+     Agora as tres escritas que definem quem ocupa o Group vao num unico lote:
+     ou todas valem, ou nenhuma vale. A estrutura fisica do local continua
+     preservada, como sempre foi. */
+  const lote=writeBatch(db);
+
   const previous=estado.entregas.filter(x=>x.group===f.group&&x.status==='ATIVA');
-for(const d of previous)await setDoc(doc(db,'highos','data','entregas',d.id),{...d,
+for(const d of previous)lote.set(doc(db,'highos','data','entregas',d.id),{...d,
 status:'RECOLHIDA',
 recolhidaEm:serverTimestamp(),
 recolhidaPor:currentUser.email},{merge:true});
 
-  await addDoc(deliveryCol,payload);
+  const novaEntregaRef=doc(deliveryCol);
+lote.set(novaEntregaRef,payload);
+
 const deliveredGroup={...f,
 status:'ATIVA',
 faccao,
@@ -4512,9 +4525,15 @@ plano:payload.plano,
 beneficiosAtivos:active},
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email};
-await setDoc(doc(db,'highos','data','faccoes',f.group),deliveredGroup);
-await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
-await upsertOrganizationFromDelivery(payload,f);
+lote.set(doc(db,'highos','data','faccoes',f.group),deliveredGroup);
+
+  await lote.commit();          // ponto de nao retorno: daqui em diante a troca valeu
+
+  /* O que vem depois e consequencia, nao definicao: se falhar, a entrega
+     continua valida e o aviso diz exatamente o que ficou pendente. */
+  const pendencias=[];
+try{await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true})}catch(e){pendencias.push('planilha oficial')}
+try{await upsertOrganizationFromDelivery(payload,f)}catch(e){pendencias.push('cadastro da organização')}
 
   await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'ENTREGA_GROUP',
@@ -4527,7 +4546,9 @@ data:serverTimestamp()});
 $('#newDeliveryModal').classList.add('hidden');
 await loadFaccoes();
 await loadDeliveries();
-alert('Entrega registrada. A estrutura permanente do Group foi preservada.');
+alert(pendencias.length
+  ? `Entrega registrada e ocupação trocada. Não foi possível atualizar: ${pendencias.join(' e ')}. Refaça essa parte quando puder.`
+  : 'Entrega registrada. A estrutura permanente do Group foi preservada.');
 
  }catch(err){alert('Erro ao concluir entrega: '+err.message)}
 }
@@ -13254,82 +13275,7 @@ best=Infinity;
 };
 
 /* ===== HIGH OS V9.0.8 · Estruturas com salvamento imediato e persistência completa ===== */
-async function v909CommitStructure(beforeRows, descricao='Estrutura atualizada'){
-  const f=grCurrent(),
- group=f?.group;
 
-  if(!group) throw new Error('Group não identificado.');
-
-  const before=v9CleanRows(v9Clone(beforeRows||[]));
-
-  const after=v9CleanRows(v9Clone(gsRows()));
-
-  const diff=v9Diff(before,after);
-
-  const scrollY=window.scrollY;
-
-  techDraft.estruturaCatalogo=v9Clone(after);
-
-  const ref=doc(db,'highos','data','faccoes',group);
-
-  // V9: grava uma cópia canônica no nível raiz + compatibilidade no perfilTecnico.
-  // Assim nenhuma consolidação legada consegue apagar Post-it/caixas de som na leitura seguinte.
-  await setDoc(ref,{
-    estruturaCatalogoV9:clonePlain(after),
-
-    perfilTecnico:clonePlain(techDraft),
-
-    updatedAt:serverTimestamp(),
-
-    updatedBy:currentUser?.email||''
-  },{merge:true});
-
-  const snap=await getDoc(ref);
-
-  if(!snap.exists()) throw new Error('Não foi possível reler o Group após salvar.');
-
-  const fresh={id:snap.id,
-...snap.data()};
-
-  const persisted=v9CleanRows(v9Clone(fresh.estruturaCatalogoV9||fresh.perfilTecnico?.estruturaCatalogo||[]));
-
-  if(JSON.stringify(persisted)!==JSON.stringify(after)) throw new Error('O Firestore não confirmou todas as coordenadas salvas.');
-
-  const pos=estado.faccoes.findIndex(x=>x.group===group);
-
-  if(pos>=0) estado.faccoes[pos]={...estado.faccoes[pos],
-...fresh};
-
-  techDraft=mergedTechProfile(pos>=0?estado.faccoes[pos]:fresh);
-
-  techDraft.estruturaCatalogo=v9Clone(persisted);
-
-  v9StructureOriginal=v9Clone(persisted);
-
-  v9StructureDirty=false;
-
-  $('#gsDirtyBar')?.classList.add('hidden');
-
-  await addDoc(histCol,{sessionId:currentSessionId||'',
-tipo:'ESTRUTURA_ATUALIZADA',
-group,
-descricao:`${descricao}: ${diff.length} alteração(ões)`,
-usuario:currentUser?.email||'',
-data:serverTimestamp()});
-
-  gsRender(false);
-
-  requestAnimationFrame(()=>window.scrollTo({top:scrollY,
-left:0,
-behavior:'auto'}));
-
-  if(diff.length && confirm(`Alterações salvas.\n\nDeseja gerar uma solicitação ao Dev da cidade com ${diff.length} alteração(ões)?`)){
-    v9ShowRequest(v9StructureRequest(group,diff));
-
-  }
-  return true;
-
-}
 function v908EditorHtml(row={},i=-1,isNew=false){
   const speakers=[...(row.speakers||[]),
 '',
@@ -13406,7 +13352,7 @@ speakers:tipo==='TELÃO'?[...modal.querySelectorAll('.gsmSpeaker')].map(x=>x.val
     if(isNew) rows.push(n);
  else rows[i]=n;
 
-    try{await v909CommitStructure(before,isNew?`Estrutura adicionada: ${n.tipo} ${n.nome}`:`Estrutura editada: ${n.tipo} ${n.nome}`);
+    try{await v9010CommitStructure(before,isNew?`Estrutura adicionada: ${n.tipo} ${n.nome}`:`Estrutura editada: ${n.tipo} ${n.nome}`);
 close()}catch(e){if(isNew)rows.pop();
 else rows[i]=before[i];
 alert('Erro ao salvar estrutura: '+e.message);
@@ -13426,7 +13372,7 @@ r=rows[i];
   const before=v9Clone(rows);
  rows.splice(i,1);
 
-  try{await v909CommitStructure(before,`Estrutura excluída: ${r.tipo} ${r.nome||''}`)}catch(e){techDraft.estruturaCatalogo=before;
+  try{await v9010CommitStructure(before,`Estrutura excluída: ${r.tipo} ${r.nome||''}`)}catch(e){techDraft.estruturaCatalogo=before;
 alert('Erro ao excluir: '+e.message);
 gsRender(false)}
 };
@@ -13540,7 +13486,6 @@ behavior:'auto'})}catch{};gsMap?.invalidateSize?.()},60);
 
 }
 // Substitui apenas o commit da estrutura; o restante da V9 permanece igual.
-v909CommitStructure=v9010CommitStructure;
 
 // Blindagem: botões da Estrutura dentro do formulário do Group nunca podem submeter o formulário principal.
 document.addEventListener('click',e=>{
@@ -13551,7 +13496,10 @@ document.addEventListener('click',e=>{
 /* ===== HIGH OS V9.1 · CENTRAL DE GESTÃO DO ILEGAL ===== */
 let mgmtLastRows=[];
 
-function mgmtDayKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+
+/* mesma regra de isoDay: mantido como apelido para nao espalhar
+   duas versoes da conversao de data pelo arquivo */
+function mgmtDayKey(d){return isoDay(d)}
 function mgmtStart(days,offset=0){const d=new Date();
 d.setHours(0,0,0,0);
 d.setDate(d.getDate()-offset-days+1);
