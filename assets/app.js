@@ -1125,8 +1125,6 @@ async function reservarSessao(email){
 }
 function makeSessionId(email=''){return `${Date.now()}_${String(email||'user').replace(/[^a-z0-9]/gi,'_')}_${Math.random().toString(36).slice(2,8)}`}
 
-function sessionMeta(){return {sessionId:currentSessionId,
-sessionStart:currentSessionStart||0}}
 async function closeCurrentSession(reason='LOGOUT'){
  if(!currentUser||!currentSessionId)return;
 
@@ -5274,51 +5272,6 @@ if(dc?.sheetLast)desc+=` • Planilha ${dc.sheetLast.date} ${dc.sheetLast.slot} 
  el.innerHTML=`<div><span class="metric-source-dot"></span><div><b>${has?'GOOGLE SHEETS • APPS SCRIPT GRATUITO':'FONTE NÃO CONFIGURADA'}</b><small>${esc(desc)}</small></div></div><span>${has?`Última sincronização: ${esc(when)}<br>AGENDA • 14:05 · 16:05 · 21:05 · 23:05`:'CONFIGURAR'}</span>`;
 
 }
-async function fetchMetricsFromSource({persist=false,
-quiet=false,
-authorize=true}={}){
- if(!extractSpreadsheetId(metricSourceConfig.url)){if(!quiet)alert('Configure primeiro o link da planilha em Fonte.');
-metricSourceState={status:'SEM FONTE',
-lastSync:null,
-count:0,
-activeCount:0,
-error:''};
-renderMetricSourceStatus();
-return false}
- metricSourceState={...metricSourceState,
-status:'SINCRONIZANDO',
-error:''};
-renderMetricSourceStatus();
-
- try{const result=await readMetricsDirect({authorize});
-const rows=result.rows.map(metricSnapshot);
-estado.metricas=rows;
-metricPeriodKey=currentMetricMonthKey();
-metricSourceState={status:'ONLINE',
-lastSync:Date.now(),
-count:rows.length,
-activeCount:activeMetricRows().length,
-error:'',
-sheet:result.sheet};
-renderMetricSourceStatus();
-refreshMetricPeriodOptions();
-renderMetrics();
-if(persist)await persistMetricRows(rows,result.sheet);
-if(!quiet)alert(`${rows.length} registro(s) históricos lidos da aba ${result.sheet}. Exibindo ${activeMetricRows().length} registro(s) de ${metricPeriodLabel(metricPeriodKey)}. A planilha não foi alterada.`);
-return true
- }catch(e){estado.metricas=estado.metricasCache.slice();
-if(e.message==='AUTORIZAÇÃO NECESSÁRIA'){metricSourceState={...metricSourceState,
-status:'AGUARDANDO',
-error:''};
-renderMetricSourceStatus();
-return false}metricSourceState={...metricSourceState,
-status:'ERRO',
-error:e.message};
-renderMetricSourceStatus();
-renderMetrics();
-if(!quiet)alert('Erro ao sincronizar métricas: '+e.message);
-return false}
-}
 /* =====================================================================
    HIGH OS V9.6 - ECONOMIA DE COTA DAS METRICAS
    ---------------------------------------------------------------------
@@ -6051,7 +6004,6 @@ setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 
 }
 
-function metricGroupKey(row){return alvesNorm(String(row?.group||row?.organizacao||row?.faccao||'')).replace(/\s+/g,'')}
 function metricTimeMinutes(h){const m=String(h||'').toUpperCase().match(/(\d{1,2})(?::?(\d{2}))?/);
 return m?(+m[1]*60+(+m[2]||0)):9999}
 function metricTimeline(rows=[]){
@@ -8998,7 +8950,6 @@ const box=$('#groupStructureSnapshot');
 if(box)box.innerHTML=items.length?items.map(([n,
 v])=>`<div class="structure-chip"><span>${esc(n)}</span><b>${esc(v)}</b></div>`).join(''):'<div class="delivery-no-change">Nenhuma estrutura técnica cadastrada.</div>';
 }
-function techChanged(oldF,newF){return JSON.stringify(mergedTechProfile(oldF))!==JSON.stringify(newF.perfilTecnico||mergedTechProfile(newF))}
 function techAutoRequests(f=currentFactionFromForm()){
  const old=estado.faccoes.find(x=>x.group===f.group)||{},
 now=f.perfilTecnico||getTechProfileFromForm(),
@@ -10866,9 +10817,6 @@ usuario:currentUser.email,
 data:serverTimestamp()});
 await loadFaccoes()}catch(e){alert('Erro ao atualizar status do anúncio: '+e.message)}
 }
-async function toggleAvailablePosted(group){const f=estado.faccoes.find(x=>x.group===group);
-return setAvailableDiscordState(group,!availablePosted(f))}
-
 function freeFaccoesForReport(type='TODAS'){
  const rows=estado.faccoes.filter(f=>!f.removido&&(f.status!=='ATIVA'||!String(f.faccao||'').trim()));
 
@@ -10995,15 +10943,6 @@ icon])=>`<button type="button" class="${active===value?'active':''}" data-value=
  box.querySelectorAll('button').forEach(b=>b.onclick=()=>{sel.value=b.dataset.value||'';onChange()});
 
 }
-function renderFacActivityButtonsLegacy(){activityButtons('facStatusButtons','facStatus',[['',
-'TODOS',
-'◉'],
-['ATIVA',
-'OCUPADOS',
-'●'],
-['INATIVA',
-'DISPONÍVEIS',
-'○']],renderFaccoes)}
 function renderOrgActivityButtons(){activityButtons('orgStatusButtons','orgStatus',[['',
 'AMBAS',
 '◉'],
@@ -11731,9 +11670,6 @@ type:file.type||'application/octet-stream',
 size:file.size,
 dataUrl};
 renderChatAttachmentPreview()}
-function hmDisplayName(){const n=currentProfile?.name||currentUser?.displayName||currentUser?.email||'Usuário',
-r=currentProfile?.cargo||currentProfile?.role||'MEMBRO';
-return `${n} • ${r}`}
 // ===== HIGH OS V9.5.3 · HIGH CALL NATIVO (WebRTC + Firestore) =====
 // Sem iframe/Jitsi. Firestore faz somente a sinalizacao; audio/video trafegam por WebRTC.
 const HIGH_RTC_CONFIG={iceServers:[{urls:['stun:stun.l.google.com:19302',
@@ -11998,7 +11934,6 @@ line:line+1})).filter(x=>x.raw).map(x=>({...x,
 p:grParseCoord(x.raw)}));
 }
 function grFmtPoint(p){return `{ ${Number(p.x).toFixed(2)},${Number(p.y).toFixed(2)},${Number(p.z).toFixed(2)}${Number.isFinite(p.h)?','+Number(p.h).toFixed(2):''} },`}
-function grRouteText(){return grParseRoute($('#grRouteInput')?.value||'').filter(x=>x.p).map(x=>grFmtPoint(x.p)).join('\n')}
 function grCurrent(){const g=$('#fGroup')?.value||'';
 return estado.faccoes.find(x=>x.group===g)||currentFactionFromForm()||{};
 }
@@ -13775,11 +13710,6 @@ w.document.open();
 w.document.write(mgmtRichReportHtml());
 w.document.close();
 w.focus()}
-function mgmtOpenGeneralReport(){if(!mgmtLastRows.length)mgmtLastRows=mgmtBuild();
-const txt=mgmtGeneralReportText();
-const ta=$('#mgmtReportText');
-if(ta)ta.value=txt;
-$('#mgmtReportModal')?.classList.remove('hidden')}
 function mgmtDownloadGeneralReport(){const text=mgmtGeneralReportText(),
 blob=new Blob([text],{type:'text/plain;charset=utf-8'}),
 url=URL.createObjectURL(blob),
