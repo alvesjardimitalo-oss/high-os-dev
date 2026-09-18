@@ -594,6 +594,7 @@
     "syncSegmentSelects",
     "syncType",
     "techAutoRequests",
+    "temDado",
     "testMetricSource",
     "toggleCallCam",
     "toggleCallMic",
@@ -634,6 +635,7 @@
     "weeklyContingentAlerts",
     "wipeCollection",
     "writeBatch",
+    "x",
     "y"
   ],
   "assets/mission-planner.js": [

@@ -6094,17 +6094,33 @@ data:by.get(`${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${St
 
 }
 function metricDailyBars(daily=[]){
- const cols=metricCalendarRange31(daily);
-if(!cols.length)return '<div class="metric-empty-chart">Sem dados suficientes para montar o gráfico.</div>';
+ const todas=metricCalendarRange31(daily);
+if(!todas.length)return '<div class="metric-empty-chart">Sem dados suficientes para montar o gráfico.</div>';
+
+ /* V11.5 - antes o gráfico desenhava o mês inteiro, inclusive os dias que
+    ainda não aconteceram. Com a coleta indo até o dia corrente, metade das
+    colunas ficava vazia mostrando "—" e as colunas com dado eram espremidas
+    em menos da metade da largura. Agora o eixo termina no último dia com
+    dado, e um rodapé informa quantos dias do período ainda faltam. */
+ let ultimo=-1;
+todas.forEach((c,i)=>{if(c.data)ultimo=i});
+const cols=ultimo>=0?todas.slice(0,ultimo+1):todas;
+const restantes=todas.length-cols.length;
 
  const values=cols.map(c=>c.data?.avg||0),
 max=Math.max(1,...values);
+const comDado=values.filter(v=>v>0),
+media=comDado.length?comDado.reduce((a,b)=>a+b,0)/comDado.length:0;
 
  return `<div class="metric-month-bars" role="img" aria-label="Contingente diário do período">${cols.map(c=>{
   if(!c.date)return `<div class="metric-month-col metric-month-empty"><div class="metric-month-value">—</div><div class="metric-month-track"><i style="height:0%"></i></div><b>—</b><span>—</span></div>`;
   const d=c.data,v=d?.avg||0,pct=d?Math.max(4,Math.min(100,v/max*100)):0,week=c.date.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','').toUpperCase(),day=String(c.date.getDate()).padStart(2,'0'),count=d?.vals?.length||0,tip=d?`${c.date.toLocaleDateString('pt-BR')} • ${count<4?'PARCIAL • ':''}${count}/4 coletas • média ${v.toFixed(1)} • pico ${d.peak.total} às ${d.peak.hour}`:`${c.date.toLocaleDateString('pt-BR')} • sem coleta`;
   return `<div class="metric-month-col${d?'':' metric-month-no-data'}" title="${esc(tip)}"><div class="metric-month-value">${d?v.toFixed(0)+(count<4?' P':''):'—'}</div><div class="metric-month-track"><i style="height:${pct}%"></i></div><b>${day}</b><span>${week}</span></div>`;
- }).join('')}</div>`;
+ }).join('')}</div>${restantes>0
+  ? `<div class="metric-month-footer">${cols.length} dia(s) com coleta • ${restantes} dia(s) do período ainda sem lançamento</div>`
+  : ''}${media>0
+  ? `<div class="metric-month-footer">média do período: <b>${media.toFixed(1)}</b></div>`
+  : ''}`;
 
 }
 function metricDailySummary(points=[]){
@@ -6169,20 +6185,54 @@ avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null,
 pending=4-collected.length,
 status=!day||!collected.length?'SEM COLETA':pending?`PARCIAL • ${collected.length}/4 COLETAS • AGUARDANDO ${pending}`:'4/4 COLETAS • DIA COMPLETO';
 return `<section class="metric-daily-card"><header><div><span>${esc(title)}</span><h3>${day?esc(day.date.toLocaleDateString('pt-BR')):'SEM COLETA'}</h3><em class="metric-partial-status ${pending?'partial':'complete'}">${status}</em></div><div><small>PICO</small><b>${peak??'—'}</b></div><div><small>MÉDIA PARCIAL</small><b>${avg===null?'—':avg.toFixed(1)}</b></div></header><div class="metric-hour-grid">${hours.map(h=>`<div class="metric-hour-cell ${day&&Number.isFinite(day.slots[h])?'collected':'waiting'}"><span>${h.replace('H',':00')}</span><b>${day&&Number.isFinite(day.slots[h])?day.slots[h]:'—'}</b><small>${day&&Number.isFinite(day.slots[h])?'ONLINE':'AGUARDANDO COLETA'}</small></div>`).join('')}</div></section>`}
-function metricWeekSvg(days=[]){const hours=['14H',
-'16H',
-'21H',
-'23H'],
-all=days.flatMap(d=>hours.map(h=>d.slots[h]).filter(Number.isFinite)),
-max=Math.max(1,...all);
-const W=920,
-H=250,
-pad=38,
-step=days.length>1?(W-pad*2)/(days.length-1):0;
-const y=v=>H-pad-(v/max)*(H-pad*2);
-const lines=hours.map((h,idx)=>{const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?`${pad+i*step},${y(d.slots[h]).toFixed(1)}`:null);let segs=[],
-cur=[];pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur);return `<g class="metric-line line-${idx}">${segs.map(s=>s.length>1?`<polyline points="${s.join(' ')}"/>`:'' ).join('')}${days.map((d,i)=>Number.isFinite(d.slots[h])?`<circle cx="${pad+i*step}" cy="${y(d.slots[h]).toFixed(1)}" r="4"><title>${metricFmtDay(d.date)} • ${h} • ${d.slots[h]} online</title></circle>`:'').join('')}</g>`}).join('');
-return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img">${[0,.25,.5,.75,1].map(t=>`<line x1="${pad}" x2="${W-pad}" y1="${y(max*t)}" y2="${y(max*t)}" class="metric-grid-line"/><text x="4" y="${y(max*t)+4}" class="metric-axis-text">${Math.round(max*t)}</text>`).join('')}${lines}</svg>`}
+/* V11.5 - GRAFICO SEMANAL REFEITO
+   Problemas da versao anterior:
+   - a escala ia de 0 ate o valor maximo exato, entao a linha do pico
+     encostava na borda de cima e ficava sem respiro;
+   - dias sem coleta nao apareciam de forma nenhuma: a linha terminava no
+     meio do grafico e os tres dias restantes ficavam em branco, dando a
+     impressao de defeito;
+   - nao havia marcacao de ponto nem valor visivel.
+
+   Agora: 12% de folga no topo, pontos marcados em cada leitura, faixa
+   sombreada nos dias ainda sem lancamento e o valor no hover. */
+function metricWeekSvg(days=[]){
+ const hours=['14H','16H','21H','23H'];
+ const all=days.flatMap(d=>hours.map(h=>d.slots[h]).filter(Number.isFinite));
+ if(!all.length)return '<div class="metric-empty-chart">Nenhuma coleta nesta semana ainda.</div>';
+
+ const max=Math.max(1,...all)*1.12;           // folga para o pico nao colar no topo
+ const W=920,H=250,pad=38;
+ const step=days.length>1?(W-pad*2)/(days.length-1):0;
+ const y=v=>H-pad-(v/max)*(H-pad*2);
+ const x=i=>pad+i*step;
+
+ const temDado=i=>hours.some(h=>Number.isFinite(days[i]?.slots[h]));
+ const primeiroVazio=days.findIndex((d,i)=>!temDado(i));
+
+ // faixa sombreada cobrindo os dias ainda sem lancamento
+ const faixa=primeiroVazio>=0&&days.slice(primeiroVazio).every((d,k)=>!temDado(primeiroVazio+k))
+   ? `<rect class="metric-week-pending" x="${x(primeiroVazio)-step/2}" y="${pad-10}" width="${W-pad-(x(primeiroVazio)-step/2)+8}" height="${H-pad*2+20}"></rect>`
+   : '';
+
+ const grade=[0,.25,.5,.75,1].map(t=>
+   `<line class="metric-week-grid" x1="${pad}" x2="${W-pad}" y1="${y(max*t)}" y2="${y(max*t)}"></line>`
+   +`<text class="metric-week-axis" x="${pad-8}" y="${y(max*t)+4}" text-anchor="end">${Math.round(max*t)}</text>`
+ ).join('');
+
+ const lines=hours.map((h,idx)=>{
+  const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?{x:x(i),y:y(d.slots[h]),v:d.slots[h],i}:null);
+  const segs=[];let cur=[];
+  pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});
+  if(cur.length)segs.push(cur);
+  const traco=segs.map(seg=>`<polyline points="${seg.map(p=>`${p.x},${p.y.toFixed(1)}`).join(' ')}"></polyline>`).join('');
+  const bolas=pts.filter(Boolean).map(p=>
+    `<circle cx="${p.x}" cy="${p.y.toFixed(1)}" r="3.5"><title>${esc(h)} • ${p.v}</title></circle>`).join('');
+  return `<g class="metric-line line-${idx}">${traco}${bolas}</g>`;
+ }).join('');
+
+ return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Leituras por horário na semana">${faixa}${grade}${lines}</svg>`;
+}
 function renderMetricIntelligence(rows=[],raw=[],seg=''){
  const daily=$('#metricDailyIntel'),
 weekly=$('#metricWeeklyIntel');

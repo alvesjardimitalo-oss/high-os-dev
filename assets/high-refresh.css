@@ -952,3 +952,36 @@ body.busca-aberta{overflow:hidden}
 #historyDeepBtn:hover{background:rgba(255,207,92,.25);color:#fff}
 #historyDeepBtn:disabled{opacity:.6;cursor:wait}
 .history-more span b{color:#ffcf5c}
+
+/* =========================================================
+   GRÁFICOS DE MÉTRICAS (V11.5)
+   ========================================================= */
+.metric-week-svg{width:100%;height:auto;overflow:visible}
+.metric-week-grid{stroke:rgba(255,255,255,.07);stroke-width:1}
+.metric-week-axis{fill:var(--hm-text-3,#8a7f99);font-size:10px;font-variant-numeric:tabular-nums}
+/* faixa dos dias que ainda não aconteceram: some a impressão de gráfico truncado */
+.metric-week-pending{
+  fill:rgba(255,255,255,.028);
+  stroke:rgba(255,255,255,.06);
+  stroke-dasharray:4 4;
+}
+.metric-line polyline{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.metric-line circle{stroke:#0d0a12;stroke-width:1.5}
+.metric-line.line-0 polyline{stroke:#b878ff}.metric-line.line-0 circle{fill:#b878ff}
+.metric-line.line-1 polyline{stroke:#4fd2ff}.metric-line.line-1 circle{fill:#4fd2ff}
+.metric-line.line-2 polyline{stroke:#50f5a0}.metric-line.line-2 circle{fill:#50f5a0}
+.metric-line.line-3 polyline{stroke:#ffa53c}.metric-line.line-3 circle{fill:#ffa53c}
+.metric-line circle:hover{r:5.5}
+
+/* barras do contingente */
+.metric-month-footer{
+  margin-top:9px;padding-top:9px;
+  border-top:1px solid var(--hm-line,rgba(255,255,255,.075));
+  font-size:10.5px;color:var(--hm-text-3,#8a7f99);letter-spacing:.03em;
+}
+.metric-month-footer b{color:var(--hm-text,#f4f0f8);font-variant-numeric:tabular-nums}
+.metric-empty-chart{
+  padding:34px 20px;text-align:center;
+  border:1px dashed var(--hm-line-2,rgba(255,255,255,.13));border-radius:14px;
+  color:var(--hm-text-3,#8a7f99);font-size:12.5px;
+}
