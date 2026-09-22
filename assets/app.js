@@ -14210,7 +14210,9 @@ function buildProductSwapRequest(current={},incoming={},reason=''){
 function renderProductSwap(){
  const current=estado.faccoes.find(x=>x.group===($('#fGroup')?.value||'')),incoming=estado.faccoes.find(x=>x.group===($('#productSwapDestination')?.value||''));
  if(!current||!incoming)return;
- const out=buildProductSwapRequest(current,incoming,$('#productSwapReason')?.value.trim()||'');
+ const audit=productSwapAuditData(),out=buildProductSwapRequest(current,incoming,audit.reason);
+ const hist=buildProductSwapHistoryText(current,incoming,audit,out);
+ if($('#productSwapHistoryText'))$('#productSwapHistoryText').value=hist;
  $('#productSwapRequestText').value=out.text;
  $('#productSwapSummary').innerHTML='<b>PRÉVIA</b><span>'+esc(incoming.group)+' → '+esc(current.qg||'QG ATUAL')+'</span>'+(psHasPhysical(incoming)?'<span>'+esc(current.group)+' → '+esc(incoming.qg)+'</span>':'<span>'+esc(current.group)+' → SEM QG</span>');
  $('#productSwapPending').innerHTML=out.pending.length?'<b>SOLICITAÇÃO GERADA • '+out.pending.length+' PENDÊNCIA(S)</b><span>'+out.pending.map(esc).join(' • ')+'</span>':'<b>SOLICITAÇÃO COMPLETA</b><span>Nenhuma CDS pendente.</span>';
@@ -14221,14 +14223,91 @@ function openProductSwap(){
  const sel=$('#productSwapDestination');if(!sel)return;
  sel.innerHTML=estado.faccoes.filter(x=>x.group!==current.group).map(x=>'<option value="'+esc(x.group)+'">'+esc(x.group)+' • '+esc(x.segmento||'—')+' • '+esc(x.qg||'SEM LOCAL')+'</option>').join('');
  $('#productSwapOrigin').textContent=current.group+' • '+(current.qg||'SEM LOCAL')+' • '+(current.faccao||'VAGO');
- $('#productSwapReason').value='';$('#productSwapModal').classList.remove('hidden');renderProductSwap();
+ $('#productSwapReason').value='';
+ if($('#productSwapOriginType'))$('#productSwapOriginType').value='LOJA';
+ if($('#productSwapAuthorizedBy'))$('#productSwapAuthorizedBy').value='';
+ if($('#productSwapResponsible'))$('#productSwapResponsible').value=currentUser?.email||'';
+ if($('#productSwapReference'))$('#productSwapReference').value='';
+ $('#productSwapModal').classList.remove('hidden');renderProductSwap();
 }
 $('#productSwapBtn')?.addEventListener('click',openProductSwap);
 $('#productSwapDestination')?.addEventListener('change',renderProductSwap);
-$('#productSwapReason')?.addEventListener('input',renderProductSwap);
+['productSwapOriginType','productSwapAuthorizedBy','productSwapResponsible','productSwapReference','productSwapReason'].forEach(id=>$('#'+id)?.addEventListener('input',renderProductSwap));
 $('#productSwapRegenerate')?.addEventListener('click',renderProductSwap);
 $('#productSwapClose')?.addEventListener('click',()=>$('#productSwapModal')?.classList.add('hidden'));
 $('#productSwapCancel')?.addEventListener('click',()=>$('#productSwapModal')?.classList.add('hidden'));
+
+function productSwapAuditData(){
+ return {
+  origin:$('#productSwapOriginType')?.value||'OUTRO',
+  authorizedBy:$('#productSwapAuthorizedBy')?.value.trim()||'',
+  responsible:$('#productSwapResponsible')?.value.trim()||currentUser?.email||'',
+  reference:$('#productSwapReference')?.value.trim()||'',
+  reason:$('#productSwapReason')?.value.trim()||''
+ };
+}
+function productSwapOriginLabel(v=''){
+ return ({LOJA:'Compra / Loja',META:'Meta / Benefício',ADMIN:'Autorização Administrativa',EVENTO:'Premiação / Evento',CORRECAO:'Correção Operacional',OUTRO:'Outro'})[v]||v;
+}
+function buildProductSwapHistoryText(current={},incoming={},audit={},out={}){
+ const two=psHasPhysical(incoming),parts=[
+  'Troca de Produto / Group registrada no High OS.',
+  'Motivo/origem: '+productSwapOriginLabel(audit.origin)+'.',
+  audit.reason?'Justificativa: '+audit.reason+'.':'',
+  audit.authorizedBy?'Autorizado por: '+audit.authorizedBy+'.':'',
+  audit.reference?'Referência: '+audit.reference+'.':'',
+  'Movimentação: '+incoming.group+' passou a ser solicitado para '+(current.qg||'QG atual')+'.',
+  two?(current.group+' passou a ser solicitado para '+incoming.qg+'.'):(current.group+' ficará sem QG após a execução.'),
+  'Produto/Craft/Farm: remover os vínculos antigos de cada QG e configurar os correspondentes ao Group que passa a ocupá-lo.',
+  'Amenidades privadas: permissões atualizadas, criadas ou removidas conforme comparação dos perfis. Garagens públicas não sofrem alteração.',
+  out.pending?.length?('Pendências de CDS na solicitação: '+out.pending.join('; ')+'.'):'Solicitação sem pendências de CDS identificadas.'
+ ];
+ return parts.filter(Boolean).join('\n');
+}
+async function registerProductSwapHistory(){
+ if(!isAdmin())return alert('Apenas ADMIN pode registrar esta operação.');
+ const current=estado.faccoes.find(x=>x.group===($('#fGroup')?.value||'')),incoming=estado.faccoes.find(x=>x.group===($('#productSwapDestination')?.value||''));
+ if(!current||!incoming)return;
+ const audit=productSwapAuditData();
+ if(!audit.reason)return alert('Informe a justificativa da troca.');
+ if(!audit.authorizedBy)return alert('Informe quem autorizou a troca.');
+ const out=buildProductSwapRequest(current,incoming,audit.reason),historyText=buildProductSwapHistoryText(current,incoming,audit,out);
+ if(!confirm('Registrar esta troca no Histórico? Isso registra a autorização e a solicitação, mas não executa a troca no Firestore.'))return;
+ try{
+  await addDoc(histCol,{
+   sessionId:currentSessionId||'',
+   tipo:'TROCA_PRODUTO_GROUP',
+   descricao:historyText,
+   resumo:historyText,
+   group:current.group,
+   groupDestino:incoming.group,
+   qg:current.qg||'',
+   qgDestino:incoming.qg||'',
+   faccao:current.faccao||'',
+   faccaoDestino:incoming.faccao||'',
+   produtoAntes:current.produto||'',
+   produtoDepois:incoming.produto||'',
+   segmentoAntes:current.segmento||'',
+   segmentoDepois:incoming.segmento||'',
+   origemTroca:audit.origin,
+   origemTrocaLabel:productSwapOriginLabel(audit.origin),
+   justificativa:audit.reason,
+   autorizadoPor:audit.authorizedBy,
+   responsavel:audit.responsible,
+   referencia:audit.reference,
+   solicitacaoTecnica:out.text,
+   pendencias:out.pending||[],
+   status:'SOLICITADO',
+   usuario:currentUser?.email||'',
+   data:serverTimestamp()
+  });
+  await archiveTechnicalRequest({tipo:'TROCA_PRODUTO_GROUP',titulo:'Troca de Produto / Group',texto:out.text},{group:current.group,faccao:current.faccao||''},'TROCA_PRODUTO_GROUP');
+  if($('#productSwapHistoryText'))$('#productSwapHistoryText').value=historyText;
+  renderHistory();
+  alert('Troca registrada no histórico como SOLICITADA. Nenhuma alteração de Group/QG foi executada.');
+ }catch(e){alert('Erro ao registrar a troca: '+e.message)}
+}
+$('#productSwapRegister')?.addEventListener('click',registerProductSwapHistory);
 $('#productSwapCopy')?.addEventListener('click',async()=>{
  const ta=$('#productSwapRequestText'),b=$('#productSwapCopy');if(!ta?.value)return;
  try{await navigator.clipboard.writeText(ta.value)}catch(e){ta.select();document.execCommand('copy')}
