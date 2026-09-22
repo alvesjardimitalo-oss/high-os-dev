@@ -9730,16 +9730,31 @@ function cleanSnapshot(o){
 // Firestore rejeita qualquer propriedade undefined, inclusive dentro de objetos/arrays.
 // Mantém false, 0 e strings vazias; remove somente valores undefined.
 function firestoreSafe(value){
-  if(Array.isArray(value)) return value.map(firestoreSafe).filter(v => v !== undefined);
-  if(value && typeof value === 'object'){
-    if(value instanceof Date) return value;
-    const out = {};
-    for(const [k,v] of Object.entries(value)){
-      if(v !== undefined) out[k] = firestoreSafe(v);
-    }
-    return out;
+  if(value === undefined) return undefined;
+  if(value === null || typeof value !== 'object') return value;
+  // Firestore sentinels (serverTimestamp etc.) precisam ser preservados.
+  const ctor = value?.constructor?.name || '';
+  if(value instanceof Date || /FieldValue|Timestamp|GeoPoint|DocumentReference/.test(ctor)) return value;
+  if(Array.isArray(value)){
+    return value.map(v => firestoreSafe(v)).filter(v => v !== undefined);
   }
-  return value;
+  const out = {};
+  for(const [k,v] of Object.entries(value)){
+    const clean = firestoreSafe(v);
+    if(clean !== undefined) out[k] = clean;
+  }
+  return out;
+}
+function movementWritable(raw={}){
+  const out = {...raw};
+  // Campos físicos opcionais antigos nunca podem existir como undefined.
+  for(const k of PHYSICAL_FIELDS){
+    if(out[k] === undefined) delete out[k];
+  }
+  if(out.beneficios === undefined) delete out.beneficios;
+  if(out.perfilEntrega === undefined) delete out.perfilEntrega;
+  if(out.perfilTecnico === undefined) delete out.perfilTecnico;
+  return firestoreSafe(out);
 }
 
 function movementOpen(mode){
@@ -9839,8 +9854,11 @@ $('#movementConfirm')?.addEventListener('click', async () => {
     b.updatedAt = serverTimestamp();
     b.updatedBy = currentUser.email;
 
-    const safeA = firestoreSafe(a);
-    const safeB = firestoreSafe(b);
+    const safeA = movementWritable(a);
+    const safeB = movementWritable(b);
+    // Defesa final específica para o erro visto em Groups sem local.
+    if(safeA.beneficios === undefined) delete safeA.beneficios;
+    if(safeB.beneficios === undefined) delete safeB.beneficios;
     const batch = writeBatch(db);
     batch.set(doc(db,'highos','data','faccoes',src.group), safeA);
     batch.set(doc(db,'highos','data','faccoes',dst.group), safeB);
