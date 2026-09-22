@@ -14104,3 +14104,133 @@ window.HighOSMissionCloud={
 
 console.info('HIGH OS V9.5.6 · sistema carregado');
 
+
+// ===== HIGH OS V12.5 · TROCA DE PRODUTO / GROUP — GERADOR TÉCNICO =====
+function psHasPhysical(f={}){
+ const q=String(f.qg||'').trim().toUpperCase();
+ return !!q&&!/SEM (LOCAL|QG)|NULO|REMOVID/.test(q);
+}
+function psOp(f={}){
+ try{return mergedTechProfile(f).operacional||operationalFromExisting(f)||opBlank()}catch(e){return opBlank()}
+}
+function psAmenities(f={}){
+ const o=psOp(f),b=f.beneficios||{},fac=(o.garagens||[]).find(x=>String(x.tipo||'').toUpperCase()==='FACCAO'),t=o.telao||{};
+ return {
+  garagem:{label:'Garagem Fac',kind:'GARAGE',on:!!(fac?.blip||fac?.spawn||b.garagemVipBlip||b.garagemVipSpawn),blip:fac?.blip||b.garagemVipBlip||'',spawn:fac?.spawn||b.garagemVipSpawn||''},
+  barbearia:{label:'Barbearia',kind:'POINT',on:!!(o.barbearia?.cds||b.barbearia),cds:o.barbearia?.cds||b.barbearia||''},
+  roupas:{label:'Loja de Roupas',kind:'POINT',on:!!(o.roupas?.cds||b.lojaRoupas),cds:o.roupas?.cds||b.lojaRoupas||''},
+  tatuagem:{label:'Loja de Tatuagens',kind:'POINT',on:!!(o.tatuagem?.cds||b.tatuagem),cds:o.tatuagem?.cds||b.tatuagem||''},
+  loja:{label:'Loja da Facção',kind:'POINT',on:!!(o.lojaFac?.cds||b.shopExclusivo),cds:o.lojaFac?.cds||b.shopExclusivo||''},
+  bar:{label:'Bar',kind:'POINT',on:!!o.bar?.cds,cds:o.bar?.cds||''},
+  arena:{label:'Arena',kind:'POINT',on:!!(o.arena?.cds||b.arena),cds:o.arena?.cds||b.arena||''},
+  telao:{label:'Telão',kind:'TELAO',on:!!(t.ativo||b.telao),modelo:t.modelo||b.telaoNome||'',cds:t.cds||b.telaoCds||'',postit:t.postit||b.telaoPostit||'',sons:Array.isArray(t.sons)?t.sons:['','','','']}
+ };
+}
+function psRecipes(f={}){
+ const t=mergedTechProfile(f),rs=t.craft?.receitas||[],farm=farmItemsFromCraft(rs),L=[];
+ L.push('CRAFT','', 'Ação: CRIAR / CONFIGURAR CRAFT DO '+f.group,'CDS Craft: [PREENCHER CDS]','Permissão: "'+f.group+'"','','Receitas do Craft:');
+ if(!rs.length)L.push('- [SEM RECEITAS CADASTRADAS NO HIGH OS]');
+ rs.forEach((x,i)=>{
+  L.push('- '+String(i+1).padStart(2,'0')+'. '+(x.nome||x.spawn||'Receita')+(x.spawn?' | Spawn: '+x.spawn:''));
+  L.push('  Receita: '+((x.insumos||[]).map(z=>(z.nome||z.spawn)+' ('+(z.spawn||'sem spawn')+') x'+(z.qtd||'?')).join(' + ')||'[SEM INSUMOS CADASTRADOS]'));
+ });
+ L.push('','ROTA / FARM','Ação: CONFIGURAR FARM DO '+f.group,'CDS para iniciar a rota: [PREENCHER CDS]','Permissão: "'+f.group+'"','','Itens que devem aparecer para o player ao iniciar a rota:');
+ if(!farm.length)L.push('- [SEM ITENS DE FARM IDENTIFICADOS]');
+ farm.forEach(x=>L.push('- '+(x.nome||x.spawn)+(x.spawn?' | Spawn: '+x.spawn:'')));
+ return L;
+}
+function psRemoveProduct(f={}){
+ const t=mergedTechProfile(f),L=['PRODUTO ANTIGO','',
+  '- Remover/desvincular o Craft atual do '+f.group+' deste QG.',
+  '- Remover/desvincular o blip de início da rota/farm atual do '+f.group+' deste QG.'];
+ if(t.craft?.cds)L.push('- Craft atual: '+t.craft.cds);
+ if(t.rota?.inicio||t.farm?.cds)L.push('- Farm/Rota atual: '+(t.rota?.inicio||t.farm?.cds));
+ return L;
+}
+function psTelCreate(a,group,pending){
+ const vals=[['CDS do Telão',a.cds],['Post-it do Meio do Telão',a.postit],['Caixa de Som 01',a.sons?.[0]],['Caixa de Som 02',a.sons?.[1]],['Caixa de Som 03',a.sons?.[2]],['Caixa de Som 04',a.sons?.[3]]];
+ vals.forEach(x=>{if(!String(x[1]||'').trim())pending.push('Telão • '+x[0])});
+ if(!a.modelo)pending.push('Telão • Prop');
+ return ['TELÃO','Ação: CRIAR','Prop do Telão: '+(a.modelo||'[PREENCHER PROP DO TELÃO]')].concat(vals.map(x=>x[0]+': '+(x[1]||'[PREENCHER CDS]')),['Permissão: "'+group+'"']);
+}
+function psAmenityRequest(incoming={},destination={},inheritAll=false,pending=[]){
+ const src=psAmenities(incoming),dst=psAmenities(destination),L=['ATUALIZAÇÃO DA PERMISSÃO DAS AMENIDADES ABAIXO',''];
+ Object.keys(dst).forEach(k=>{
+  const d=dst[k],wants=inheritAll?d.on:src[k]?.on;
+  if(d.on&&wants){
+   if(d.kind==='GARAGE')L.push(d.label,'','CDS Blip: '+(d.blip||'[PREENCHER CDS]'),'CDS Spawn: '+(d.spawn||'[PREENCHER CDS]'),'','Permissão: "'+incoming.group+'"','');
+   else if(d.kind==='TELAO')L.push('Telão','','Ação: MANTER TELÃO EXISTENTE','Permissão: "'+incoming.group+'"','');
+   else L.push(d.label+' CDS: '+(d.cds||'[PREENCHER CDS]'),'','Permissão: "'+incoming.group+'"','');
+  }else if(d.on&&!wants){
+   if(d.kind==='TELAO')L.push('Telão','','Ação: REMOVER','Observação: Remover o telão existente in-game.','');
+   else L.push(d.label,'','Ação: REMOVER / DESVINCULAR DO QG','');
+  }
+ });
+ if(!inheritAll)Object.keys(src).forEach(k=>{
+  const s=src[k],d=dst[k];if(!s.on||d?.on)return;
+  if(s.kind==='TELAO'){L.push(...psTelCreate(s,incoming.group,pending),'');return}
+  if(s.kind==='GARAGE'){
+   pending.push(s.label+' • CDS Blip',s.label+' • CDS Spawn');
+   L.push(s.label,'','Ação: CRIAR','CDS Blip: [PREENCHER CDS]','CDS Spawn: [PREENCHER CDS]','','Permissão: "'+incoming.group+'"','');
+  }else{
+   pending.push(s.label+' • CDS');
+   L.push(s.label+' CDS: [PREENCHER CDS]','','Ação: CRIAR','Permissão: "'+incoming.group+'"','');
+  }
+ });
+ return L;
+}
+function buildProductSwapRequest(current={},incoming={},reason=''){
+ const pending=[],two=psHasPhysical(incoming),L=['ASSUNTO: TROCA DE PRODUTO / GROUP','',
+  'QG atual: '+(current.qg||'SEM LOCAL'),
+  'Group atualmente no local: '+current.group,
+  'Group que vai ocupar o local: '+incoming.group,
+  'Produto/segmento que entra: '+(incoming.segmento||'—')+' • '+(incoming.produto||'—')];
+ if(reason)L.push('Motivo: '+reason);
+ L.push('','============================================================','',incoming.group+' → '+(current.qg||'QG ATUAL'),'',
+  ...psRemoveProduct(current),'',...psRecipes(incoming),'');
+ pending.push('Craft '+incoming.group+' • CDS','Farm/Rota '+incoming.group+' • CDS de início');
+ L.push(...psAmenityRequest(incoming,current,!two,pending));
+ if(two){
+  L.push('============================================================','',current.group+' → '+incoming.qg,'',...psRemoveProduct(incoming),'',...psRecipes(current),'');
+  pending.push('Craft '+current.group+' • CDS','Farm/Rota '+current.group+' • CDS de início');
+  L.push(...psAmenityRequest(current,incoming,false,pending));
+ }else{
+  L.push('============================================================','',current.group+' — RESULTADO APÓS EXECUÇÃO','',
+   '- O Group '+current.group+' ficará SEM QG.',
+   '- Não deverá permanecer Craft, Farm/Rota ou amenidade privada deste QG vinculada à permissão "'+current.group+'".',
+   '- Garagens públicas não entram na alteração e permanecem como estão.','');
+ }
+ L.push('============================================================','','VALIDAÇÃO FINAL','',
+  '- Garagens públicas: NÃO ALTERAR.',
+  '- Craft e Farm/Rota antigos saem do QG; entram os correspondentes ao Group que passa a ocupar o local.',
+  '- Conferir que todas as permissões privadas estejam vinculadas ao Group ocupante após a execução.',
+  '- Solicitação gerada com '+pending.length+' campo(s) pendente(s) para coleta/preenchimento.');
+ return {text:L.filter((x,i,a)=>x!==''||a[i-1]!=='').join('\n'),pending};
+}
+function renderProductSwap(){
+ const current=estado.faccoes.find(x=>x.group===($('#fGroup')?.value||'')),incoming=estado.faccoes.find(x=>x.group===($('#productSwapDestination')?.value||''));
+ if(!current||!incoming)return;
+ const out=buildProductSwapRequest(current,incoming,$('#productSwapReason')?.value.trim()||'');
+ $('#productSwapRequestText').value=out.text;
+ $('#productSwapSummary').innerHTML='<b>PRÉVIA</b><span>'+esc(incoming.group)+' → '+esc(current.qg||'QG ATUAL')+'</span>'+(psHasPhysical(incoming)?'<span>'+esc(current.group)+' → '+esc(incoming.qg)+'</span>':'<span>'+esc(current.group)+' → SEM QG</span>');
+ $('#productSwapPending').innerHTML=out.pending.length?'<b>SOLICITAÇÃO GERADA • '+out.pending.length+' PENDÊNCIA(S)</b><span>'+out.pending.map(esc).join(' • ')+'</span>':'<b>SOLICITAÇÃO COMPLETA</b><span>Nenhuma CDS pendente.</span>';
+}
+function openProductSwap(){
+ if(!isAdmin())return alert('Apenas ADMIN pode gerar troca de produto / Group.');
+ const current=estado.faccoes.find(x=>x.group===($('#fGroup')?.value||''));if(!current)return;
+ const sel=$('#productSwapDestination');if(!sel)return;
+ sel.innerHTML=estado.faccoes.filter(x=>x.group!==current.group).map(x=>'<option value="'+esc(x.group)+'">'+esc(x.group)+' • '+esc(x.segmento||'—')+' • '+esc(x.qg||'SEM LOCAL')+'</option>').join('');
+ $('#productSwapOrigin').textContent=current.group+' • '+(current.qg||'SEM LOCAL')+' • '+(current.faccao||'VAGO');
+ $('#productSwapReason').value='';$('#productSwapModal').classList.remove('hidden');renderProductSwap();
+}
+$('#productSwapBtn')?.addEventListener('click',openProductSwap);
+$('#productSwapDestination')?.addEventListener('change',renderProductSwap);
+$('#productSwapReason')?.addEventListener('input',renderProductSwap);
+$('#productSwapRegenerate')?.addEventListener('click',renderProductSwap);
+$('#productSwapClose')?.addEventListener('click',()=>$('#productSwapModal')?.classList.add('hidden'));
+$('#productSwapCancel')?.addEventListener('click',()=>$('#productSwapModal')?.classList.add('hidden'));
+$('#productSwapCopy')?.addEventListener('click',async()=>{
+ const ta=$('#productSwapRequestText'),b=$('#productSwapCopy');if(!ta?.value)return;
+ try{await navigator.clipboard.writeText(ta.value)}catch(e){ta.select();document.execCommand('copy')}
+ const old=b.textContent;b.textContent='COPIADO ✓';setTimeout(()=>b.textContent=old,1300);
+});
