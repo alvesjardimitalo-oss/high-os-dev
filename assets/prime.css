@@ -412,7 +412,7 @@ tbody tr:hover{background:rgba(147,60,255,.028)!important}
 
 /* DENSITY + RESPONSIVE PER PAGE */
 @media(min-width:1200px){
- #page-dashboard .command-dashboard{grid-template-columns:repeat(12,minmax(0,1fr))}
+ #page-dashboard .command-dashboard{grid-template-columns:minmax(0,1fr)}
  #page-metricas .metric-visuals{align-items:stretch}
  #page-administracao .admin-summary-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
@@ -550,13 +550,13 @@ tbody tr:hover{background:rgba(147,60,255,.028)!important}
 
 /* Dashboard recebe palco próprio mesmo com conteúdo dinâmico */
 #page-dashboard .command-dashboard{
- grid-template-columns:repeat(12,minmax(0,1fr))!important;gap:10px!important;
+ grid-template-columns:minmax(0,1fr)!important;gap:14px!important;
  padding:2px!important;
 }
 #page-dashboard .command-dashboard>.placeholder{grid-column:1/-1!important}
 #page-dashboard .command-dashboard>article,
 #page-dashboard .command-dashboard>.card,
-#page-dashboard .command-dashboard>section{
+#page-dashboard .command-dashboard>section{grid-column:1/-1!important;width:100%!important;
  border-radius:14px!important;border:1px solid var(--h-line)!important;
  background:linear-gradient(145deg,rgba(22,17,29,.96),rgba(12,10,15,.96))!important;
  box-shadow:0 12px 34px rgba(0,0,0,.12)!important;
