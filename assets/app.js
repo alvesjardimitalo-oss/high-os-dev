@@ -9727,6 +9727,21 @@ function cleanSnapshot(o){
 
 }
 
+// Firestore rejeita qualquer propriedade undefined, inclusive dentro de objetos/arrays.
+// Mantém false, 0 e strings vazias; remove somente valores undefined.
+function firestoreSafe(value){
+  if(Array.isArray(value)) return value.map(firestoreSafe).filter(v => v !== undefined);
+  if(value && typeof value === 'object'){
+    if(value instanceof Date) return value;
+    const out = {};
+    for(const [k,v] of Object.entries(value)){
+      if(v !== undefined) out[k] = firestoreSafe(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 function movementOpen(mode){
   if(!isAdmin()) return alert('Apenas ADMIN pode executar transferências e trocas de QG.');
 
@@ -9810,9 +9825,12 @@ $('#movementConfirm')?.addEventListener('click', async () => {
       b.status = b.faccao ? 'ATIVA' : 'INATIVA';
     }else{
       for(const k of PHYSICAL_FIELDS){
-        const v = a[k];
-        a[k] = b[k];
-        b[k] = v;
+        // Campo ausente é normal em Groups sem QG/perfil legado.
+        // Nunca propagar undefined para o payload do Firestore.
+        const av = a[k];
+        const bv = b[k];
+        a[k] = bv === undefined ? (k === 'beneficios' || k === 'perfilEntrega' || k === 'perfilTecnico' ? {} : '') : bv;
+        b[k] = av === undefined ? (k === 'beneficios' || k === 'perfilEntrega' || k === 'perfilTecnico' ? {} : '') : av;
       }
     }
 
@@ -9821,12 +9839,14 @@ $('#movementConfirm')?.addEventListener('click', async () => {
     b.updatedAt = serverTimestamp();
     b.updatedBy = currentUser.email;
 
+    const safeA = firestoreSafe(a);
+    const safeB = firestoreSafe(b);
     const batch = writeBatch(db);
-    batch.set(doc(db,'highos','data','faccoes',src.group), a);
-    batch.set(doc(db,'highos','data','faccoes',dst.group), b);
+    batch.set(doc(db,'highos','data','faccoes',src.group), safeA);
+    batch.set(doc(db,'highos','data','faccoes',dst.group), safeB);
     await batch.commit();
-    await syncGroupsToOfficialSheet([a,
-b],{quiet:true});
+    await syncGroupsToOfficialSheet([safeA,
+safeB],{quiet:true});
 
     await addDoc(histCol, {
       tipo: movementMode === 'TRANSFER_PANEL' ? 'TRANSFERENCIA_PAINEL' : 'TROCA_QG',
@@ -9844,16 +9864,16 @@ b],{quiet:true});
       antes: {origem: cleanSnapshot(src),
  destino: cleanSnapshot(dst)},
 
-      depois: {origem: cleanSnapshot(a),
- destino: cleanSnapshot(b)},
+      depois: {origem: cleanSnapshot(safeA),
+ destino: cleanSnapshot(safeB)},
 
       usuario: currentUser.email,
 
       data: serverTimestamp()
     });
 
-    for(const rec of [a,
-b]){
+    for(const rec of [safeA,
+safeB]){
       if(rec.faccao){
         await setDoc(doc(db,'highos','data','organizacoes',orgKey(rec.faccao)), {
           nome: rec.faccao,
