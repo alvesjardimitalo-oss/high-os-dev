@@ -601,3 +601,49 @@ tbody tr:hover{background:rgba(147,60,255,.028)!important}
  #page-dashboard .command-dashboard>*{grid-column:auto!important}
  #page-planejador .mission-planner-mapwrap{min-height:440px!important}
 }
+
+
+/* HIGH OS V12.5.2 · HOTFIX DASHBOARD GRID
+   command-dashboard contém blocos internos que já possuem seus próprios grids.
+   O container raiz deve ser uma coluna; nunca um grid de 12 colunas. */
+#page-dashboard .command-dashboard{
+ display:grid!important;
+ grid-template-columns:minmax(0,1fr)!important;
+ gap:14px!important;
+ width:100%!important;
+ min-width:0!important;
+ padding:2px!important;
+}
+#page-dashboard .command-dashboard>*{
+ grid-column:1/-1!important;
+ width:100%!important;
+ min-width:0!important;
+ max-width:100%!important;
+ box-sizing:border-box!important;
+}
+#page-dashboard .dash-command-hero{
+ display:flex!important;
+ width:100%!important;
+}
+#page-dashboard .dash-kpis{
+ display:grid!important;
+ grid-template-columns:repeat(5,minmax(0,1fr))!important;
+ width:100%!important;
+}
+#page-dashboard .dash-grid{
+ display:grid!important;
+ grid-template-columns:minmax(0,1.35fr) minmax(0,.85fr)!important;
+ width:100%!important;
+}
+#page-dashboard .dash-panel{min-width:0!important;width:auto!important}
+@media(max-width:1200px){
+ #page-dashboard .dash-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ #page-dashboard .dash-grid{grid-template-columns:1fr!important}
+}
+@media(max-width:760px){
+ #page-dashboard .dash-command-hero{flex-direction:column!important;align-items:flex-start!important}
+ #page-dashboard .dash-kpis{grid-template-columns:1fr 1fr!important}
+}
+@media(max-width:480px){
+ #page-dashboard .dash-kpis{grid-template-columns:1fr!important}
+}
