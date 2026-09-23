@@ -1399,14 +1399,17 @@ iconAnchor:[12,
   }
   function startSafePreview(all=false){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
-    const combos=safeRouteCombinations(r);if(!combos.length){alert('Adicione pelo menos uma opção de Safe 2 e uma de Safe 3 no mapa.');return;}
+    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
+    if(!o2.length){alert('Nenhuma opção de Safe 2 foi registrada. Clique em ADICIONAR OPÇÃO SAFE 2 e marque o centro no mapa.');return;}
+    if(!o3.length){alert('Safe 2 registrada. Agora adicione pelo menos uma opção de Safe 3 para completar e visualizar a rota.');return;}
+    const combos=safeRouteCombinations(r);if(!combos.length){alert('As Safes foram registradas, mas nenhuma combinação respeita os limites: Safe 1→2 até 500m e Safe 2→3 até 250m. Ajuste uma das posições.');return;}
     stopSafePreview();
     if(!all){const combo=combos[Math.floor(Math.random()*combos.length)];playSafeCombination(m,r,combo);return;}
     let n=0;const next=()=>{if(n>=combos.length){renderMap();const s=qs('#mpSafeRouteStatus');if(s)s.innerHTML=`<b>DEMONSTRAÇÃO CONCLUÍDA</b> • ${combos.length} rota(s) exibida(s).`;return;}playSafeCombination(m,r,combos[n++],next);};next();
   }
   async function recordSafeDemonstration(){
     const mapEl=state.map?.getContainer(),m=active(),r=ensureSafeRoute(m);if(!mapEl||!m||!r)return;
-    const combos=safeRouteCombinations(r);if(!combos.length){alert('Configure opções de Safe 2 e Safe 3 antes de gravar.');return;}
+    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));if(!o2.length){alert('Nenhuma Safe 2 registrada.');return;}if(!o3.length){alert('Safe 2 registrada. Adicione uma Safe 3 antes de gravar.');return;}const combos=safeRouteCombinations(r);if(!combos.length){alert('Não há rota válida dentro dos limites de 500m / 250m.');return;}
     if(!navigator.mediaDevices?.getDisplayMedia||typeof MediaRecorder==='undefined'){alert('Este navegador não oferece gravação de tela compatível. Use DEMONSTRAR TODAS AS ROTAS e grave a aba pelo sistema.');return;}
     let stream;try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false});}catch{return;}
     const chunks=[],rec=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm'});
