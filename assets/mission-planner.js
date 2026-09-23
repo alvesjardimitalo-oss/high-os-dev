@@ -1338,7 +1338,10 @@ iconAnchor:[12,
     qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}rr.stages[i][k]=v;if(k==='radius')rr.stages[i][k]=Math.max(30,v);state.dirty=true;setSaveState('Rota da Safe alterada • NÃO SALVO');renderMap();renderSafeRouteUi();}));
     const ok=r.stages.filter(safeStageValid).length;
     const o2=r.stage2Options||[],o3=r.stage3Options||[];
-    const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';opts.innerHTML=`Opções aleatórias: <b>Safe 2: ${o2.length}</b> • <b>Safe 3: ${o3.length}</b> <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`;host.appendChild(opts);
+    const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';
+    const s1=r.stages[0],dist2=o2.map((p,i)=>{const d=safeDistance(s1,p);return `S2${String.fromCharCode(65+i)}: <b>${Math.round(d)}m</b> [${safeTransitionStatus(d,SAFE_MOVE_LIMIT_12)}]`;}).join(' • ');
+    const dist3=o2.flatMap((p,i)=>o3.map((q,j)=>{const d=safeDistance(p,q);return `S2${String.fromCharCode(65+i)}→S3${String.fromCharCode(65+j)}: <b>${Math.round(d)}m</b> [${safeTransitionStatus(d,SAFE_MOVE_LIMIT_23)}]`;})).join(' • ');
+    opts.innerHTML=`Opções: <b>Safe 2: ${o2.length}</b> • <b>Safe 3: ${o3.length}</b><br><small>Limites a pé: S1→S2 ≤ <b>500m</b> • S2→S3 ≤ <b>250m</b></small>${dist2?'<br>'+dist2:''}${dist3?'<br>'+dist3:''} <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`;host.appendChild(opts);
     qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;r.stage2Options=[];r.stage3Options=[];r.stages[1].x=r.stages[1].y=null;r.stages[2].x=r.stages[2].y=null;commit('Opções aleatórias da Safe removidas');});
     status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas configuradas: <b>${ok}/3</b><br><small>Adicione várias opções de Safe 2 e Safe 3 clicando no mapa. A execução poderá sortear uma rota.</small>`;
   }
@@ -1364,13 +1367,19 @@ iconAnchor:[12,
     if(state.safePreviewTimer){clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;}
     if(state.safePreviewLayer&&state.map){try{state.map.removeLayer(state.safePreviewLayer)}catch{}state.safePreviewLayer=null;}
   }
+  function safeDistance(a,b){if(!a||!b||!validCoord(a.x)||!validCoord(a.y)||!validCoord(b.x)||!validCoord(b.y))return Infinity;return Math.hypot(Number(b.x)-Number(a.x),Number(b.y)-Number(a.y));}
+  function safeTransitionStatus(d,max){return d<=max?'OK':(d<=max*1.15?'APERTADO':'INVIÁVEL');}
+  const SAFE_MOVE_LIMIT_12=500,SAFE_MOVE_LIMIT_23=250;
   function safeRouteCombinations(r){
     const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
     const o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
-    return o2.flatMap((p2,i)=>o3.filter((p3,j)=>{
-      const links=Array.isArray(p2.stage3Indexes)?p2.stage3Indexes:null;
-      return !links||!links.length||links.includes(j);
-    }).map((p3,j)=>({p2,p3,i2:i,i3:o3.indexOf(p3)})));
+    return o2.flatMap((p2,i)=>{
+      if(safeDistance(r.stages[0],p2)>SAFE_MOVE_LIMIT_12)return [];
+      return o3.filter((p3,j)=>{
+        const links=Array.isArray(p2.stage3Indexes)?p2.stage3Indexes:null;
+        return (!links||!links.length||links.includes(j))&&safeDistance(p2,p3)<=SAFE_MOVE_LIMIT_23;
+      }).map(p3=>({p2,p3,i2:i,i3:o3.indexOf(p3)}));
+    });
   }
   function playSafeCombination(m,r,combo,onDone){
     r.stages[1].x=combo.p2.x;r.stages[1].y=combo.p2.y;r.stages[2].x=combo.p3.x;r.stages[2].y=combo.p3.y;
@@ -1970,7 +1979,10 @@ MOVIMENTAÇÃO DA SAFE:
 ${o2.map((p,i)=>fmtOpt(p,i,'SAFE 2')).join('\n')}
 ${o3.map((p,i)=>fmtOpt(p,i,'SAFE 3')).join('\n')}
 
-- A cada execução, sortear uma opção de SAFE 2 e uma opção de SAFE 3 dentre as CDS configuradas.
+- A cada execução, sortear somente uma combinação de SAFE 2 e SAFE 3 que respeite os limites de deslocamento a pé.
+- Limite de deslocamento do centro SAFE 1→SAFE 2: máximo de 500 metros.
+- Limite de deslocamento do centro SAFE 2→SAFE 3: máximo de 250 metros.
+- Combinações acima desses limites não deverão ser utilizadas/sorteadas.
 - Fluxo: SAFE 1 fecha → círculo inteiro se desloca até SAFE 2 mantendo o raio alcançado → fecha novamente → desloca até SAFE 3 → fechamento final.
 - Movimento SAFE 1→2: ${Number(s[0]?.moveSeconds)||0}s. Movimento SAFE 2→3: ${Number(s[1]?.moveSeconds)||0}s.
 - Durante o deslocamento, centro e área do gás devem se mover continuamente, sem teleporte da zona.`;
