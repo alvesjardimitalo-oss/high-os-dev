@@ -1545,6 +1545,7 @@ async function loadFaccoes(){
 estado.faccoes=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
 estado.faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
+reaplicarVinculoMetricas();   // V12.6 - metricas seguem a faccao nas Trocas de Group
 renderFaccoes();definirGroupsConhecidos(estado.faccoes);
 renderAvailableFaccoes()}catch(e){$('#facList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${e.message}</p></div>`}
 }
@@ -1566,7 +1567,7 @@ f.produto].join(' ').toLowerCase().includes(q)));
 
  if(!operacionais.length){$('#facList').innerHTML='<div class="placeholder"><b>◆</b><h3>BASE AINDA NÃO IMPORTADA</h3><p>ADMIN: clique em “IMPORTAR BASE INICIAL”.</p></div>';
 return}
- $('#facList').innerHTML=filtered.map(f=>`<article class="fac-card" data-id="${f.id}"><div class="fac-card-head"><h3>${esc(f.group)}</h3><span class="status-chip ${f.status==='ATIVA'?'ativa':'inativa'}">${f.status==='ATIVA'?'ATIVA':'VAGA'}</span></div><div class="fac-name">${esc(f.faccao||'— VAGA —')}</div><div class="muted">${esc(f.segmento)} • ${esc(f.qg||'SEM LOCAL')}</div><div class="muted">${f.lider?'Líder: '+esc(f.lider):''}${f.staff?'<br>Staff: '+esc(f.staff):''}</div><div class="product">${esc(f.produto||'')}</div><div class="card-actions"><button class="mini-btn req-from-fac" data-group="${esc(f.group)}">NOVA SOLICITAÇÃO</button></div></article>`).join('');
+ $('#facList').innerHTML=filtered.map(f=>`<article class="fac-card" data-id="${esc(f.id)}"><div class="fac-card-head"><h3>${esc(f.group)}</h3><span class="status-chip ${f.status==='ATIVA'?'ativa':'inativa'}">${f.status==='ATIVA'?'ATIVA':'VAGA'}</span></div><div class="fac-name">${esc(f.faccao||'— VAGA —')}</div><div class="muted">${esc(f.segmento)} • ${esc(f.qg||'SEM LOCAL')}</div><div class="muted">${f.lider?'Líder: '+esc(f.lider):''}${f.staff?'<br>Staff: '+esc(f.staff):''}</div><div class="product">${esc(f.produto||'')}</div><div class="card-actions"><button class="mini-btn req-from-fac" data-group="${esc(f.group)}">NOVA SOLICITAÇÃO</button></div></article>`).join('');
 
  document.querySelectorAll('.fac-card').forEach(c=>c.onclick=(e)=>{if(e.target.closest('.req-from-fac'))return;openFac(c.dataset.id)});
 document.querySelectorAll('.req-from-fac').forEach(b=>b.onclick=(e)=>{e.stopPropagation();openRequestModal('',b.dataset.group)});
@@ -1878,6 +1879,8 @@ function getFormBenefits(){
 
   arena:$('#fArena').value.trim(),
 
+  farmAfk:($('#fFarmAfk')?.value||'').trim(),   // V12.6
+
   farm:($('#fTechFarmCds')?.value||$('#fFarm').value).trim(),
 
   craft:($('#fTechCraftCds')?.value||$('#fCraft').value).trim(),
@@ -1930,6 +1933,7 @@ $('#fShopExclusivo').value=b.shopExclusivo||'';
  $('#fBau').value=b.bau||'';
 $('#fBauCapacidade').value=b.bauCapacidade||'';
 $('#fArena').value=b.arena||'';
+if($('#fFarmAfk'))$('#fFarmAfk').value=b.farmAfk||'';
 $('#fFarm').value=b.farm||'';
 $('#fCraft').value=b.craft||'';
 
@@ -2339,6 +2343,7 @@ $('#facModalClose').onclick=closeGroupProfilePage;
 'fBau',
 'fBauCapacidade',
 'fArena',
+'fFarmAfk',
 'fFarm',
 'fCraft',
 'fRotaExclusiva',
@@ -2541,6 +2546,7 @@ resetEm:new Date().toISOString(),
 resetPor:currentUser.email},
 ultimoRecolhimento:{...recolhimento,
 possuiEvidencia:!!recollectPanelImage},
+ocupacoesAnteriores:[...(Array.isArray(old.ocupacoesAnteriores)?old.ocupacoesAnteriores:[]),{id:`${Date.now()}_${group}_rec`,faccao:old.faccao||'',group,desdeIso:inicioOcupacao(old),ateIso:tgSomarDias(metricIsoDe(recolhimento.data)||tgHojeIso(),1),motivo:'RECOLHIMENTO',em:new Date().toISOString(),por:currentUser.email}].filter(o=>o.faccao),   // V12.6
 observacoes:old.observacoes||'',
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email};try{let evidenceId='';if(recollectPanelImage){const ev=await addDoc(collection(db,'highos','data','evidencias_recolhimento'),{tipo:'PRINT_PAINEL',
@@ -3958,6 +3964,7 @@ const INSTALLATIONS=[
  ['vipOrg','VIP Org'],['chatFaccao','Chat da Facção'],['radio','Rádio Exclusiva'],['salario','Salário'],
  ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaExclusiva','Rota Exclusiva'],
  ['telao','Telão'],['lojaRoupas','Loja de Roupas'],['barbearia','Barbearia'],['tatuagem','Tatuagem'],['shopExclusivo','Shop Exclusivo'],
+['farmAfk','Farm AFK'],
  ['bau','Baú'],['farm','Farm'],['craft','Craft'],['arena','Arena']
 ];
 function renderDefaultDeliveryProfile(f){
@@ -4029,7 +4036,7 @@ operacionais.forEach(f=>{const k=f.segmento||'OUTROS';segCounts[k]=(segCounts[k]
 return}
  if(!filtered.length){$('#facList').innerHTML='<div class="placeholder"><b>⌕</b><h3>NENHUM GROUP ENCONTRADO</h3><p>Ajuste a busca ou os filtros.</p></div>';
 return}
- $('#facList').innerHTML=filtered.map(f=>`<article class="fac-card" data-id="${f.id}"><div class="fac-card-head"><div><div class="group-kicker">${esc(f.segmento||'OUTROS')}</div><h3>${esc(f.group)}</h3></div><span class="status-chip ${f.status==='ATIVA'?'ativa':'inativa'}">${f.status==='ATIVA'?'OCUPADO':'VAGO'}</span></div><div class="fac-name">${esc(f.qg||'SEM LOCAL')}</div><div class="muted">Ocupante: <b>${esc(f.faccao||'— NENHUMA —')}</b>${f.lider?'<br>Líder: '+esc(f.lider):''}</div><div class="product">${esc(f.produto||'')}</div><div class="install-count">${installedCount(f)} instalações/setagens cadastradas no Group</div><div class="group-profile"><button class="mini-btn edit-group" data-id="${f.id}">PERFIL TÉCNICO</button><button class="btn-primary compact deliver-group" data-group="${esc(f.group)}">${f.status==='ATIVA'?'NOVA ENTREGA':'ENTREGAR GROUP'}</button></div></article>`).join('');
+ $('#facList').innerHTML=filtered.map(f=>`<article class="fac-card" data-id="${esc(f.id)}"><div class="fac-card-head"><div><div class="group-kicker">${esc(f.segmento||'OUTROS')}</div><h3>${esc(f.group)}</h3></div><span class="status-chip ${f.status==='ATIVA'?'ativa':'inativa'}">${f.status==='ATIVA'?'OCUPADO':'VAGO'}</span></div><div class="fac-name">${esc(f.qg||'SEM LOCAL')}</div><div class="muted">Ocupante: <b>${esc(f.faccao||'— NENHUMA —')}</b>${f.lider?'<br>Líder: '+esc(f.lider):''}</div><div class="product">${esc(f.produto||'')}</div><div class="install-count">${installedCount(f)} instalações/setagens cadastradas no Group</div><div class="group-profile"><button class="mini-btn edit-group" data-id="${f.id}">PERFIL TÉCNICO</button><button class="btn-primary compact deliver-group" data-group="${esc(f.group)}">${f.status==='ATIVA'?'NOVA ENTREGA':'ENTREGAR GROUP'}</button></div></article>`).join('');
 
  document.querySelectorAll('.edit-group').forEach(b=>b.onclick=e=>{e.stopPropagation();openFac(b.dataset.id)});
 
@@ -7985,7 +7992,7 @@ function sourceToGroupPatch(f,src){
  oldT=mergedTechProfile(f||{}),
  b={...oldB},
  t=clonePlain(oldT)||{},
- correction=GROUP_BASE_CORRECTIONS[f?.group]||{};
+ correction=GROUP_BASE_CORRECTIONS[f?.localDe||f?.group]||{};
 
  const local=cleanProfileValue(src.LOCAL),
  product=cleanProfileValue(src.PRODUTO),
@@ -8056,7 +8063,9 @@ patch.observacoes=[f?.observacoes,
 }
  if(local&&!profileCoordLike(local)&&!/^N\/?A$/i.test(local))patch.qg=local;
 
- if(product&&/^(armas\d*|muni[cç][aã]o|drogas|lavagem|desmanche|ilegalmedic)$/i.test(product))patch.produto=product;
+ /* V12.5 - depois de uma Troca de Group o preset do local nao define o produto:
+    produto e identidade do Group, nao do lugar. */
+ if(product&&(!f?.localDe||f.localDe===f.group)&&/^(armas\d*|muni[cç][aã]o|drogas|lavagem|desmanche|ilegalmedic)$/i.test(product))patch.produto=product;
 
  return patch;
 
@@ -8076,7 +8085,7 @@ if(!entries.length)return alert('Nenhum perfil oficial carregado.');
 missing=0;
 const batch=writeBatch(db);
 for(const [sourceGroup,
-src] of entries){const f=(estado.faccoes||[]).find(x=>alvesNorm(x.group).replace(/\s+/g,'')===alvesNorm(sourceGroup).replace(/\s+/g,''));
+src] of entries){const f=(estado.faccoes||[]).find(x=>alvesNorm(x.localDe||x.group).replace(/\s+/g,'')===alvesNorm(sourceGroup).replace(/\s+/g,''));   // V12.5 - casa pelo local
 if(!f){missing++;
 continue}const patch=sourceToGroupPatch(f,src);
 batch.set(doc(db,'highos','data','faccoes',f.group),{...patch,
@@ -8639,7 +8648,7 @@ insumos:[['tarp',
 
 function segmentKey(v=''){return alvesNorm(String(v)).replace(/[^a-z0-9]/g,'')}
 function standardRecipesForGroup(f={}){
- if(f.semCraft||GROUP_BASE_CORRECTIONS?.[f.group]?.state==='SEM_CRAFT')return [];
+ if(f.semCraft||GROUP_BASE_CORRECTIONS?.[f.localDe||f.group]?.state==='SEM_CRAFT')return [];
 
  const k=segmentKey(f.segmento),
 g=String(f.group||'');
@@ -8848,7 +8857,7 @@ function mergedTechProfile(f={}){
  const d=defaultTechProfile(f),
 p=clonePlain(f.perfilTecnico||{})||{};
 
- const semCraft=!!(f.semCraft||GROUP_BASE_CORRECTIONS?.[f.group]?.state==='SEM_CRAFT'||p?.craft?.ativo===false);
+ const semCraft=!!(f.semCraft||GROUP_BASE_CORRECTIONS?.[f.localDe||f.group]?.state==='SEM_CRAFT'||p?.craft?.ativo===false);
 
  const saved=Array.isArray(p?.craft?.receitas)?p.craft.receitas:[];
 
@@ -9318,8 +9327,8 @@ return out}
 function operationalFromExisting(f={}){
  const o=opBlank(),
 b=f.beneficios||{},
-src=f.perfilFonte||GROUP_PROFILE_SOURCE?.[f.group]||{},
-corr=GROUP_BASE_CORRECTIONS?.[f.group]||{};
+src=f.perfilFonte||GROUP_PROFILE_SOURCE?.[f.localDe||f.group]||{},
+corr=GROUP_BASE_CORRECTIONS?.[f.localDe||f.group]||{};   // V12.5 - preset e do LOCAL (muda na Troca de Group)
 
  o.localizacao.nome=f.qg||cleanProfileValue(src.LOCAL||'');
 o.localizacao.cdsPrincipal=corr.cds||f.perfilBase?.cds||f.cds||cleanProfileValue(src.COORDENADA||'');
@@ -9727,36 +9736,6 @@ function cleanSnapshot(o){
 
 }
 
-// Firestore rejeita qualquer propriedade undefined, inclusive dentro de objetos/arrays.
-// Mantém false, 0 e strings vazias; remove somente valores undefined.
-function firestoreSafe(value){
-  if(value === undefined) return undefined;
-  if(value === null || typeof value !== 'object') return value;
-  // Firestore sentinels (serverTimestamp etc.) precisam ser preservados.
-  const ctor = value?.constructor?.name || '';
-  if(value instanceof Date || /FieldValue|Timestamp|GeoPoint|DocumentReference/.test(ctor)) return value;
-  if(Array.isArray(value)){
-    return value.map(v => firestoreSafe(v)).filter(v => v !== undefined);
-  }
-  const out = {};
-  for(const [k,v] of Object.entries(value)){
-    const clean = firestoreSafe(v);
-    if(clean !== undefined) out[k] = clean;
-  }
-  return out;
-}
-function movementWritable(raw={}){
-  const out = {...raw};
-  // Campos físicos opcionais antigos nunca podem existir como undefined.
-  for(const k of PHYSICAL_FIELDS){
-    if(out[k] === undefined) delete out[k];
-  }
-  if(out.beneficios === undefined) delete out.beneficios;
-  if(out.perfilEntrega === undefined) delete out.perfilEntrega;
-  if(out.perfilTecnico === undefined) delete out.perfilTecnico;
-  return firestoreSafe(out);
-}
-
 function movementOpen(mode){
   if(!isAdmin()) return alert('Apenas ADMIN pode executar transferências e trocas de QG.');
 
@@ -9838,14 +9817,15 @@ $('#movementConfirm')?.addEventListener('click', async () => {
       }
       a.status = a.faccao ? 'ATIVA' : 'INATIVA';
       b.status = b.faccao ? 'ATIVA' : 'INATIVA';
+      // V12.6 - a métrica é da facção: a série acompanha quem mudou de Group
+      const hoje = tgHojeIso();
+      registrarMudancaDeGroup(a, src, dst.faccao, hoje, 'TRANSFERENCIA_PAINEL');
+      registrarMudancaDeGroup(b, dst, src.faccao, hoje, 'TRANSFERENCIA_PAINEL');
     }else{
       for(const k of PHYSICAL_FIELDS){
-        // Campo ausente é normal em Groups sem QG/perfil legado.
-        // Nunca propagar undefined para o payload do Firestore.
-        const av = a[k];
-        const bv = b[k];
-        a[k] = bv === undefined ? (k === 'beneficios' || k === 'perfilEntrega' || k === 'perfilTecnico' ? {} : '') : bv;
-        b[k] = av === undefined ? (k === 'beneficios' || k === 'perfilEntrega' || k === 'perfilTecnico' ? {} : '') : av;
+        const v = a[k];
+        a[k] = b[k];
+        b[k] = v;
       }
     }
 
@@ -9854,17 +9834,12 @@ $('#movementConfirm')?.addEventListener('click', async () => {
     b.updatedAt = serverTimestamp();
     b.updatedBy = currentUser.email;
 
-    const safeA = movementWritable(a);
-    const safeB = movementWritable(b);
-    // Defesa final específica para o erro visto em Groups sem local.
-    if(safeA.beneficios === undefined) delete safeA.beneficios;
-    if(safeB.beneficios === undefined) delete safeB.beneficios;
     const batch = writeBatch(db);
-    batch.set(doc(db,'highos','data','faccoes',src.group), safeA);
-    batch.set(doc(db,'highos','data','faccoes',dst.group), safeB);
+    batch.set(doc(db,'highos','data','faccoes',src.group), a);
+    batch.set(doc(db,'highos','data','faccoes',dst.group), b);
     await batch.commit();
-    await syncGroupsToOfficialSheet([safeA,
-safeB],{quiet:true});
+    await syncGroupsToOfficialSheet([a,
+b],{quiet:true});
 
     await addDoc(histCol, {
       tipo: movementMode === 'TRANSFER_PANEL' ? 'TRANSFERENCIA_PAINEL' : 'TROCA_QG',
@@ -9882,16 +9857,16 @@ safeB],{quiet:true});
       antes: {origem: cleanSnapshot(src),
  destino: cleanSnapshot(dst)},
 
-      depois: {origem: cleanSnapshot(safeA),
- destino: cleanSnapshot(safeB)},
+      depois: {origem: cleanSnapshot(a),
+ destino: cleanSnapshot(b)},
 
       usuario: currentUser.email,
 
       data: serverTimestamp()
     });
 
-    for(const rec of [safeA,
-safeB]){
+    for(const rec of [a,
+b]){
       if(rec.faccao){
         await setDoc(doc(db,'highos','data','organizacoes',orgKey(rec.faccao)), {
           nome: rec.faccao,
@@ -12811,6 +12786,8 @@ origem:'LEGADO'})};
 
  if(t.farm?.cds)add('FARM','Início / Farm',t.farm.cds);
 
+ if(f.beneficios?.farmAfk)add('FARM','Farm AFK',f.beneficios.farmAfk);   // V12.6
+
  add('LOJA','Loja da Facção',o.lojaFac?.cds);
 add('AMENIDADE','Bar',o.bar?.cds);
 add('AMENIDADE','Barbearia',o.barbearia?.cds);
@@ -14143,211 +14120,632 @@ window.HighOSMissionCloud={
 console.info('HIGH OS V9.5.6 · sistema carregado');
 
 
-// ===== HIGH OS V12.5 · TROCA DE PRODUTO / GROUP — GERADOR TÉCNICO =====
-function psHasPhysical(f={}){
- const q=String(f.qg||'').trim().toUpperCase();
- return !!q&&!/SEM (LOCAL|QG)|NULO|REMOVID/.test(q);
-}
-function psOp(f={}){
- try{return mergedTechProfile(f).operacional||operationalFromExisting(f)||opBlank()}catch(e){return opBlank()}
-}
-function psAmenities(f={}){
- const o=psOp(f),b=f.beneficios||{},fac=(o.garagens||[]).find(x=>String(x.tipo||'').toUpperCase()==='FACCAO'),t=o.telao||{};
- return {
-  garagem:{label:'Garagem Fac',kind:'GARAGE',on:!!(fac?.blip||fac?.spawn||b.garagemVipBlip||b.garagemVipSpawn),blip:fac?.blip||b.garagemVipBlip||'',spawn:fac?.spawn||b.garagemVipSpawn||''},
-  barbearia:{label:'Barbearia',kind:'POINT',on:!!(o.barbearia?.cds||b.barbearia),cds:o.barbearia?.cds||b.barbearia||''},
-  roupas:{label:'Loja de Roupas',kind:'POINT',on:!!(o.roupas?.cds||b.lojaRoupas),cds:o.roupas?.cds||b.lojaRoupas||''},
-  tatuagem:{label:'Loja de Tatuagens',kind:'POINT',on:!!(o.tatuagem?.cds||b.tatuagem),cds:o.tatuagem?.cds||b.tatuagem||''},
-  loja:{label:'Loja da Facção',kind:'POINT',on:!!(o.lojaFac?.cds||b.shopExclusivo),cds:o.lojaFac?.cds||b.shopExclusivo||''},
-  bar:{label:'Bar',kind:'POINT',on:!!o.bar?.cds,cds:o.bar?.cds||''},
-  arena:{label:'Arena',kind:'POINT',on:!!(o.arena?.cds||b.arena),cds:o.arena?.cds||b.arena||''},
-  telao:{label:'Telão',kind:'TELAO',on:!!(t.ativo||b.telao),modelo:t.modelo||b.telaoNome||'',cds:t.cds||b.telaoCds||'',postit:t.postit||b.telaoPostit||'',sons:Array.isArray(t.sons)?t.sons:['','','','']}
- };
-}
-function psRecipes(f={}){
- const t=mergedTechProfile(f),rs=t.craft?.receitas||[],farm=farmItemsFromCraft(rs),L=[];
- L.push('CRAFT','', 'Ação: CRIAR / CONFIGURAR CRAFT DO '+f.group,'CDS Craft: [PREENCHER CDS]','Permissão: "'+f.group+'"','','Receitas do Craft:');
- if(!rs.length)L.push('- [SEM RECEITAS CADASTRADAS NO HIGH OS]');
- rs.forEach((x,i)=>{
-  L.push('- '+String(i+1).padStart(2,'0')+'. '+(x.nome||x.spawn||'Receita')+(x.spawn?' | Spawn: '+x.spawn:''));
-  L.push('  Receita: '+((x.insumos||[]).map(z=>(z.nome||z.spawn)+' ('+(z.spawn||'sem spawn')+') x'+(z.qtd||'?')).join(' + ')||'[SEM INSUMOS CADASTRADOS]'));
- });
- L.push('','ROTA / FARM','Ação: CONFIGURAR FARM DO '+f.group,'CDS para iniciar a rota: [PREENCHER CDS]','Permissão: "'+f.group+'"','','Itens que devem aparecer para o player ao iniciar a rota:');
- if(!farm.length)L.push('- [SEM ITENS DE FARM IDENTIFICADOS]');
- farm.forEach(x=>L.push('- '+(x.nome||x.spawn)+(x.spawn?' | Spawn: '+x.spawn:'')));
- return L;
-}
-function psRemoveProduct(f={}){
- const t=mergedTechProfile(f),L=['PRODUTO ANTIGO','',
-  '- Remover/desvincular o Craft atual do '+f.group+' deste QG.',
-  '- Remover/desvincular o blip de início da rota/farm atual do '+f.group+' deste QG.'];
- if(t.craft?.cds)L.push('- Craft atual: '+t.craft.cds);
- if(t.rota?.inicio||t.farm?.cds)L.push('- Farm/Rota atual: '+(t.rota?.inicio||t.farm?.cds));
- return L;
-}
-function psTelCreate(a,group,pending){
- const vals=[['CDS do Telão',a.cds],['Post-it do Meio do Telão',a.postit],['Caixa de Som 01',a.sons?.[0]],['Caixa de Som 02',a.sons?.[1]],['Caixa de Som 03',a.sons?.[2]],['Caixa de Som 04',a.sons?.[3]]];
- vals.forEach(x=>{if(!String(x[1]||'').trim())pending.push('Telão • '+x[0])});
- if(!a.modelo)pending.push('Telão • Prop');
- return ['TELÃO','Ação: CRIAR','Prop do Telão: '+(a.modelo||'[PREENCHER PROP DO TELÃO]')].concat(vals.map(x=>x[0]+': '+(x[1]||'[PREENCHER CDS]')),['Permissão: "'+group+'"']);
-}
-function psAmenityRequest(incoming={},destination={},inheritAll=false,pending=[]){
- const src=psAmenities(incoming),dst=psAmenities(destination),L=['ATUALIZAÇÃO DA PERMISSÃO DAS AMENIDADES ABAIXO',''];
- Object.keys(dst).forEach(k=>{
-  const d=dst[k],wants=inheritAll?d.on:src[k]?.on;
-  if(d.on&&wants){
-   if(d.kind==='GARAGE')L.push(d.label,'','CDS Blip: '+(d.blip||'[PREENCHER CDS]'),'CDS Spawn: '+(d.spawn||'[PREENCHER CDS]'),'','Permissão: "'+incoming.group+'"','');
-   else if(d.kind==='TELAO')L.push('Telão','','Ação: MANTER TELÃO EXISTENTE','Permissão: "'+incoming.group+'"','');
-   else L.push(d.label+' CDS: '+(d.cds||'[PREENCHER CDS]'),'','Permissão: "'+incoming.group+'"','');
-  }else if(d.on&&!wants){
-   if(d.kind==='TELAO')L.push('Telão','','Ação: REMOVER','Observação: Remover o telão existente in-game.','');
-   else L.push(d.label,'','Ação: REMOVER / DESVINCULAR DO QG','');
-  }
- });
- if(!inheritAll)Object.keys(src).forEach(k=>{
-  const s=src[k],d=dst[k];if(!s.on||d?.on)return;
-  if(s.kind==='TELAO'){L.push(...psTelCreate(s,incoming.group,pending),'');return}
-  if(s.kind==='GARAGE'){
-   pending.push(s.label+' • CDS Blip',s.label+' • CDS Spawn');
-   L.push(s.label,'','Ação: CRIAR','CDS Blip: [PREENCHER CDS]','CDS Spawn: [PREENCHER CDS]','','Permissão: "'+incoming.group+'"','');
-  }else{
-   pending.push(s.label+' • CDS');
-   L.push(s.label+' CDS: [PREENCHER CDS]','','Ação: CRIAR','Permissão: "'+incoming.group+'"','');
-  }
- });
- return L;
-}
-function buildProductSwapRequest(current={},incoming={},reason=''){
- const pending=[],two=psHasPhysical(incoming),L=['ASSUNTO: TROCA DE PRODUTO / GROUP','',
-  'QG atual: '+(current.qg||'SEM LOCAL'),
-  'Group atualmente no local: '+current.group,
-  'Group que vai ocupar o local: '+incoming.group,
-  'Produto/segmento que entra: '+(incoming.segmento||'—')+' • '+(incoming.produto||'—')];
- if(reason)L.push('Motivo: '+reason);
- L.push('','============================================================','',incoming.group+' → '+(current.qg||'QG ATUAL'),'',
-  ...psRemoveProduct(current),'',...psRecipes(incoming),'');
- pending.push('Craft '+incoming.group+' • CDS','Farm/Rota '+incoming.group+' • CDS de início');
- L.push(...psAmenityRequest(incoming,current,!two,pending));
- if(two){
-  L.push('============================================================','',current.group+' → '+incoming.qg,'',...psRemoveProduct(incoming),'',...psRecipes(current),'');
-  pending.push('Craft '+current.group+' • CDS','Farm/Rota '+current.group+' • CDS de início');
-  L.push(...psAmenityRequest(current,incoming,false,pending));
- }else{
-  L.push('============================================================','',current.group+' — RESULTADO APÓS EXECUÇÃO','',
-   '- O Group '+current.group+' ficará SEM QG.',
-   '- Não deverá permanecer Craft, Farm/Rota ou amenidade privada deste QG vinculada à permissão "'+current.group+'".',
-   '- Garagens públicas não entram na alteração e permanecem como estão.','');
- }
- L.push('============================================================','','VALIDAÇÃO FINAL','',
-  '- Garagens públicas: NÃO ALTERAR.',
-  '- Craft e Farm/Rota antigos saem do QG; entram os correspondentes ao Group que passa a ocupar o local.',
-  '- Conferir que todas as permissões privadas estejam vinculadas ao Group ocupante após a execução.',
-  '- Solicitação gerada com '+pending.length+' campo(s) pendente(s) para coleta/preenchimento.');
- return {text:L.filter((x,i,a)=>x!==''||a[i-1]!=='').join('\n'),pending};
-}
-function renderProductSwap(){
- const current=estado.faccoes.find(x=>x.group===($('#fGroup')?.value||'')),incoming=estado.faccoes.find(x=>x.group===($('#productSwapDestination')?.value||''));
- if(!current||!incoming)return;
- const audit=productSwapAuditData(),out=buildProductSwapRequest(current,incoming,audit.reason);
- const hist=buildProductSwapHistoryText(current,incoming,audit,out);
- if($('#productSwapHistoryText'))$('#productSwapHistoryText').value=hist;
- $('#productSwapRequestText').value=out.text;
- $('#productSwapSummary').innerHTML='<b>PRÉVIA</b><span>'+esc(incoming.group)+' → '+esc(current.qg||'QG ATUAL')+'</span>'+(psHasPhysical(incoming)?'<span>'+esc(current.group)+' → '+esc(incoming.qg)+'</span>':'<span>'+esc(current.group)+' → SEM QG</span>');
- $('#productSwapPending').innerHTML=out.pending.length?'<b>SOLICITAÇÃO GERADA • '+out.pending.length+' PENDÊNCIA(S)</b><span>'+out.pending.map(esc).join(' • ')+'</span>':'<b>SOLICITAÇÃO COMPLETA</b><span>Nenhuma CDS pendente.</span>';
-}
-function openProductSwap(){
- if(!isAdmin())return alert('Apenas ADMIN pode gerar troca de produto / Group.');
- const current=estado.faccoes.find(x=>x.group===($('#fGroup')?.value||''));if(!current)return;
- const sel=$('#productSwapDestination');if(!sel)return;
- sel.innerHTML=estado.faccoes.filter(x=>x.group!==current.group).map(x=>'<option value="'+esc(x.group)+'">'+esc(x.group)+' • '+esc(x.segmento||'—')+' • '+esc(x.qg||'SEM LOCAL')+'</option>').join('');
- $('#productSwapOrigin').textContent=current.group+' • '+(current.qg||'SEM LOCAL')+' • '+(current.faccao||'VAGO');
- $('#productSwapReason').value='';
- if($('#productSwapOriginType'))$('#productSwapOriginType').value='LOJA';
- if($('#productSwapAuthorizedBy'))$('#productSwapAuthorizedBy').value='';
- if($('#productSwapResponsible'))$('#productSwapResponsible').value=currentUser?.email||'';
- if($('#productSwapReference'))$('#productSwapReference').value='';
- $('#productSwapModal').classList.remove('hidden');renderProductSwap();
-}
-$('#productSwapBtn')?.addEventListener('click',openProductSwap);
-$('#productSwapDestination')?.addEventListener('change',renderProductSwap);
-['productSwapOriginType','productSwapAuthorizedBy','productSwapResponsible','productSwapReference','productSwapReason'].forEach(id=>$('#'+id)?.addEventListener('input',renderProductSwap));
-$('#productSwapRegenerate')?.addEventListener('click',renderProductSwap);
-$('#productSwapClose')?.addEventListener('click',()=>$('#productSwapModal')?.classList.add('hidden'));
-$('#productSwapCancel')?.addEventListener('click',()=>$('#productSwapModal')?.classList.add('hidden'));
 
-function productSwapAuditData(){
- return {
-  origin:$('#productSwapOriginType')?.value||'OUTRO',
-  authorizedBy:$('#productSwapAuthorizedBy')?.value.trim()||'',
-  responsible:$('#productSwapResponsible')?.value.trim()||currentUser?.email||'',
-  reference:$('#productSwapReference')?.value.trim()||'',
-  reason:$('#productSwapReason')?.value.trim()||''
- };
+// ===== HIGH OS V12.6 · TROCA DE GROUP (PERMISSÕES + CONFERÊNCIA DE AMENIDADES) =====
+/* ---------------------------------------------------------------------
+   Dois Groups trocam de LUGAR sem nenhum blip sair do lugar.
+
+   Exemplo: Drogas03 (Favela A, facção Peitanove) ⇄ Armas03 (Favela B).
+   Depois da troca, os blips da Favela A passam a ter permissão Armas03 e
+   os da Favela B passam a ter permissão Drogas03. O CRAFT da Favela A, que
+   produzia drogas, passa a produzir armas.
+
+   CAMADA 1 · TROCA BASE
+     Cada documento FICA com a identidade do Group (nome, segmento, produto,
+     receitas, métricas) e RECEBE o patrimônio físico do outro (QG, CDS de
+     todos os blips, estrutura V9 e legado).
+
+   CAMADA 2 · CONFERÊNCIA DE AMENIDADES (V12.6)
+     Amenidade COMPRADA pertence à FACÇÃO, não ao Group nem ao local.
+     O sistema compara origem × destino, amenidade por amenidade:
+       - a facção tinha comprado e no novo lugar não existe → IMPLANTAR
+       - era da facção e é vinculada ao Group (rota exclusiva, rádio,
+         VIP Org, chat, salário)                          → TRANSFERIR
+       - existe no novo lugar, mas foi comprada pela OUTRA facção
+                                                          → REMOVER
+         (quem faz o caminho inverso não herda o que o outro pagou)
+       - as duas facções compraram                        → MANTER
+     "Comprada" x "base do local" vem do Perfil Padrão de Entrega
+     (o que não está no plano padrão é compra da facção). Sem perfil
+     cadastrado, vale a lista padrão abaixo. O ADMIN pode corrigir clicando
+     na célula antes de confirmar.
+
+   Facção ocupante: escolha do ADMIN no modal
+     FICA NO LOCAL  → a facção continua na favela e é setada no outro Group
+     ACOMPANHA      → a facção continua no Group e muda de favela
+
+   Tudo é gravado num único writeBatch (atômico).
+   --------------------------------------------------------------------- */
+
+const TG_OCUPANTE=['faccao','lider','staff','dataEntrega','status','observacoes','ocupacaoAtual'];
+const TG_FISICO_TOPO=['qg','cds','nomeLocal','nomeQG','perfilOperacional','perfilBase','imagemAnuncio','semCraft'];
+// 'radio' saiu desta lista na V12.6: rádio exclusiva é permissão do Group, não blip
+const TG_FISICO_BENEF=['garagemVip','garagemVipBlip','garagemVipSpawn','garagemVipVeiculos','lojaRoupas','barbearia','tatuagem','shopExclusivo','bau','bauCapacidade','arena','farm','farmAfk','craft','telao','telaoNome','telaoPostit','telaoCds','garagemPublica','garagemPublicaBlip','garagemPublicaSpawn','heliponto','helipontoBlip','helipontoSpawn','coordenadaBase'];
+const TG_ROTULO_TIPO={QG:'QG / Local',CRAFT:'Craft',FARM:'Início da rota / Farm',LOJA:'Shop Exclusivo','BAÚ':'Baú','RÁDIO':'Rádio Exclusivo',AMENIDADE:'Amenidade',GARAGEM:'Garagem',HELIPONTO:'Heliponto',BLINDADO:'Garagem de Blindados','TELÃO':'Telão',OUTRO:'Outro'};
+const TG_ORDEM_TIPO=['QG','CRAFT','GARAGEM','BLINDADO','HELIPONTO','AMENIDADE','LOJA','RÁDIO','TELÃO','BAÚ','FARM','OUTRO'];
+
+/* Sem Perfil Padrão de Entrega cadastrado, estas contam como COMPRADAS. */
+const TG_COMPRADAS_PADRAO=new Set(['farmAfk','rotaExclusiva','telao','arena','shopExclusivo','radio']);
+
+const tgNorm=v=>alvesNorm(String(v||''));
+const tgRowNome=re=>r=>re.test(tgNorm(r.nome));
+/* Cada amenidade: onde mora (LOCAL = blip | GROUP = permissão do Group),
+   como detectar na estrutura, e quais campos limpar ao remover. */
+const TG_AMENIDADES=[
+ // Farm AFK: blip onde o player, parado, recebe os insumos das receitas do CRAFT.
+ // Ele lê AUTOMATICAMENTE a receita do Group em que está implantado: não há
+ // insumo para configurar. Na troca só muda a permissão; os itens seguem a
+ // receita do novo Group sozinhos.
+ {k:'farmAfk',rotulo:'Farm AFK',vinc:'LOCAL',insumos:true,benef:['farmAfk'],linha:r=>/afk/.test(tgNorm(r.nome))},
+ {k:'telao',rotulo:'Telão',vinc:'LOCAL',benef:['telao','telaoNome','telaoPostit','telaoCds'],linha:r=>r.tipo==='TELÃO',op:'telao'},
+ {k:'arena',rotulo:'Arena',vinc:'LOCAL',benef:['arena'],linha:r=>r.tipo==='AMENIDADE'&&/arena/.test(tgNorm(r.nome)),op:'arena',fonte:['ARENA']},
+ {k:'shopExclusivo',rotulo:'Shop Exclusivo',vinc:'LOCAL',benef:['shopExclusivo'],linha:r=>r.tipo==='LOJA',op:'lojaFac',fonte:['SHOP EXCLUSIVO','SHOP DELUXE'],extra:['shopDeluxe']},
+ {k:'heliponto',rotulo:'Heliponto',vinc:'LOCAL',benef:['heliponto','helipontoBlip','helipontoSpawn'],linha:r=>r.tipo==='HELIPONTO',opLista:'helipontos'},
+ {k:'blindados',rotulo:'Garagem de Blindados',vinc:'LOCAL',benef:[],linha:r=>r.tipo==='BLINDADO',op:'blindados'},
+ {k:'garagemVip',rotulo:'Garagem da Facção / VIP',vinc:'LOCAL',benef:['garagemVip','garagemVipBlip','garagemVipSpawn','garagemVipVeiculos'],linha:r=>r.tipo==='GARAGEM'&&/vip|fac|servi|deluxe/.test(tgNorm(r.nome)),opLista:'garagens',opFiltro:g=>g.tipo!=='PUBLICA'&&g.tipo!=='PUBLICA_2',fonte:['GARAGEM VIP FAC','GARAGEM DELUXE'],extra:['garagemDeluxe']},
+ {k:'garagemPublica',rotulo:'Garagem Pública',vinc:'LOCAL',benef:['garagemPublica','garagemPublicaBlip','garagemPublicaSpawn'],linha:r=>r.tipo==='GARAGEM'&&/publica/.test(tgNorm(r.nome)),opLista:'garagens',opFiltro:g=>g.tipo==='PUBLICA'||g.tipo==='PUBLICA_2',fonte:['GARAGEM PUBLICA']},
+ {k:'barbearia',rotulo:'Barbearia',vinc:'LOCAL',benef:['barbearia'],linha:r=>r.tipo==='AMENIDADE'&&/barbear/.test(tgNorm(r.nome)),op:'barbearia',fonte:['BARBEARIA']},
+ {k:'tatuagem',rotulo:'Tatuagem',vinc:'LOCAL',benef:['tatuagem'],linha:r=>r.tipo==='AMENIDADE'&&/tatua/.test(tgNorm(r.nome)),op:'tatuagem',fonte:['TATUAGEM']},
+ {k:'lojaRoupas',rotulo:'Loja de Roupas',vinc:'LOCAL',benef:['lojaRoupas'],linha:r=>r.tipo==='AMENIDADE'&&/roupa/.test(tgNorm(r.nome)),op:'roupas',fonte:['LOJA DE ROUPAS']},
+ {k:'rotaExclusiva',rotulo:'Rota Exclusiva',vinc:'GROUP'},
+ {k:'radio',rotulo:'Rádio Exclusivo',vinc:'GROUP',linha:r=>r.tipo==='RÁDIO'},
+ {k:'vipOrg',rotulo:'VIP Org',vinc:'GROUP'},
+ {k:'chatFaccao',rotulo:'Chat da Facção',vinc:'GROUP'},
+ {k:'salario',rotulo:'Salário',vinc:'GROUP'}
+];
+const TG_AMEN=Object.fromEntries(TG_AMENIDADES.map(a=>[a.k,a]));
+
+let tgModo='FICA';            // FICA = facção fica no local | ACOMPANHA = facção acompanha o Group
+let tgUltimoTexto='';
+let tgPosse={A:{},B:{},par:''};   // correções do ADMIN: true = comprada pela facção
+
+function tgLocalDe(f){return f?.localDe||f?.group||''}
+function tgProduto(f){return String(f?.produto||f?.segmento||'—').trim()||'—'}
+function tgLocalNome(f,cat){return String(f?.qg||cat.find(r=>r.tipo==='QG'&&r.nome)?.nome||'SEM LOCAL').trim()}
+function tgFaccaoNome(f){return String(f?.faccao||'').trim()}
+/* Insumos que o Farm AFK entrega = insumos das receitas do craft do Group. */
+function tgInsumos(f,max=99){
+ const it=(mergedTechProfile(f).farm?.itens||[]).map(x=>x.nome||x.spawn).filter(Boolean);
+ const u=[...new Set(it)];
+ return u.length?u.slice(0,max).join(', ')+(u.length>max?` +${u.length-max}`:''):'sem receitas cadastradas';
 }
-function productSwapOriginLabel(v=''){
- return ({LOJA:'Compra / Loja',META:'Meta / Benefício',ADMIN:'Autorização Administrativa',EVENTO:'Premiação / Evento',CORRECAO:'Correção Operacional',OUTRO:'Outro'})[v]||v;
+
+/* Estrutura efetiva do Group: V9 quando existe, legado consolidado quando não. */
+function tgCatalogo(f){
+ const t=mergedTechProfile(f);
+ return v9CleanRows(gsMergeLegacy(f,t.estruturaCatalogo||[]));
 }
-function buildProductSwapHistoryText(current={},incoming={},audit={},out={}){
- const two=psHasPhysical(incoming),parts=[
-  'Troca de Produto / Group registrada no High OS.',
-  'Motivo/origem: '+productSwapOriginLabel(audit.origin)+'.',
-  audit.reason?'Justificativa: '+audit.reason+'.':'',
-  audit.authorizedBy?'Autorizado por: '+audit.authorizedBy+'.':'',
-  audit.reference?'Referência: '+audit.reference+'.':'',
-  'Movimentação: '+incoming.group+' passou a ser solicitado para '+(current.qg||'QG atual')+'.',
-  two?(current.group+' passou a ser solicitado para '+incoming.qg+'.'):(current.group+' ficará sem QG após a execução.'),
-  'Produto/Craft/Farm: remover os vínculos antigos de cada QG e configurar os correspondentes ao Group que passa a ocupá-lo.',
-  'Amenidades privadas: permissões atualizadas, criadas ou removidas conforme comparação dos perfis. Garagens públicas não sofrem alteração.',
-  out.pending?.length?('Pendências de CDS na solicitação: '+out.pending.join('; ')+'.'):'Solicitação sem pendências de CDS identificadas.'
- ];
- return parts.filter(Boolean).join('\n');
+
+/* ---------- detecção de amenidade ---------- */
+function tgRota(f){const t=mergedTechProfile(f);return {nome:t.rota?.nome||'',pontos:String(t.rota?.pontos||f?.beneficios?.rotaBlips||'').trim()}}
+function tgTem(f,k,cat=null){
+ const a=TG_AMEN[k],b=f?.beneficios||{};
+ if(k==='rotaExclusiva')return !!(b.rotaExclusiva||tgRota(f).pontos);
+ if(k==='vipOrg'||k==='chatFaccao')return !!b[k];
+ if(k==='salario')return !!String(b.salario||'').trim();
+ if(k==='radio'&&String(b.radio||'').trim())return true;
+ if((a.benef||[]).some(x=>typeof b[x]==='string'?b[x].trim():false))return true;
+ if(a.linha)return (cat||tgCatalogo(f)).some(a.linha);
+ return false;
 }
-async function registerProductSwapHistory(){
- if(!isAdmin())return alert('Apenas ADMIN pode registrar esta operação.');
- const current=estado.faccoes.find(x=>x.group===($('#fGroup')?.value||'')),incoming=estado.faccoes.find(x=>x.group===($('#productSwapDestination')?.value||''));
- if(!current||!incoming)return;
- const audit=productSwapAuditData();
- if(!audit.reason)return alert('Informe a justificativa da troca.');
- if(!audit.authorizedBy)return alert('Informe quem autorizou a troca.');
- const out=buildProductSwapRequest(current,incoming,audit.reason),historyText=buildProductSwapHistoryText(current,incoming,audit,out);
- if(!confirm('Registrar esta troca no Histórico? Isso registra a autorização e a solicitação, mas não executa a troca no Firestore.'))return;
- try{
-  await addDoc(histCol,{
-   sessionId:currentSessionId||'',
-   tipo:'TROCA_PRODUTO_GROUP',
-   descricao:historyText,
-   resumo:historyText,
-   group:current.group,
-   groupDestino:incoming.group,
-   qg:current.qg||'',
-   qgDestino:incoming.qg||'',
-   faccao:current.faccao||'',
-   faccaoDestino:incoming.faccao||'',
-   produtoAntes:current.produto||'',
-   produtoDepois:incoming.produto||'',
-   segmentoAntes:current.segmento||'',
-   segmentoDepois:incoming.segmento||'',
-   origemTroca:audit.origin,
-   origemTrocaLabel:productSwapOriginLabel(audit.origin),
-   justificativa:audit.reason,
-   autorizadoPor:audit.authorizedBy,
-   responsavel:audit.responsible,
-   referencia:audit.reference,
-   solicitacaoTecnica:out.text,
-   pendencias:out.pending||[],
-   status:'SOLICITADO',
-   usuario:currentUser?.email||'',
-   data:serverTimestamp()
+function tgDetalhe(f,k,cat=null){
+ const a=TG_AMEN[k],b=f?.beneficios||{};
+ if(k==='rotaExclusiva'){const r=tgRota(f);const n=routePointList(r.pontos).length;return `${r.nome||'Rota exclusiva'}${n?` • ${n} CDS`:''}`}
+ if(k==='vipOrg'||k==='chatFaccao')return b[k]?'SIM':'';
+ if(k==='salario')return b.salario?`${b.salario} / ${b.salarioMinutos||40} min`:'';
+ if(k==='radio'&&b.radio)return String(b.radio);
+ const rows=a.linha?(cat||tgCatalogo(f)).filter(a.linha):[];
+ if(rows.length)return rows.map(r=>[r.cds,r.secondary].filter(Boolean).map(v=>gsCoord(v)?fmtCds(v):v).join(' / ')).filter(Boolean).join(' • ');
+ const v=(a.benef||[]).map(x=>b[x]).find(x=>typeof x==='string'&&x.trim());
+ return v?(gsCoord(v)?fmtCds(v):v):'';
+}
+/* Comprada pela facção? Perfil Padrão de Entrega manda; sem ele, lista padrão. */
+function tgCompradaPadrao(f,k){
+ const pad=f?.perfilEntrega?.beneficiosPadrao;
+ const conhecida=INSTALLATIONS.some(([x])=>x===k);
+ if(Array.isArray(pad)&&pad.length&&conhecida)return !pad.includes(k);
+ return TG_COMPRADAS_PADRAO.has(k);
+}
+function tgComprada(lado,f,k){
+ const o=tgPosse[lado]||{};
+ return Object.prototype.hasOwnProperty.call(o,k)?!!o[k]:tgCompradaPadrao(f,k);
+}
+
+/* ---------- camada 1: troca base ---------- */
+function tgExtrairFisico(f){
+ const t=mergedTechProfile(f),cat=tgCatalogo(f),b=f.beneficios||{};
+ const top={};
+ TG_FISICO_TOPO.forEach(k=>{top[k]=f[k]===undefined?undefined:clonePlain(f[k])});
+ top.localDe=tgLocalDe(f);
+ top.perfilFonte=clonePlain(f.perfilFonte||GROUP_PROFILE_SOURCE?.[tgLocalDe(f)]||null)||undefined;
+ const benef={};
+ TG_FISICO_BENEF.forEach(k=>{benef[k]=b[k]});
+ return {top,benef,cat:cat.filter(r=>r.tipo!=='RÁDIO'),craftNome:t.craft?.nome||'',
+  tec:{craftCds:t.craft?.cds||'',farmCds:t.farm?.cds||'',rotaInicio:t.rota?.inicio||'',
+       estruturaExtra:clonePlain(t.estruturaExtra||{}),operacional:clonePlain(t.operacional||{})}};
+}
+
+function tgAplicarFisico(grupo,fis){
+ const r=clonePlain(grupo)||{};
+ Object.keys(r).forEach(k=>{if(k.startsWith('__'))delete r[k]});
+ /* o nome do CRAFT é o produto: o blip vem do outro local, mas passa a levar
+    o nome do craft deste Group (senão o legado recria um craft duplicado) */
+ const meuCraft=mergedTechProfile(grupo).craft?.nome||'';
+ const meuRadio=tgCatalogo(grupo).filter(x=>x.tipo==='RÁDIO');   // rádio fica com o Group
+ const cat=[...fis.cat.map(x=>x.tipo==='CRAFT'&&meuCraft?{...x,nome:meuCraft}:{...x}),...meuRadio];
+ Object.entries(fis.top).forEach(([k,v])=>{if(v===undefined||v===null)delete r[k];else r[k]=clonePlain(v)});
+ r.estruturaCatalogoV9=cat;
+ r.beneficios={...(r.beneficios||{})};
+ Object.entries(fis.benef).forEach(([k,v])=>{if(v===undefined)delete r.beneficios[k];else r.beneficios[k]=v});
+ const p=clonePlain(r.perfilTecnico||{})||{};
+ p.craft={...(p.craft||{}),cds:fis.tec.craftCds};
+ p.farm={...(p.farm||{}),cds:fis.tec.farmCds};
+ p.rota={...(p.rota||{}),inicio:fis.tec.rotaInicio};
+ p.estruturaExtra=fis.tec.estruturaExtra;
+ p.operacional=fis.tec.operacional;
+ p.estruturaCatalogo=clonePlain(cat);
+ r.perfilTecnico=p;
+ return r;
+}
+
+function tgMontarBase(a,b,modo){
+ const fa=tgExtrairFisico(a),fb=tgExtrairFisico(b);
+ const na=tgAplicarFisico(a,fb),nb=tgAplicarFisico(b,fa);
+ if(modo==='FICA'){
+  TG_OCUPANTE.forEach(k=>{
+   if(b[k]===undefined)delete na[k];else na[k]=clonePlain(b[k]);
+   if(a[k]===undefined)delete nb[k];else nb[k]=clonePlain(a[k]);
   });
-  await archiveTechnicalRequest({tipo:'TROCA_PRODUTO_GROUP',titulo:'Troca de Produto / Group',texto:out.text},{group:current.group,faccao:current.faccao||''},'TROCA_PRODUTO_GROUP');
-  if($('#productSwapHistoryText'))$('#productSwapHistoryText').value=historyText;
-  renderHistory();
-  alert('Troca registrada no histórico como SOLICITADA. Nenhuma alteração de Group/QG foi executada.');
- }catch(e){alert('Erro ao registrar a troca: '+e.message)}
+ }
+ [na,nb].forEach(x=>{x.status=String(x.faccao||'').trim()?'ATIVA':'INATIVA'});
+ return {na,nb};
 }
-$('#productSwapRegister')?.addEventListener('click',registerProductSwapHistory);
-$('#productSwapCopy')?.addEventListener('click',async()=>{
- const ta=$('#productSwapRequestText'),b=$('#productSwapCopy');if(!ta?.value)return;
- try{await navigator.clipboard.writeText(ta.value)}catch(e){ta.select();document.execCommand('copy')}
- const old=b.textContent;b.textContent='COPIADO ✓';setTimeout(()=>b.textContent=old,1300);
-});
+
+/* ---------- camada 2: conferência de amenidades ---------- */
+/* Para cada facção: de onde vem cada amenidade que ela vai usar depois da
+   troca? Se vem do próprio lugar/Group dela, nada muda. Se vem do outro
+   lado, compara o que ela comprou com o que o outro lado tem. */
+function tgComparar(a,b,modo){
+ const cat={A:tgCatalogo(a),B:tgCatalogo(b)},doc={A:a,B:b};
+ const fim=modo==='FICA'?{A:'nb',B:'na'}:{A:'na',B:'nb'};
+ const grupoFim=l=>fim[l]==='na'?a.group:b.group;
+ // documento antigo de onde vem o LOCAL e o GROUP de cada documento novo
+ const origemLocal=l=>fim[l]==='nb'?'A':'B', origemGroup=l=>fim[l]==='na'?'A':'B';
+ const linhas=[];
+ TG_AMENIDADES.forEach(am=>{
+  const tem={A:tgTem(a,am.k,cat.A),B:tgTem(b,am.k,cat.B)};
+  if(!tem.A&&!tem.B)return;
+  const comp={A:tem.A&&tgComprada('A',a,am.k),B:tem.B&&tgComprada('B',b,am.k)};
+  const acoes=[];
+  ['A','B'].forEach(l=>{
+   const o=l==='A'?'B':'A',own=doc[l],fac=tgFaccaoNome(own);
+   const origem=am.vinc==='LOCAL'?origemLocal(l):origemGroup(l);
+   const dono=fac&&comp[l];                    // a facção comprou
+   const base={lado:l,doc:fim[l],grupo:grupoFim(l),faccao:fac,k:am.k,rotulo:am.rotulo,vinc:am.vinc};
+   if(am.insumos){const idFim=grupoFim(l)===a.group?a:b;base.insumosAntes=tgInsumos(own);base.insumosDepois=tgInsumos(idFim)}
+   if(origem===l){
+    /* continua usando o que já era seu. Se foi comprado e a permissão muda
+       de Group (blip no local com a facção ficando), a efetivação vai
+       explícita na solicitação. */
+    if(dono&&own.group!==grupoFim(l))acoes.push({...base,acao:'EFETIVAR',de:own.group,detalhe:tgDetalhe(own,am.k,cat[l])});
+    return;
+   }
+   if(dono&&am.vinc==='GROUP')acoes.push({...base,acao:'TRANSFERIR',de:own.group,detalhe:tgDetalhe(own,am.k,cat[l])});
+   else if(dono&&!tem[o])acoes.push({...base,acao:'IMPLANTAR',de:own.group,detalhe:tgDetalhe(own,am.k,cat[l])});
+   else if(dono&&tem[o])acoes.push({...base,acao:'MANTER',detalhe:'as duas facções possuem'});
+   else if(tem[o]&&comp[o])acoes.push({...base,acao:'REMOVER',dono:tgFaccaoNome(doc[o])||doc[o].group,detalhe:tgDetalhe(doc[o],am.k,cat[o])});
+  });
+  linhas.push({k:am.k,rotulo:am.rotulo,vinc:am.vinc,tem,comp,det:{A:tgDetalhe(a,am.k,cat.A),B:tgDetalhe(b,am.k,cat.B)},acoes});
+ });
+ return linhas;
+}
+
+function tgLimparLocal(r,am){
+ r.beneficios={...(r.beneficios||{})};
+ (am.benef||[]).forEach(x=>{r.beneficios[x]=typeof r.beneficios[x]==='boolean'?false:''});
+ const tirar=x=>!am.linha(x);
+ r.estruturaCatalogoV9=(r.estruturaCatalogoV9||[]).filter(tirar);
+ const p=r.perfilTecnico=clonePlain(r.perfilTecnico||{})||{};
+ p.estruturaCatalogo=(p.estruturaCatalogo||[]).filter(tirar);
+ p.operacional=p.operacional||{};
+ if(am.op)p.operacional[am.op]={...(p.operacional[am.op]||{}),cds:'',blip:'',spawn:'',ativo:false,postit:'',sons:[]};
+ if(am.opLista)p.operacional[am.opLista]=(p.operacional[am.opLista]||[]).filter(g=>am.opFiltro?!am.opFiltro(g):false);
+ if(am.extra)p.estruturaExtra={...(p.estruturaExtra||{}),...Object.fromEntries(am.extra.map(x=>[x,'']))};
+ if(am.fonte&&r.perfilFonte)r.perfilFonte={...r.perfilFonte,...Object.fromEntries(am.fonte.map(x=>[x,'']))};
+}
+function tgAplicarGroup(r,am,origem,acao){
+ const b=r.beneficios={...(r.beneficios||{})},ob=origem?.beneficios||{};
+ const p=r.perfilTecnico=clonePlain(r.perfilTecnico||{})||{};
+ const tirarRadio=()=>{r.estruturaCatalogoV9=(r.estruturaCatalogoV9||[]).filter(x=>x.tipo!=='RÁDIO');p.estruturaCatalogo=(p.estruturaCatalogo||[]).filter(x=>x.tipo!=='RÁDIO')};
+ if(am.k==='rotaExclusiva'){
+  if(acao==='REMOVER'){b.rotaExclusiva=false;b.rotaBlips='';p.rota={...(p.rota||{}),nome:'',pontos:''};return}
+  const ro=tgRota(origem);
+  b.rotaExclusiva=true;b.rotaBlips=ro.pontos;
+  p.rota={...(p.rota||{}),nome:`RotaExclusiva${r.group}`,pontos:ro.pontos,origem:'TROCA_GROUP',status:'PENDENTE'};
+  return;
+ }
+ if(am.k==='radio'){
+  tirarRadio();
+  if(acao==='REMOVER'){b.radio='';return}
+  b.radio=ob.radio||'';
+  const rows=tgCatalogo(origem).filter(x=>x.tipo==='RÁDIO');
+  r.estruturaCatalogoV9=[...r.estruturaCatalogoV9,...rows];p.estruturaCatalogo=[...(p.estruturaCatalogo||[]),...clonePlain(rows)];
+  return;
+ }
+ if(am.k==='vipOrg'||am.k==='chatFaccao'){b[am.k]=acao!=='REMOVER';return}
+ if(am.k==='salario'){if(acao==='REMOVER'){b.salario='';b.salarioMinutos=''}else{b.salario=ob.salario||'';b.salarioMinutos=ob.salarioMinutos||''}}
+}
+
+function tgMontar(a,b,modo){
+ const {na,nb}=tgMontarBase(a,b,modo);
+ const cmp=tgComparar(a,b,modo),novo={na,nb},antigo={A:a,B:b};
+ const pend={na:[],nb:[]};
+ cmp.forEach(l=>l.acoes.forEach(x=>{
+  const r=novo[x.doc],am=TG_AMEN[x.k];
+  if(x.acao==='REMOVER'){am.vinc==='LOCAL'?tgLimparLocal(r,am):tgAplicarGroup(r,am,null,'REMOVER')}
+  else if(x.acao==='TRANSFERIR')tgAplicarGroup(r,am,antigo[x.lado],'TRANSFERIR');
+  if(x.acao!=='MANTER')
+   pend[x.doc].push({acao:x.acao,amenidade:x.k,rotulo:x.rotulo,faccao:x.faccao||'',de:x.de||'',dono:x.dono||'',detalhe:x.detalhe||'',status:'PENDENTE'});
+ }));
+ ['na','nb'].forEach(d=>{if(pend[d].length)novo[d].pendenciasTroca=pend[d];else delete novo[d].pendenciasTroca});
+ return {na,nb,cmp};
+}
+
+/* ---------- texto da solicitação ---------- */
+function tgLinhasLocal(cat,produtoAntes,produtoDepois,fDe=null,fPara=null){
+ const ord=t=>{const i=TG_ORDEM_TIPO.indexOf(t);return i<0?99:i};
+ return [...cat].filter(r=>r.tipo!=='RÁDIO').sort((x,y)=>ord(x.tipo)-ord(y.tipo)).map(r=>{
+  const rot=r.tipo==='AMENIDADE'||r.tipo==='GARAGEM'||r.tipo==='FARM'?(r.nome||TG_ROTULO_TIPO[r.tipo]):(TG_ROTULO_TIPO[r.tipo]||r.tipo);
+  const cds=[r.cds,r.secondary].filter(Boolean).map(v=>fmtCds(v)).join(' / ')||'{CDS}';
+  const afk=r.tipo==='FARM'&&/afk/.test(tgNorm(r.nome))&&fDe&&fPara;
+  const extra=r.tipo==='CRAFT'?` — produto: ${produtoAntes} → ${produtoDepois}`:afk?(tgInsumos(fDe)===tgInsumos(fPara)?` — segue a receita do ${fPara.group}: ${tgInsumos(fPara)}`:` — passa a farmar automaticamente a receita do ${fPara.group}: ${tgInsumos(fPara)} (antes: ${tgInsumos(fDe)})`):(r.tipo==='QG'&&r.nome?` — ${r.nome}`:'');
+  return {tipo:r.tipo,rotulo:rot,cds,extra,sai:!!r.__sai};
+ });
+}
+function tgTextoAcao(x){
+ const det=x.detalhe&&x.detalhe!=='SIM'?x.detalhe:'';
+ const ins=x.insumosDepois?(x.insumosAntes&&x.insumosAntes!==x.insumosDepois?` Passa a farmar automaticamente a receita do ${x.grupo} (${x.insumosDepois}) no lugar de ${x.insumosAntes}.`:` Farma automaticamente a receita do ${x.grupo} (${x.insumosDepois}).`):'';
+ if(x.acao==='EFETIVAR')return `- EFETIVAR ${x.rotulo} no ${x.grupo} — compra da ${x.faccao}; o blip continua em ${det||'—'}, só a permissão muda (${x.de} → ${x.grupo}).${ins}`;
+ if(x.acao==='IMPLANTAR')return `- IMPLANTAR ${x.rotulo} no ${x.grupo} — compra da ${x.faccao}; no local anterior (${x.de}) ficava em ${det||'—'}. CDS no novo local: a definir.${ins}`;
+ if(x.acao==='TRANSFERIR'){
+  if(x.k==='rotaExclusiva'){const n=(String(x.detalhe).match(/(\d+) CDS/)||[])[1];return `- TRANSFERIR Rota Exclusiva da ${x.faccao}: RotaExclusiva${x.de} → RotaExclusiva${x.grupo}, mesmos pontos${n?` (${n} CDS)`:''}.`}
+  return `- TRANSFERIR ${x.rotulo} da ${x.faccao}: sai do ${x.de} e passa para o ${x.grupo}${det?` (${det})`:''}.`;
+ }
+ if(x.acao==='REMOVER')return `- REMOVER ${x.rotulo} do ${x.grupo}${det?` — ${det}`:''} — compra da ${x.dono}, não acompanha a troca.`;
+ return '';
+}
+function tgTexto(a,b,modo,motivo,cmp=null){
+ cmp=cmp||tgComparar(a,b,modo);
+ const ca=tgCatalogo(a),cb=tgCatalogo(b);
+ const la=tgLocalNome(a,ca),lb=tgLocalNome(b,cb);
+ const L=[`Assunto: Troca de Group — ${a.group} ⇄ ${b.group}`,'','Solicitação:','',
+  `Trocar entre si as permissões dos Groups ${a.group} e ${b.group}.`,
+  'Nenhum blip muda de lugar: apenas a permissão de cada um.',''];
+ const removidos=cmp.flatMap(l=>l.acoes).filter(x=>x.acao==='REMOVER'&&x.vinc==='LOCAL');
+ const bloco=(loc,de,para,cat,prodDe,prodPara,fDe,fPara)=>{
+  L.push(`📍 ${loc} — hoje ${de} → passa a ser ${para}`);
+  const sai=removidos.filter(x=>x.grupo===para).map(x=>TG_AMEN[x.k]);
+  const linhas=tgLinhasLocal(cat.map(r=>({...r,__sai:sai.some(am=>am.linha&&am.linha(r))})),prodDe,prodPara,fDe,fPara);
+  if(!linhas.length)L.push('- Nenhuma estrutura cadastrada neste local.');
+  linhas.forEach(x=>L.push(`- ${x.rotulo}: ${x.cds}${x.sai?' — NÃO passa para o '+para+' (ver conferência)':x.extra}`));
+  L.push(`- Permissão: ${de} → ${para}`,'');
+ };
+ bloco(la,a.group,b.group,ca,tgProduto(a),tgProduto(b),a,b);
+ bloco(lb,b.group,a.group,cb,tgProduto(b),tgProduto(a),b,a);
+ const acoes=cmp.flatMap(l=>l.acoes).filter(x=>x.acao!=='MANTER');
+ if(acoes.length){
+  L.push('Conferência de amenidades (origem × destino):');
+  [a.group,b.group].forEach(g=>{
+   const xs=acoes.filter(x=>x.grupo===g);if(!xs.length)return;
+   const fac=xs.find(x=>x.faccao)?.faccao;
+   L.push(`▸ ${g}${fac?` (${fac})`:''}`,...xs.map(tgTextoAcao));
+  });
+  L.push('');
+ }
+ const fac=[];
+ if(modo==='FICA'){
+  if(a.faccao)fac.push(`- ${a.faccao}${a.lider?` (líder ${a.lider})`:''}: sai do ${a.group} e passa para o ${b.group} — continua em ${la}.`);
+  if(b.faccao)fac.push(`- ${b.faccao}${b.lider?` (líder ${b.lider})`:''}: sai do ${b.group} e passa para o ${a.group} — continua em ${lb}.`);
+ }else{
+  if(a.faccao)fac.push(`- ${a.faccao}: continua no ${a.group} e passa a usar ${lb}.`);
+  if(b.faccao)fac.push(`- ${b.faccao}: continua no ${b.group} e passa a usar ${la}.`);
+ }
+ if(fac.length)L.push(modo==='FICA'?'Setagem das facções:':'Facções:',...fac,'');
+ const vig=tgVigenciaTexto();
+ if(modo==='FICA'&&vig)L.push('Métricas:',...[a,b].filter(f=>f.faccao).map(f=>`- ${f.faccao}: leitura pelo ${f.group} até ${tgDiaAnterior(vig)}; a partir de ${vig}, pelo ${f.group===a.group?b.group:a.group}.`),'');
+ if(motivo)L.push(`- Motivo: ${motivo}`);
+ return L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+
+/* ---------- interface ---------- */
+function tgModal(){
+ let m=$('#tgModal');if(m)return m;
+ m=document.createElement('div');m.id='tgModal';m.className='modal hidden';
+ m.innerHTML=`<div class="modal-card tg-card"><button type="button" class="modal-x" id="tgClose" aria-label="Fechar">×</button>
+  <div class="eyebrow">GESTÃO DE GROUPS • OPERAÇÃO AUDITADA</div><h2>TROCA DE GROUP</h2>
+  <p class="page-subtitle">Os dois Groups trocam de lugar. Nenhum blip é movido: as permissões de cada local passam para o outro Group e o craft passa a produzir o produto do novo Group. Amenidades compradas acompanham a facção que pagou por elas.</p>
+  <div class="tg-pick"><label>GROUP DE ORIGEM<select id="tgOrigem"></select></label><div class="tg-arrow">⇄</div><label>GROUP DE DESTINO<select id="tgDestino"></select></label></div>
+  <div class="tg-modo" role="radiogroup" aria-label="Facção ocupante">
+   <label><input type="radio" name="tgModo" value="FICA" checked><span><b>FACÇÃO FICA NO LOCAL</b><small>Cada facção continua na sua favela e é setada no outro Group (troca de produto).</small></span></label>
+   <label><input type="radio" name="tgModo" value="ACOMPANHA"><span><b>FACÇÃO ACOMPANHA O GROUP</b><small>Cada facção continua no seu Group e passa a usar a outra favela.</small></span></label>
+  </div>
+  <div id="tgMetricas" class="tg-metricas"><label>MÉTRICAS PELO NOVO GROUP A PARTIR DE<input type="date" id="tgVigencia"></label><p id="tgMetricasTexto"></p></div>
+  <div id="tgAmenidades" class="tg-amen"></div>
+  <details class="tg-detalhe"><summary>Blips de cada local</summary><div id="tgPreview" class="tg-preview"></div></details>
+  <label class="tg-motivo">Motivo<textarea id="tgMotivo" rows="2" placeholder="Ex.: troca de produto aprovada em reunião da Cúpula"></textarea></label>
+  <div id="tgPronto" class="tg-pronto hidden"><div class="tg-pronto-head"><b>✓ TROCA REGISTRADA</b><button type="button" class="mini-btn" id="tgCopiar">COPIAR SOLICITAÇÃO</button></div><pre id="tgTextoFinal"></pre><small>A solicitação também ficou salva como PENDENTE nas solicitações do Group de origem.</small></div>
+  <div class="modal-actions"><button type="button" class="btn-secondary" id="tgCancelar">CANCELAR</button><button type="button" class="btn-primary compact" id="tgConfirmar">CONFIRMAR TROCA</button></div>
+ </div>`;
+ document.body.appendChild(m);
+ const fechar=()=>m.classList.add('hidden');
+ $('#tgClose').onclick=fechar;$('#tgCancelar').onclick=fechar;
+ m.addEventListener('click',e=>{if(e.target===m)fechar()});
+ $('#tgOrigem').onchange=tgPrevia;$('#tgDestino').onchange=tgPrevia;$('#tgVigencia').onchange=tgPrevia;
+ m.querySelectorAll('input[name="tgModo"]').forEach(r=>r.onchange=()=>{tgModo=r.value;tgPrevia()});
+ $('#tgConfirmar').onclick=tgConfirmar;
+ $('#tgCopiar').onclick=e=>copyText(tgUltimoTexto,e.currentTarget);
+ return m;
+}
+
+function tgOpcoes(sel,atual,excluir=''){
+ const lista=estado.faccoes.filter(f=>!f.removido&&f.group!==excluir).sort((x,y)=>String(x.group).localeCompare(String(y.group),'pt-BR',{numeric:true}));
+ sel.innerHTML='<option value="">Selecione...</option>'+lista.map(f=>`<option value="${esc(f.group)}" ${f.group===atual?'selected':''}>${esc(f.group)} • ${esc(f.qg||'SEM LOCAL')} • ${esc(f.faccao||'VAGO')}</option>`).join('');
+}
+
+function tgAbrir(origem=''){
+ if(!isAdmin())return alert('Apenas ADMIN pode executar a Troca de Group.');
+ const m=tgModal();
+ tgModo='FICA';m.querySelector('input[name="tgModo"][value="FICA"]').checked=true;
+ tgPosse={A:{},B:{},par:''};
+ tgOpcoes($('#tgOrigem'),origem);tgOpcoes($('#tgDestino'),'',origem);
+ $('#tgMotivo').value='';$('#tgPronto').classList.add('hidden');
+ $('#tgVigencia').value=tgHojeIso();
+ $('#tgConfirmar').disabled=false;$('#tgConfirmar').classList.remove('hidden');$('#tgCancelar').textContent='CANCELAR';
+ m.classList.remove('hidden');
+ tgPrevia();
+}
+
+const TG_ACAO_ROTULO={IMPLANTAR:'IMPLANTAR',TRANSFERIR:'TRANSFERIR',REMOVER:'REMOVER',MANTER:'MANTER',EFETIVAR:'EFETIVAR'};
+function tgRenderAmenidades(a,b){
+ const box=$('#tgAmenidades');if(!box)return;
+ const cmp=tgComparar(a,b,tgModo);
+ const cel=(l,f,x)=>{
+  if(!x.tem[l])return '<td class="tg-nao">—</td>';
+  const c=tgComprada(l,f,x.k);
+  return `<td><button type="button" class="tg-posse ${c?'comprada':'base'}" data-lado="${l}" data-k="${esc(x.k)}" title="Clique para alternar entre comprada pela facção e base do local/Group"><b>✓ ${c?'COMPRADA':'BASE'}</b><small>${esc(x.det[l]||'')}</small></button></td>`;
+ };
+ const res=x=>x.acoes.length?x.acoes.map(y=>`<span class="tg-acao ${y.acao.toLowerCase()}">${TG_ACAO_ROTULO[y.acao]} <i>${esc(y.grupo)}</i></span>`).join(''):'<span class="tg-acao ok">SEM ALTERAÇÃO</span>';
+ const cab=f=>`${esc(f.group)}<small>${esc(tgFaccaoNome(f)||'VAGO')}</small>`;
+ const pend=cmp.flatMap(x=>x.acoes).filter(x=>x.acao!=='MANTER').length;
+ box.innerHTML=`<div class="tg-amen-head"><b>CONFERÊNCIA DE AMENIDADES</b><span>${pend?`${pend} ação(ões) entram na solicitação`:'Nada a implantar, transferir ou remover'}</span></div>
+  ${cmp.length?`<div class="tg-amen-scroll"><table class="tg-amen-tabela"><thead><tr><th>AMENIDADE</th><th>${cab(a)}</th><th>${cab(b)}</th><th>RESULTADO</th></tr></thead><tbody>${cmp.map(x=>`<tr><td><b>${esc(x.rotulo)}</b><small>${x.vinc==='GROUP'?'permissão do Group':'blip no local'}</small></td>${cel('A',a,x)}${cel('B',b,x)}<td class="tg-res">${res(x)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="delivery-no-change">Nenhum dos dois Groups tem amenidade cadastrada.</div>'}
+  <small class="tg-amen-nota">COMPRADA acompanha a facção; BASE fica no local/Group. O padrão vem do Perfil Padrão de Entrega. Clique numa célula para corrigir.</small>`;
+ box.querySelectorAll('.tg-posse').forEach(bt=>bt.onclick=()=>{
+  const l=bt.dataset.lado,k=bt.dataset.k,f=l==='A'?a:b;
+  tgPosse[l]={...(tgPosse[l]||{}),[k]:!tgComprada(l,f,k)};
+  tgPrevia();
+ });
+}
+
+function tgPrevia(){
+ const box=$('#tgPreview');if(!box)return;
+ const og=$('#tgOrigem').value,dg=$('#tgDestino').value;
+ if(og){tgOpcoes($('#tgDestino'),dg===og?'':dg,og)}
+ const a=estado.faccoes.find(f=>f.group===og),b=estado.faccoes.find(f=>f.group===$('#tgDestino').value);
+ const par=`${a?.group||''}|${b?.group||''}`;
+ if(tgPosse.par!==par)tgPosse={A:{},B:{},par};     // trocou o par: descarta correções
+ if(!a||!b){box.innerHTML='';$('#tgAmenidades').innerHTML='<div class="delivery-no-change">Escolha os dois Groups para ver a conferência.</div>';return}
+ tgRenderAmenidades(a,b);
+ tgRenderMetricas(a,b);
+ const ca=tgCatalogo(a),cb=tgCatalogo(b),la=tgLocalNome(a,ca),lb=tgLocalNome(b,cb);
+ const avisos=[];
+ if(segmentKey(a.segmento)===segmentKey(b.segmento))avisos.push('Os dois Groups são do mesmo segmento: o produto não muda.');
+ if(!ca.length||!cb.length)avisos.push(`${!ca.length?a.group:b.group} não tem nenhuma estrutura cadastrada: confira o cadastro antes de trocar.`);
+ const semReceita=f=>!(mergedTechProfile(f).craft?.receitas||[]).length;
+ const afk=cat=>cat.some(r=>r.tipo==='FARM'&&/afk/.test(tgNorm(r.nome)));
+ [[ca,b],[cb,a]].forEach(([cat,para])=>{const alvo=tgModo==='FICA'?para:(para===a?b:a);if(afk(cat)&&semReceita(alvo))avisos.push(`O Farm AFK usa a receita do Group em que está: ${alvo.group} não tem receita cadastrada, então o farm ficaria sem insumos.`)});
+ if(tgModo==='ACOMPANHA'&&(ca.some(r=>r.tipo==='BAÚ')||cb.some(r=>r.tipo==='BAÚ')))avisos.push('Com a facção acompanhando o Group, o CONTEÚDO do baú fica no local: combine a retirada antes.');
+ const card=(f,cat,loc,para,prodDe,prodPara)=>{
+  const linhas=tgLinhasLocal(cat,prodDe,prodPara,f,f===a?b:a);
+  const fac=tgModo==='FICA'?(f.faccao?`${f.faccao} fica aqui e vira ${para}`:'Local vago'):(f.faccao?`${f.faccao} sai daqui`:'Local vago');
+  return `<section class="tg-local"><header><span>📍 ${esc(loc)}</span><b>${esc(f.group)} <i>→</i> ${esc(para)}</b><small>${esc(fac)}</small></header>
+   <ul>${linhas.map(x=>`<li class="${x.tipo==='CRAFT'||/receita do/.test(x.extra)?'tg-craft':''}"><span>${esc(x.rotulo)}</span><code>${esc(x.cds)}</code>${x.extra?`<em>${esc(x.extra.replace(/^ — /,''))}</em>`:''}</li>`).join('')||'<li class="tg-vazio">Nenhuma estrutura cadastrada</li>'}</ul></section>`;
+ };
+ box.innerHTML=`<div class="tg-locais">${card(a,ca,la,b.group,tgProduto(a),tgProduto(b))}${card(b,cb,lb,a.group,tgProduto(b),tgProduto(a))}</div>`
+  +(avisos.length?`<div class="tg-avisos">${avisos.map(x=>`<span>⚠ ${esc(x)}</span>`).join('')}</div>`:'');
+}
+
+async function tgConfirmar(){
+ if(!isAdmin())return;
+ const btn=$('#tgConfirmar');
+ const a=estado.faccoes.find(f=>f.group===$('#tgOrigem').value),b=estado.faccoes.find(f=>f.group===$('#tgDestino').value);
+ const motivo=$('#tgMotivo').value.trim();
+ if(!a||!b)return alert('Escolha os dois Groups.');
+ if(a.group===b.group)return alert('Origem e destino precisam ser Groups diferentes.');
+ if(!motivo)return alert('Informe o motivo da troca.');
+ const {na,nb,cmp}=tgMontar(a,b,tgModo);
+ const acoes=cmp.flatMap(l=>l.acoes).filter(x=>x.acao!=='MANTER');
+ const resumo=acoes.length?`\n\nAmenidades:\n${acoes.map(x=>`• ${x.acao} ${x.rotulo} → ${x.grupo}`).join('\n')}`:'';
+ const txtModo=tgModo==='FICA'?'As facções FICAM nos seus locais e trocam de Group.':'As facções ACOMPANHAM o Group e trocam de local.';
+ if(!confirm(`Confirmar TROCA DE GROUP ${a.group} ⇄ ${b.group}?\n\nNenhum blip muda de lugar; as permissões de cada local passam para o outro Group.\n${txtModo}${resumo}\n\nA operação fica registrada no histórico.`))return;
+ btn.disabled=true;const rotulo=btn.textContent;btn.textContent='GRAVANDO...';
+ try{
+  const texto=tgTexto(a,b,tgModo,motivo,cmp);
+  const quando=new Date().toISOString(),marca=(par,local)=>({par,modo:tgModo,localAnterior:local,em:quando,por:currentUser.email});
+  const vigIso=$('#tgVigencia')?.value||tgHojeIso();
+  if(tgModo==='FICA'&&!/^\d{4}-\d{2}-\d{2}$/.test(vigIso))throw new Error('Data de início das métricas inválida.');
+  if(tgModo==='FICA'){
+   // cada facção muda de Group: encerra a ocupação antiga e abre a nova na vigência
+   registrarMudancaDeGroup(na,a,b.faccao,vigIso,'TROCA_GROUP');
+   registrarMudancaDeGroup(nb,b,a.faccao,vigIso,'TROCA_GROUP');
+  }
+  na.trocaGroup=marca(b.group,tgLocalNome(a,tgCatalogo(a)));
+  nb.trocaGroup=marca(a.group,tgLocalNome(b,tgCatalogo(b)));
+  [na,nb].forEach(x=>{x.updatedAt=serverTimestamp();x.updatedBy=currentUser.email});
+
+  const batch=writeBatch(db);
+  batch.set(doc(db,'highos','data','faccoes',a.group),na);
+  batch.set(doc(db,'highos','data','faccoes',b.group),nb);
+  for(const rec of [na,nb]){
+   if(!String(rec.faccao||'').trim())continue;
+   batch.set(doc(db,'highos','data','organizacoes',orgKey(rec.faccao)),{nome:rec.faccao,status:'ATIVA',groupAtual:rec.group,
+    segmentoAtual:rec.segmento||'',segmentoVinculado:rec.segmento||'',qgAtual:rec.qg||'',lider:rec.lider||'',
+    updatedAt:serverTimestamp(),updatedBy:currentUser.email},{merge:true});
+  }
+  const semTempo=x=>{const c=cleanSnapshot(x);delete c.updatedAt;return c};
+  batch.set(doc(histCol),{sessionId:currentSessionId||'',tipo:'TROCA_GROUP',group:a.group,groupDestino:b.group,
+   faccao:a.faccao||'',modo:tgModo,motivo,
+   descricao:`Troca de Group ${a.group} ⇄ ${b.group} (${tgModo==='FICA'?'facções ficam no local':'facções acompanham o Group'})${acoes.length?` • ${acoes.length} ajuste(s) de amenidade`:''}`,
+   amenidades:acoes.map(x=>({acao:x.acao,amenidade:x.k,rotulo:x.rotulo,group:x.grupo,faccao:x.faccao||'',dono:x.dono||'',detalhe:x.detalhe||''})),
+   antes:{origem:semTempo(a),destino:semTempo(b)},depois:{origem:semTempo(na),destino:semTempo(nb)},
+   solicitacaoTexto:texto,usuario:currentUser.email,data:serverTimestamp()});
+  await batch.commit();
+
+  // a partir daqui a troca já está gravada: falhas abaixo só geram aviso
+  try{await syncGroupsToOfficialSheet([na,nb],{quiet:true})}catch(e){console.warn('[TROCA GROUP] planilha',e)}
+  try{await archiveTechnicalRequest({tipo:'TROCA_GROUP',titulo:`Troca de Group ${a.group} ⇄ ${b.group}`,texto},na,'TROCA_GROUP')}catch(e){console.warn('[TROCA GROUP] solicitação',e)}
+  await loadFaccoes();
+  try{if(estado.metricas.length)renderMetrics()}catch(e){}
+
+  tgUltimoTexto=texto;
+  $('#tgTextoFinal').textContent=texto;
+  $('#tgPronto').classList.remove('hidden');
+  btn.classList.add('hidden');$('#tgCancelar').textContent='FECHAR';
+  try{renderAdminGroupManager()}catch(e){}
+  window.highToast?.(`Troca ${a.group} ⇄ ${b.group} registrada.`,'success');
+ }catch(e){
+  alert('Falha na Troca de Group: '+e.message+'\n\nNada foi alterado: a gravação é atômica.');
+ }finally{btn.disabled=false;btn.textContent=rotulo}
+}
+
+/* pontos de entrada: editor do Group, barra da Administração e cada linha */
+$('#swapGroupBtn')?.addEventListener('click',()=>tgAbrir($('#fGroup')?.value||''));
+$('#adminGroupSwapBtn')?.addEventListener('click',()=>tgAbrir(''));
+(function tgInjetarNasLinhas(){
+ const lista=$('#adminGroupList');if(!lista)return;
+ const injetar=()=>lista.querySelectorAll('.admin-group-row').forEach(row=>{
+  const acts=row.querySelector('.admin-group-actions');
+  if(!acts||acts.querySelector('.admin-group-swap'))return;
+  const b=document.createElement('button');b.type='button';b.className='mini-btn admin-group-swap';b.textContent='⇆ TROCAR GROUP';
+  b.onclick=()=>tgAbrir(row.dataset.group||'');acts.appendChild(b);
+ });
+ new MutationObserver(injetar).observe(lista,{childList:true});injetar();
+})();
+
+/* =====================================================================
+   V12.6 · MÉTRICAS SÃO DA FACÇÃO
+   ---------------------------------------------------------------------
+   A coleta é feita por Group, mas a métrica pertence à facção que assumiu
+   o Group. A série precisa acompanhar a facção sempre:
+
+   - Troca de Group (facção fica no local) e Transferência de Painel: a
+     facção muda de Group. Todo o histórico dela aparece sob o Group que
+     ela ocupa hoje. Exemplo: Peitanove foi Drogas03 até 22/09 e Armas03 a
+     partir de 23/09, e a série dela é uma só.
+   - Recolhimento: o que a facção coletou naquele Group sai da série do
+     Group. Se ela assumir outro Group depois, a série vai junto.
+   - Entrega: o novo ocupante NÃO herda o que foi coletado antes da data de
+     entrega dele. Isso vale para a comparação semanal, alertas, triagem e
+     boletim.
+
+   Modelo (tudo nos documentos dos Groups, sem coleção nova):
+     ocupacoesAnteriores: [{id, faccao, group, desdeIso, ateIso, motivo}]
+         períodos encerrados. ateIso é exclusivo (o 1º dia que já não é dela).
+     ocupacaoDesde: {faccao, iso}
+         início da ocupação atual quando a facção chegou por troca ou
+         transferência. Sem ele vale a dataEntrega.
+
+   Na leitura, cada linha (Group, data) é atribuída à facção que ocupava
+   aquele Group naquele dia:
+     - essa facção está num Group hoje → a linha aparece sob esse Group;
+     - não está em Group nenhum        → sai da vista (fica em
+                                          estado.metricasForaDeOcupacao);
+     - não se sabe quem era             → a linha fica como está.
+   Nada é regravado: a coleta bruta continua em estado.metricasCache, no
+   Firestore e na planilha. A linha remapeada guarda groupColeta.
+   ===================================================================== */
+function tgHojeIso(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function tgIsoParaBr(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?`${m[3]}/${m[2]}/${m[1]}`:''}
+function tgBrParaIso(br){const m=String(br||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);return m?`${m[3]}-${m[2]}-${m[1]}`:''}
+function tgSomarDias(iso,n){const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function tgDiaAnterior(br){const iso=tgBrParaIso(br);return iso?tgIsoParaBr(tgSomarDias(iso,-1)):''}
+function tgVigenciaTexto(){return tgIsoParaBr($('#tgVigencia')?.value||'')||tgIsoParaBr(tgHojeIso())}
+const tgChave=g=>alvesNorm(String(g||'')).replace(/\s+/g,'');
+function metricIsoDe(v){return tgBrParaIso(normalizeMetricDate(v))}
+
+/* Início da ocupação atual do Group pela facção que está nele. */
+function inicioOcupacao(f){
+ if(!String(f?.faccao||'').trim())return '';
+ const e=metricIsoDe(f.dataEntrega||f.ocupacaoAtual?.dataEntrega||'');
+ const o=f.ocupacaoDesde&&tgChave(f.ocupacaoDesde.faccao)===tgChave(f.faccao)?String(f.ocupacaoDesde.iso||''):'';
+ return [e,o].filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).sort().pop()||'';
+}
+
+/* Grava no documento NOVO do Group (novoDoc) que a facção do documento
+   ANTIGO (antigo) saiu dele em vigIso, e que quemChega entrou nessa data. */
+function registrarMudancaDeGroup(novoDoc,antigo,quemChega,vigIso,motivo){
+ const lista=Array.isArray(antigo.ocupacoesAnteriores)?antigo.ocupacoesAnteriores.map(x=>({...x})):[];
+ if(String(antigo.faccao||'').trim())lista.push({id:`${Date.now()}_${antigo.group}_${Math.random().toString(36).slice(2,6)}`,
+  faccao:antigo.faccao,group:antigo.group,desdeIso:inicioOcupacao(antigo),ateIso:vigIso,motivo,em:new Date().toISOString(),por:currentUser?.email||''});
+ novoDoc.ocupacoesAnteriores=lista;
+ if(String(quemChega||'').trim())novoDoc.ocupacaoDesde={faccao:quemChega,iso:vigIso};else delete novoDoc.ocupacaoDesde;
+}
+
+function ocupacoesMetricas(){
+ const fechadas=new Map(),abertas=[];
+ (estado.faccoes||[]).forEach(f=>{
+  (Array.isArray(f.ocupacoesAnteriores)?f.ocupacoesAnteriores:[]).forEach(o=>{if(o&&o.id&&o.faccao&&o.group&&/^\d{4}-\d{2}-\d{2}$/.test(o.ateIso||''))fechadas.set(o.id,o)});
+  if(String(f.faccao||'').trim()&&!f.removido)abertas.push({faccao:f.faccao,group:f.group,desdeIso:inicioOcupacao(f)});
+ });
+ return {fechadas:[...fechadas.values()],abertas};
+}
+
+let _metricasFora=[];
+function aplicarVinculoMetricas(rows){
+ _metricasFora=[];
+ if(!Array.isArray(rows)||!rows.length)return rows;
+ const {fechadas,abertas}=ocupacoesMetricas();
+ if(!fechadas.length&&!abertas.some(a=>a.desdeIso))return rows;
+ const grupoDaFaccao=new Map(abertas.map(a=>[tgChave(a.faccao),a.group]));
+ const abertaDoGroup=new Map(abertas.map(a=>[tgChave(a.group),a]));
+ const fechadasDoGroup=new Map();
+ fechadas.forEach(o=>{const k=tgChave(o.group);if(!fechadasDoGroup.has(k))fechadasDoGroup.set(k,[]);fechadasDoGroup.get(k).push(o)});
+ const out=[];
+ for(const r of rows){
+  const g=r.group||r.organizacao||r.faccao||'',k=tgChave(g),iso=metricIsoDe(r.data||r.date);
+  if(!iso){out.push(r);continue}
+  const ab=abertaDoGroup.get(k);
+  let dona='';
+  if(ab&&(!ab.desdeIso||iso>=ab.desdeIso))dona=ab.faccao;
+  else{const c=(fechadasDoGroup.get(k)||[]).find(o=>(!o.desdeIso||iso>=o.desdeIso)&&iso<o.ateIso);if(c)dona=c.faccao}
+  if(!dona){
+   if(ab&&ab.desdeIso&&iso<ab.desdeIso){_metricasFora.push(r);continue}   // antes da entrega do ocupante atual
+   out.push(r);continue;
+  }
+  const alvo=grupoDaFaccao.get(tgChave(dona));
+  if(!alvo){_metricasFora.push({...r,faccaoSnapshot:dona});continue}    // facção sem Group hoje
+  if(tgChave(alvo)===k){out.push(tgChave(r.faccaoSnapshot)===tgChave(dona)?r:{...r,faccaoSnapshot:dona});continue}
+  const x={...r,group:alvo,groupColeta:g,faccaoSnapshot:dona};
+  if(r.segmentoSnapshot)x.segmentoColeta=r.segmentoSnapshot;
+  delete x.segmentoSnapshot;delete x.qgSnapshot;delete x.liderSnapshot;
+  out.push(x);
+ }
+ return out;
+}
+
+let _metricasBrutas=Array.isArray(estado.metricas)?estado.metricas:[],_metricasVista=_metricasBrutas;
+Object.defineProperty(estado,'metricas',{configurable:true,enumerable:true,
+ get(){return _metricasVista},
+ set(v){_metricasBrutas=Array.isArray(v)?v:[];_metricasVista=aplicarVinculoMetricas(_metricasBrutas)}});
+Object.defineProperty(estado,'metricasForaDeOcupacao',{configurable:true,enumerable:false,get(){return _metricasFora}});
+function reaplicarVinculoMetricas(){_metricasVista=aplicarVinculoMetricas(_metricasBrutas)}
+
+function tgRenderMetricas(a,b){
+ const box=$('#tgMetricas'),p=$('#tgMetricasTexto');if(!box||!p)return;
+ const inp=$('#tgVigencia');
+ if(tgModo!=='FICA'){inp.disabled=true;p.textContent='Com a facção acompanhando o Group, cada facção continua no mesmo Group: as métricas seguem com ela sem nenhuma mudança.';return}
+ inp.disabled=false;
+ const vig=tgVigenciaTexto(),ant=tgDiaAnterior(vig);
+ const linha=(f,para)=>f.faccao?`${f.faccao}: ${f.group} até ${ant} → ${para} a partir de ${vig}`:`${f.group} está vago: sem série para levar`;
+ p.innerHTML=`${esc(linha(a,b.group))}<br>${esc(linha(b,a.group))}<br><small>A métrica é da facção: o histórico inteiro de cada uma passa a aparecer sob o Group que ela ocupa agora. A comparação semanal e os alertas seguem a facção. A coleta original não é alterada.</small>`;
+}
