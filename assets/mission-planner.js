@@ -1412,17 +1412,53 @@ iconAnchor:[12,
     const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
     if(!o2.length){alert('Nenhuma Safe 2 registrada.');return;}if(!o3.length){alert('Safe 2 registrada. Adicione uma Safe 3 antes de gravar.');return;}
     const combos=safeRouteCombinations(r);if(!combos.length){alert('Não há rota válida dentro dos limites de 500m / 250m.');return;}
-    if(!navigator.mediaDevices?.getDisplayMedia||typeof MediaRecorder==='undefined'){alert('Este navegador não oferece gravação de tela compatível.');return;}
-    const oldStyle=mapEl.getAttribute('style')||'',ph=document.createElement('div'),parent=mapEl.parentNode,next=mapEl.nextSibling;
-    ph.style.cssText='width:'+mapEl.offsetWidth+'px;height:'+mapEl.offsetHeight+'px';parent.insertBefore(ph,next);
-    document.body.appendChild(mapEl);mapEl.style.cssText='position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483000!important;border:0!important;border-radius:0!important;';
-    document.documentElement.classList.add('mp-recording-map');setTimeout(()=>state.map.invalidateSize(),100);
-    let stream;try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false,preferCurrentTab:true});}catch{mapEl.setAttribute('style',oldStyle);parent.insertBefore(mapEl,ph);ph.remove();document.documentElement.classList.remove('mp-recording-map');state.map.invalidateSize();return;}
-    const chunks=[],rec=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm'});
-    const restore=()=>{mapEl.setAttribute('style',oldStyle);parent.insertBefore(mapEl,ph);ph.remove();document.documentElement.classList.remove('mp-recording-map');state.map.invalidateSize();renderMap();};
+    if(typeof MediaRecorder==='undefined'||typeof HTMLCanvasElement.prototype.captureStream!=='function'){alert('Seu navegador não suporta gravação direta da área do mapa.');return;}
+    const rect=mapEl.getBoundingClientRect(),scale=Math.min(1.5,1280/Math.max(1,rect.width)),canvas=document.createElement('canvas');
+    canvas.width=Math.max(640,Math.round(rect.width*scale));canvas.height=Math.max(360,Math.round(rect.height*scale));
+    const ctx=canvas.getContext('2d'),stream=canvas.captureStream(30),chunks=[];
+    const rec=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm'});
+    let recording=true,raf=0;
+    function drawMapFrame(){
+      if(!recording)return;
+      ctx.fillStyle='#10131a';ctx.fillRect(0,0,canvas.width,canvas.height);
+      const sx=canvas.width/Math.max(1,rect.width),sy=canvas.height/Math.max(1,rect.height);
+      const tiles=[...mapEl.querySelectorAll('.leaflet-tile-loaded')];
+      let tileBlocked=false;
+      for(const img of tiles){try{const ir=img.getBoundingClientRect();ctx.drawImage(img,(ir.left-rect.left)*sx,(ir.top-rect.top)*sy,ir.width*sx,ir.height*sy);}catch(e){tileBlocked=true;}}
+      const svg=mapEl.querySelector('.leaflet-overlay-pane svg');
+      if(svg){try{const xml=new XMLSerializer().serializeToString(svg),blob=new Blob([xml],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),im=new Image();im.onload=()=>{try{ctx.drawImage(im,0,0,canvas.width,canvas.height)}finally{URL.revokeObjectURL(url)}};im.src=url;}catch{}}
+      const project=p=>{const lp=state.map.latLngToContainerPoint(ll(p.x,p.y));return {x:lp.x*sx,y:lp.y*sy};};
+      const s1=r.stages[0],s2=r.stages[1],s3=r.stages[2],all2=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),all3=(r.stage3Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));
+      ctx.save();ctx.lineWidth=2;ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      if(safeStageValid(s1)){
+        const a=project(s1);
+        all2.forEach((p,i)=>{const b=project(p),d=safeDistance(s1,p);ctx.beginPath();ctx.setLineDash([8,6]);ctx.strokeStyle=d<=SAFE_MOVE_LIMIT_12?'rgba(192,132,252,.8)':'rgba(255,90,90,.35)';ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});
+      }
+      all2.forEach((p,i)=>all3.forEach((q,j)=>{const d=safeDistance(p,q);if(d>SAFE_MOVE_LIMIT_23)return;const a=project(p),b=project(q);ctx.beginPath();ctx.setLineDash([5,6]);ctx.strokeStyle='rgba(216,180,254,.55)';ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}));
+      const drawOption=(p,label,rad,fill)=>{const pt=project(p),edge=state.map.latLngToContainerPoint(ll(Number(p.x)+Number(rad),p.y)),rr=Math.max(8,Math.abs(edge.x-state.map.latLngToContainerPoint(ll(p.x,p.y)).x)*sx);ctx.beginPath();ctx.setLineDash([6,5]);ctx.strokeStyle=fill;ctx.fillStyle=fill.replace('1)','0.08)');ctx.arc(pt.x,pt.y,rr,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(10,10,16,.9)';ctx.fillRect(pt.x-23,pt.y-12,46,24);ctx.fillStyle='#fff';ctx.fillText(label,pt.x,pt.y);};
+      all2.forEach((p,i)=>drawOption(p,'S2'+String.fromCharCode(65+i),Number(s2.radius)||0,'rgba(168,85,247,1)'));
+      all3.forEach((p,i)=>drawOption(p,'S3'+String.fromCharCode(65+i),Number(s3.radius)||0,'rgba(216,180,254,1)'));
+      if(safeStageValid(s1))drawOption(s1,'S1',Number(s1.radius)||0,'rgba(126,34,206,1)');
+      /* A animação Leaflet não faz parte do canvas gravado. Replica o estado vivo
+         da safe diretamente no vídeo a cada frame. */
+      if(state.safePreviewLayer){
+        try{
+          const live=state.safePreviewLayer.getLatLng(),liveRadius=Number(state.safePreviewLayer.getRadius())||0;
+          const lp=state.map.latLngToContainerPoint(live),edge=state.map.latLngToContainerPoint(L.latLng(live.lat,live.lng+(liveRadius/111320)/Math.max(.15,Math.cos(live.lat*Math.PI/180))));
+          const rr=Math.max(2,Math.abs(edge.x-lp.x)*sx),x=lp.x*sx,y=lp.y*sy;
+          ctx.beginPath();ctx.setLineDash([]);ctx.lineWidth=5;ctx.strokeStyle='rgba(168,85,247,1)';ctx.fillStyle='rgba(126,34,206,.28)';ctx.arc(x,y,rr,0,Math.PI*2);ctx.fill();ctx.stroke();
+          ctx.fillStyle='rgba(8,8,14,.94)';ctx.fillRect(x-70,y-16,140,32);ctx.fillStyle='#fff';ctx.font='bold 13px sans-serif';ctx.fillText('SAFE EM MOVIMENTO',x,y);
+        }catch(e){}
+      }
+      ctx.restore();
+      ctx.fillStyle='rgba(10,12,18,.86)';ctx.fillRect(12,12,390,72);ctx.fillStyle='#fff';ctx.font='bold 18px sans-serif';ctx.textAlign='left';ctx.fillText('HIGH OS • DEMONSTRAÇÃO DA SAFE',24,35);ctx.font='13px sans-serif';ctx.fillText('S2/S3 = possibilidades • linhas = combinações válidas',24,56);ctx.fillText('Limites: S1→S2 500m • S2→S3 250m',24,75);
+      if(tileBlocked){ctx.fillStyle='rgba(180,40,40,.9)';ctx.fillRect(12,canvas.height-38,390,26);ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.fillText('Tiles bloqueados pelo provedor; overlays continuam gravados.',20,canvas.height-20);}
+      raf=requestAnimationFrame(drawMapFrame);
+    }
     rec.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
-    rec.onstop=()=>{stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`high-os-safe-${slugify(m.event||'evento')}-mapa-${Date.now()}.webm`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);restore();};
-    rec.start(500);let n=0;const next=()=>{if(n>=combos.length){setTimeout(()=>{if(rec.state!=='inactive')rec.stop();},900);return;}playSafeCombination(m,r,combos[n++],next);};next();
+    rec.onstop=()=>{recording=false;cancelAnimationFrame(raf);stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`high-os-safe-${slugify(m.event||'evento')}-mapa-${Date.now()}.webm`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);};
+    drawMapFrame();rec.start(500);
+    let n=0;const next=()=>{if(n>=combos.length){setTimeout(()=>{if(rec.state!=='inactive')rec.stop();renderMap();},900);return;}playSafeCombination(m,r,combos[n++],next);};next();
   }
 
   function renderMap(){
