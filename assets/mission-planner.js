@@ -1287,7 +1287,9 @@ iconAnchor:[12,
         <button type="button" id="mpSafeUseCenter">SAFE 1 = CENTRO ATUAL</button>
         <button type="button" id="mpSafePlace2">ADICIONAR OPÇÃO SAFE 2</button>
         <button type="button" id="mpSafePlace3">ADICIONAR OPÇÃO SAFE 3</button>
-        <button type="button" id="mpSafePreview" class="primary">▶ PREVIEW DA ROTA</button>
+        <button type="button" id="mpSafePreview" class="primary">▶ PREVIEW ALEATÓRIO</button>
+        <button type="button" id="mpSafePreviewAll">▶ DEMONSTRAR TODAS AS ROTAS</button>
+        <button type="button" id="mpSafeRecord">● GRAVAR DEMONSTRAÇÃO</button>
         <button type="button" id="mpSafeStop">■ PARAR</button>
       </div>`;
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
@@ -1295,6 +1297,8 @@ iconAnchor:[12,
     qs('#mpSafePlace2')?.addEventListener('click',()=>beginSafePlacement(1));
     qs('#mpSafePlace3')?.addEventListener('click',()=>beginSafePlacement(2));
     qs('#mpSafePreview')?.addEventListener('click',startSafePreview);
+    qs('#mpSafePreviewAll')?.addEventListener('click',()=>startSafePreview(true));
+    qs('#mpSafeRecord')?.addEventListener('click',recordSafeDemonstration);
     qs('#mpSafeStop')?.addEventListener('click',stopSafePreview);
   }
   function beginSafePlacement(stageIndex){
@@ -1360,13 +1364,16 @@ iconAnchor:[12,
     if(state.safePreviewTimer){clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;}
     if(state.safePreviewLayer&&state.map){try{state.map.removeLayer(state.safePreviewLayer)}catch{}state.safePreviewLayer=null;}
   }
-  function startSafePreview(){
-    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
-    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
-    if(!o2.length||!o3.length){alert('Adicione pelo menos uma opção de Safe 2 e uma de Safe 3 no mapa.');return;}
-    const p2=o2[Math.floor(Math.random()*o2.length)],p3=o3[Math.floor(Math.random()*o3.length)];
-    r.stages[1].x=p2.x;r.stages[1].y=p2.y;r.stages[2].x=p3.x;r.stages[2].y=p3.y;
-    stopSafePreview();
+  function safeRouteCombinations(r){
+    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
+    const o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
+    return o2.flatMap((p2,i)=>o3.filter((p3,j)=>{
+      const links=Array.isArray(p2.stage3Indexes)?p2.stage3Indexes:null;
+      return !links||!links.length||links.includes(j);
+    }).map((p3,j)=>({p2,p3,i2:i,i3:o3.indexOf(p3)})));
+  }
+  function playSafeCombination(m,r,combo,onDone){
+    r.stages[1].x=combo.p2.x;r.stages[1].y=combo.p2.y;r.stages[2].x=combo.p3.x;r.stages[2].y=combo.p3.y;
     const initial=effectiveEventRadius(m),phases=[
       {type:'close',a:r.stages[0],from:initial,to:r.stages[0].radius},
       {type:'move',a:r.stages[0],b:r.stages[1],from:r.stages[0].radius,to:r.stages[0].radius},
@@ -1374,12 +1381,29 @@ iconAnchor:[12,
       {type:'move',a:r.stages[1],b:r.stages[2],from:r.stages[1].radius,to:r.stages[1].radius},
       {type:'close',a:r.stages[2],from:r.stages[1].radius,to:r.stages[2].radius}
     ];
-    let pi=0,t=0;const steps=60;
+    let pi=0,t=0;const steps=45;
     const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
     state.safePreviewLayer=L.circle(ll(r.stages[0].x,r.stages[0].y),gasStyle).addTo(state.map);
-    const routeLine=L.polyline([ll(r.stages[0].x,r.stages[0].y),ll(r.stages[1].x,r.stages[1].y),ll(r.stages[2].x,r.stages[2].y)],{color:'#c084fc',weight:3,opacity:.72,dashArray:'8 8',interactive:false}).addTo(state.map);state.drawn.push(routeLine);
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>PREVIEW EM EXECUÇÃO</b> • rota sorteada: SAFE 1 → SAFE 2 → SAFE 3<br><small>O círculo roxo representa a área do gás durante fechamento e deslocamento.</small>`;
-    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];t++;const u=Math.min(1,t/steps),smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);if(u>=1){pi++;t=0;if(pi>=phases.length){stopSafePreview();renderMap();}}},45);
+    const routeLine=L.polyline([ll(r.stages[0].x,r.stages[0].y),ll(r.stages[1].x,r.stages[1].y),ll(r.stages[2].x,r.stages[2].y)],{color:'#c084fc',weight:4,opacity:.9,dashArray:'8 8',interactive:false}).addTo(state.map);state.drawn.push(routeLine);
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>DEMONSTRAÇÃO</b> • SAFE 1 → SAFE 2${String.fromCharCode(65+combo.i2)} → SAFE 3${String.fromCharCode(65+combo.i3)}<br><small>O círculo roxo fecha e se desloca continuamente.</small>`;
+    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];t++;const u=Math.min(1,t/steps),smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);if(u>=1){pi++;t=0;if(pi>=phases.length){stopSafePreview();if(onDone)setTimeout(onDone,250);else renderMap();}}},45);
+  }
+  function startSafePreview(all=false){
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
+    const combos=safeRouteCombinations(r);if(!combos.length){alert('Adicione pelo menos uma opção de Safe 2 e uma de Safe 3 no mapa.');return;}
+    stopSafePreview();
+    if(!all){const combo=combos[Math.floor(Math.random()*combos.length)];playSafeCombination(m,r,combo);return;}
+    let n=0;const next=()=>{if(n>=combos.length){renderMap();const s=qs('#mpSafeRouteStatus');if(s)s.innerHTML=`<b>DEMONSTRAÇÃO CONCLUÍDA</b> • ${combos.length} rota(s) exibida(s).`;return;}playSafeCombination(m,r,combos[n++],next);};next();
+  }
+  async function recordSafeDemonstration(){
+    const mapEl=state.map?.getContainer(),m=active(),r=ensureSafeRoute(m);if(!mapEl||!m||!r)return;
+    const combos=safeRouteCombinations(r);if(!combos.length){alert('Configure opções de Safe 2 e Safe 3 antes de gravar.');return;}
+    if(!navigator.mediaDevices?.getDisplayMedia||typeof MediaRecorder==='undefined'){alert('Este navegador não oferece gravação de tela compatível. Use DEMONSTRAR TODAS AS ROTAS e grave a aba pelo sistema.');return;}
+    let stream;try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false});}catch{return;}
+    const chunks=[],rec=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm'});
+    rec.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
+    rec.onstop=()=>{const blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`high-os-safe-${slugify(m.event||'evento')}-${Date.now()}.webm`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);};
+    rec.start();let n=0;const next=()=>{if(n>=combos.length){setTimeout(()=>{if(rec.state!=='inactive')rec.stop();stream.getTracks().forEach(t=>t.stop());renderMap();},700);return;}playSafeCombination(m,r,combos[n++],next);};next();
   }
 
   function renderMap(){
