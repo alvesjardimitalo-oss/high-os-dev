@@ -1439,6 +1439,17 @@ iconAnchor:[12,
       all2.forEach((p,i)=>drawOption(p,'S2'+String.fromCharCode(65+i),Number(s2.radius)||0,'rgba(168,85,247,1)'));
       all3.forEach((p,i)=>drawOption(p,'S3'+String.fromCharCode(65+i),Number(s3.radius)||0,'rgba(216,180,254,1)'));
       if(safeStageValid(s1))drawOption(s1,'S1',Number(s1.radius)||0,'rgba(126,34,206,1)');
+      /* A animação Leaflet não faz parte do canvas gravado. Replica o estado vivo
+         da safe diretamente no vídeo a cada frame. */
+      if(state.safePreviewLayer){
+        try{
+          const live=state.safePreviewLayer.getLatLng(),liveRadius=Number(state.safePreviewLayer.getRadius())||0;
+          const lp=state.map.latLngToContainerPoint(live),edge=state.map.latLngToContainerPoint(L.latLng(live.lat,live.lng+(liveRadius/111320)/Math.max(.15,Math.cos(live.lat*Math.PI/180))));
+          const rr=Math.max(2,Math.abs(edge.x-lp.x)*sx),x=lp.x*sx,y=lp.y*sy;
+          ctx.beginPath();ctx.setLineDash([]);ctx.lineWidth=5;ctx.strokeStyle='rgba(168,85,247,1)';ctx.fillStyle='rgba(126,34,206,.28)';ctx.arc(x,y,rr,0,Math.PI*2);ctx.fill();ctx.stroke();
+          ctx.fillStyle='rgba(8,8,14,.94)';ctx.fillRect(x-70,y-16,140,32);ctx.fillStyle='#fff';ctx.font='bold 13px sans-serif';ctx.fillText('SAFE EM MOVIMENTO',x,y);
+        }catch(e){}
+      }
       ctx.restore();
       ctx.fillStyle='rgba(10,12,18,.86)';ctx.fillRect(12,12,390,72);ctx.fillStyle='#fff';ctx.font='bold 18px sans-serif';ctx.textAlign='left';ctx.fillText('HIGH OS • DEMONSTRAÇÃO DA SAFE',24,35);ctx.font='13px sans-serif';ctx.fillText('S2/S3 = possibilidades • linhas = combinações válidas',24,56);ctx.fillText('Limites: S1→S2 500m • S2→S3 250m',24,75);
       if(tileBlocked){ctx.fillStyle='rgba(180,40,40,.9)';ctx.fillRect(12,canvas.height-38,390,26);ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.fillText('Tiles bloqueados pelo provedor; overlays continuam gravados.',20,canvas.height-20);}
