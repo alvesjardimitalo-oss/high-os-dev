@@ -204,3 +204,17 @@ console também passa a mostrar a versão certa (`HIGH OS V12.6.0 · sistema
 carregado`).
 
 **Ao publicar, suba sempre o pacote inteiro da mesma versão.**
+
+---
+
+## Correção: Transferir Painel / Trocar QG "não acontece nada"
+
+Esse problema já existia antes desta versão. O botão abria o modal usando a
+função `show()`, mas essa função serve para trocar a **tela inteira** do sistema
+(login, acesso negado, painel) e escondia o painel. Ao confirmar e fechar o
+modal, sobrava uma tela vazia. A operação chegava a gravar, mas parecia que nada
+tinha acontecido.
+
+Agora o modal abre por cima do painel, como os outros. Testado no navegador:
+abrir, escolher o destino, confirmar, gravar, recarregar os Groups e mostrar o
+aviso "Operação concluída".

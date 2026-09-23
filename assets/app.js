@@ -9779,7 +9779,10 @@ function movementOpen(mode){
 
   $('#movementReason').value = '';
 
-  show($('#movementModal'));
+  /* V12.6 - show() é a troca de TELA (login / negado / app): usada aqui ela
+     escondia o painel inteiro. Depois de fechar o modal sobrava uma tela
+     vazia e parecia que a transferência "não fazia nada". */
+  $('#movementModal')?.classList.remove('hidden');
 
   movementPreview();
 
