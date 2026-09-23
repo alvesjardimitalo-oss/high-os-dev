@@ -1961,9 +1961,18 @@ intro='';
     }
     const centerTitle=category==='gas'?'CENTRO DO GÁS / MARCO ZERO':'COORDENADA CENTRAL';
     const radiusTitle=category==='gas'?'RAIO INICIAL DA SAFE / GÁS':'RAIO DA ÁREA DE DOMINAÇÃO';
-    const isFacXFac=/fac\s*x\s*fac/i.test(eventName);
+    const isFacXFac=/fac\s*x\s*fac/i.test(eventName),isSurvival=/sobreviv[eê]ncia/i.test(eventName);
+    const cloneNote=isSurvival?`
+
+BASE DO EVENTO — CLONE DO FAC X FAC:
+
+- O evento "Sobrevivencia" deverá ser criado como clone do Fac X Fac atual, preservando suas mecânicas, regras, sistemas, escalação, inventário entregue aos participantes, caixas de loot, drop de itens ao morrer, ping para aliados, ranking e premiações.
+
+- A principal diferença do Sobrevivencia será a SAFE DINÂMICA: além de fechar progressivamente, o círculo inteiro poderá deslocar seu centro entre as etapas configuradas abaixo.
+
+- Não substituir as demais mecânicas do Fac X Fac por uma implementação nova; utilizar o funcionamento já existente como base e acrescentar a movimentação da Safe.`:''; 
     const mechanic=category==='gas'
-      ? (isFacXFac ? `- Cada facção deverá nascer em uma coordenada diferente da zona selecionada.
+      ? ((isFacXFac||isSurvival) ? `- Cada facção deverá nascer em uma coordenada diferente da zona selecionada.
 
 - Todos os participantes deverão receber automaticamente os itens necessários no inventário conforme o padrão atual do Fac x Fac.
 
@@ -1993,6 +2002,7 @@ intro='';
       const s=safeRoute.stages||[],o2=(safeRoute.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),o3=(safeRoute.stage3Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));
       if(!o2.length&&!o3.length)return '';
       const fmtOpt=(p,i,prefix)=>`- ${prefix}${String.fromCharCode(65+i)}: ${f(p.x)},${f(p.y)} • raio da etapa: ${Math.round(Number(s[prefix==='SAFE 2'?1:2]?.radius)||0)} m`;
+      const matrix=o2.map((p2,i)=>{const allowed=o3.map((p3,j)=>({j,d:safeDistance(p2,p3)})).filter(v=>v.d<=SAFE_MOVE_LIMIT_23);return `- SAFE 2${String.fromCharCode(65+i)} → ${allowed.length?allowed.map(v=>`SAFE 3${String.fromCharCode(65+v.j)} (${Math.round(v.d)}m)`).join(' / '):'SEM SAFE 3 VÁLIDA'}`;}).join('\n');
       return `
 
 MOVIMENTAÇÃO DA SAFE:
@@ -2005,6 +2015,12 @@ ${o3.map((p,i)=>fmtOpt(p,i,'SAFE 3')).join('\n')}
 - Limite de deslocamento do centro SAFE 1→SAFE 2: máximo de 500 metros.
 - Limite de deslocamento do centro SAFE 2→SAFE 3: máximo de 250 metros.
 - Combinações acima desses limites não deverão ser utilizadas/sorteadas.
+
+COMBINAÇÕES VÁLIDAS SAFE 2 → SAFE 3:
+
+${matrix}
+
+- O sorteio deverá utilizar exclusivamente uma das combinações válidas listadas acima.
 - Fluxo: SAFE 1 fecha → círculo inteiro se desloca até SAFE 2 mantendo o raio alcançado → fecha novamente → desloca até SAFE 3 → fechamento final.
 - Movimento SAFE 1→2: ${Number(s[0]?.moveSeconds)||0}s. Movimento SAFE 2→3: ${Number(s[1]?.moveSeconds)||0}s.
 - Durante o deslocamento, centro e área do gás devem se mover continuamente, sem teleporte da zona.`;
@@ -2022,7 +2038,7 @@ OBSERVAÇÃO — ALTURA DA SAFE:
 
 Solicitação:
 
-${intro}${selectorNote}
+${intro}${selectorNote}${cloneNote}
 
 ${centerTitle}:
 
