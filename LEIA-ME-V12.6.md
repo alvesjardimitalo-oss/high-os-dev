@@ -168,3 +168,39 @@ vazia, nada é cortado.
   acompanhou até o Group novo, e a coleta da facção antiga desse Group saiu da
   vista;
 - em todos os casos, a coleta bruta ficou intacta.
+
+---
+
+## Correção: "Erro ao recolher: historyMillis is not defined"
+
+A função `historyMillis` era usada para ordenar as entregas no Dashboard
+(anomalias) e no perfil da facção, mas **nunca tinha sido definida**. O erro só
+aparecia quando um Group tinha duas ou mais entregas no histórico. Por isso
+estourava no fim do recolhimento, na hora de recarregar as telas.
+
+O recolhimento em si **já tinha sido gravado** quando o erro apareceu: Group
+vago, histórico e evidência registrados. O que falhou foi a recarga da tela
+logo depois.
+
+Corrigido, junto com mais duas chamadas órfãs do mesmo tipo:
+`updateRequestPreview` (modal de solicitação) e `renderTeamCallFiles` (sala de
+chamada).
+
+### Novo: `tools/verificar-chamadas.mjs`
+
+Reprova o commit quando o código chama uma função que não existe em nenhum
+arquivo. Roda no GitHub Actions. Contra a versão anterior ele aponta exatamente
+esses três problemas; contra esta, aprova.
+
+---
+
+## Aviso de versões misturadas
+
+Se o `index.html` e o `app.js` publicados forem de versões diferentes, os botões
+novos aparecem na tela mas não têm código por trás, e o clique não faz nada.
+Agora o `app.js` confere a própria versão contra o `?v=` que o `index.html` usa
+para carregá-lo. Se não baterem, aparece um aviso vermelho logo ao entrar. O
+console também passa a mostrar a versão certa (`HIGH OS V12.6.0 · sistema
+carregado`).
+
+**Ao publicar, suba sempre o pacote inteiro da mesma versão.**

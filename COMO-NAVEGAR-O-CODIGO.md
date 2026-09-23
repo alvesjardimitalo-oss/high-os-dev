@@ -35,6 +35,7 @@ node tools/mapa-do-codigo.mjs --md            grava INDICE-DO-CODIGO.md
 node tools/mapa-do-codigo.mjs nomeDaFuncao    impacto de uma função
 node tools/verificar-integridade.mjs          funções perdidas
 node tools/verificar-regras.mjs               coleções sem regra no firestore.rules
+node tools/verificar-chamadas.mjs             chamadas para funções que não existem
 ```
 
 A consulta por nome é a que importa no dia a dia. Exemplo real:

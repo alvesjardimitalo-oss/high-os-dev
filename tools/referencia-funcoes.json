@@ -1,6 +1,7 @@
 {
   "assets/app.js": [
     "$",
+    "HIGHOS_conferirVersao",
     "a1SheetName",
     "acceptIncomingCall",
     "activateAppPage",
@@ -229,6 +230,7 @@
     "gsStatusText",
     "historyDateValue",
     "historyFamily",
+    "historyMillis",
     "historyTitle",
     "hmInitials",
     "hmLastMessageFor",
@@ -488,6 +490,7 @@
     "renderSpotify",
     "renderSpotifyAuthUI",
     "renderStructureSnapshot",
+    "renderTeamCallFiles",
     "renderTechProfile",
     "renderTriagem",
     "renderUserAudit",
@@ -671,6 +674,7 @@
     "updateOfficialGroupProfiles",
     "updateRecollectUi",
     "updateRequestGroupOptions",
+    "updateRequestPreview",
     "upsertOrganizationFromDelivery",
     "v8361CardImageUrl",
     "v836ApplyUnifiedUi",
