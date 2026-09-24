@@ -1285,6 +1285,7 @@ cayoPostal});
       const m=active();if(!m)return;
       if(!state.editing){if(qs('#mpClicked'))qs('#mpClicked').textContent='Modo visualização: clique em EDITAR EVENTO para alterar posições.';return;}
       if(qs('#mpClicked'))qs('#mpClicked').textContent=`${f(e.latlng.lng)},${f(e.latlng.lat)}`;
+      if(state.calibrationCapture){state.calibrationCapture=false;const x=qs('#mpCalMapX'),y=qs('#mpCalMapY');if(x)x.value=f(e.latlng.lng);if(y)y.value=f(e.latlng.lat);setSaveState('CALIBRADOR • ponto do mapa capturado; informe a CDS real correspondente');return;}
       if(state.safePlacementStage!==null){placeSafeOnMap(e.latlng);return;}
       if(state.polygonPlacement){if((m.category||'dominacao')!=='dominacao')return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:e.latlng.lng,y:e.latlng.lat,z:0,status:'planned',validatedAt:null,validationReason:'map-placement'});m.zoneMode='polygon';commit('Vértice '+String(m.zonePolygon.length).padStart(2,'0')+' marcado no mapa');return;}
       if(state.placing){m.points.push(normalizePoint({x:e.latlng.lng,
@@ -1479,6 +1480,18 @@ iconAnchor:[12,
     commit('SAFE '+(stageIndex+1)+' fixada a partir da possibilidade selecionada');
   }
 
+  function calibrationModel(m){
+    const refs=(m?.calibrationRefs||[]).filter(r=>[r.realX,r.realY,r.mapX,r.mapY].every(Number.isFinite));if(!refs.length)return null;
+    const dx=refs.reduce((a,r)=>a+(Number(r.realX)-Number(r.mapX)),0)/refs.length,dy=refs.reduce((a,r)=>a+(Number(r.realY)-Number(r.mapY)),0)/refs.length;
+    const residuals=refs.map(r=>Math.hypot((Number(r.mapX)+dx)-Number(r.realX),(Number(r.mapY)+dy)-Number(r.realY)));
+    return {dx,dy,count:refs.length,error:residuals.reduce((a,v)=>a+v,0)/residuals.length,maxError:Math.max(...residuals)};
+  }
+  function calibratedCoord(m,p){const c=calibrationModel(m);return c&&p?{x:Number(p.x)+c.dx,y:Number(p.y)+c.dy,z:Number(p.z)||0}:null;}
+  function renderCalibration(m=active()){
+    const el=qs('#mpCalStatus');if(!el||!m)return;const c=calibrationModel(m);
+    if(!c){el.innerHTML='Sem referências. <b>Nenhuma CDS será alterada.</b>';return;}
+    el.innerHTML=`Referências: <b>${c.count}</b> • correção sugerida X <b>${c.dx>=0?'+':''}${f(c.dx)}</b> / Y <b>${c.dy>=0?'+':''}${f(c.dy)}</b> • erro médio <b>${c.error.toFixed(2)} m</b> • erro máx. <b>${c.maxError.toFixed(2)} m</b><br><small>Calibração é apenas sugestão. O validador continua obrigatório.</small>`;
+  }
   function ensureSafeRouteUi(){
     const existing=qs('#mpSafeRouteBox');
     if(existing){
@@ -1492,6 +1505,17 @@ iconAnchor:[12,
     box.innerHTML=`<h3>ROTA PROGRESSIVA DA SAFE</h3>
       <p class="mp-note">Fluxo: <b>FECHA 1 → MOVE → FECHA 2 → MOVE → FECHA FINAL</b>. Os respawns da missão não são alterados.</p>
       <div id="mpSafeRouteStatus" class="mp-readout"></div>
+      <details id="mpCalibrator" class="mp-calibrator">
+        <summary>CALIBRADOR DE CDS • ASSISTIDO</summary>
+        <div class="mp-grid" style="margin-top:8px">
+          <label>CDS REAL X<input id="mpCalRealX" inputmode="decimal" placeholder="X conhecida no jogo"></label>
+          <label>CDS REAL Y<input id="mpCalRealY" inputmode="decimal" placeholder="Y conhecida no jogo"></label>
+          <label>CDS MAPA X<input id="mpCalMapX" inputmode="decimal" placeholder="Clique CAPTURAR MAPA"></label>
+          <label>CDS MAPA Y<input id="mpCalMapY" inputmode="decimal" placeholder="Clique CAPTURAR MAPA"></label>
+        </div>
+        <div class="mp-actions"><button type="button" id="mpCalCapture">◎ CAPTURAR PONTO NO MAPA</button><button type="button" id="mpCalAdd">＋ ADICIONAR REFERÊNCIA</button><button type="button" id="mpCalClear">LIMPAR CALIBRAÇÃO</button></div>
+        <div id="mpCalStatus" class="mp-readout" style="margin-top:7px">Sem referências. A CDS original permanece intacta.</div>
+      </details>
       <div id="mpSafeStageToolbar" class="mp-actions mp-safe-stage-toolbar" style="display:none;margin-top:8px">
         <button type="button" id="mpAddSafeTop" class="primary">＋ ADICIONAR SAFE</button>
         <button type="button" id="mpRemoveSafeTop" style="display:none">REMOVER ÚLTIMA SAFE</button>
@@ -1510,7 +1534,10 @@ iconAnchor:[12,
         <button type="button" id="mpSafeStop">■ PARAR</button>
       </div>`;
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
-    qs('#mpSafePlace1')?.addEventListener('click',()=>beginSafePlacement(0));
+    qs('#mpCalCapture')?.addEventListener('click',()=>{if(!requireEdit())return;state.calibrationCapture=true;setSaveState('CALIBRADOR • clique no ponto correspondente no mapa');});
+    qs('#mpCalAdd')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),rx=num(qs('#mpCalRealX')?.value),ry=num(qs('#mpCalRealY')?.value),mx=num(qs('#mpCalMapX')?.value),my=num(qs('#mpCalMapY')?.value);if(![rx,ry,mx,my].every(Number.isFinite)){setSaveState('CALIBRADOR • preencha CDS real e CDS do mapa');return;}if(!Array.isArray(m.calibrationRefs))m.calibrationRefs=[];m.calibrationRefs.push({realX:rx,realY:ry,mapX:mx,mapY:my,createdAt:nowIso()});commit('Referência de calibração adicionada');renderCalibration(m);});
+    qs('#mpCalClear')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();m.calibrationRefs=[];commit('Calibração da missão removida');renderCalibration(m);renderMap();});
+        qs('#mpSafePlace1')?.addEventListener('click',()=>beginSafePlacement(0));
     qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=0;commit('Safe 1 vinculada ao centro da missão');});
     qs('#mpSafePlace2')?.addEventListener('click',()=>beginSafePlacement(1));
     qs('#mpSafePlace3')?.addEventListener('click',()=>beginSafePlacement(2));
@@ -1776,7 +1803,7 @@ iconAnchor:[12,
     el.innerHTML='<b>'+esc(m.event||'EVENTO')+' • '+esc(m.name||'ZONA')+'</b><br>'+centerLabel+zoneLabel+'<br>Spawns '+valid+'/'+total+' validados'+(category==='gas'?'<br>Safe inicial: '+counts.inside+'/'+counts.total+' dentro'+(counts.outside?' • '+counts.outside+' fora ⚠':' ✓'):'');
   }
   function renderMap(){
-    if(!state.map)return;clearLayers();const m=active();if(!m)return;renderSafeRouteUi();renderMapLegend(m);
+    if(!state.map)return;clearLayers();const m=active();if(!m)return;renderSafeRouteUi();renderCalibration(m);renderMapLegend(m);
     const poly=dominationPolygon(m),hasCenter=validCoord(m.center?.x)&&validCoord(m.center?.y),polyMode=(m.category||'dominacao')==='dominacao'&&dominationZoneMode(m)==='polygon';
     if(hasCenter&&!polyMode){
       const cicon=L.divIcon({className:'',html:`<div class="mp-center-pin ${isCenterValidated(m)?'validated':'planned'}">◎</div>`,iconSize:[32,32],iconAnchor:[16,16]});
