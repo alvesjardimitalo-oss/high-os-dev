@@ -1448,7 +1448,7 @@ iconAnchor:[12,
     }
     const anchor=qs('#mpCoverageBox')||qs('#mpCenterValidation'),zonePanel=plannerPanel('zona');
     if(!anchor&&!zonePanel)return;
-    const box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card';box.dataset.forceTab='zona';box.style.marginTop='10px';
+    const box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
     box.innerHTML=`<h3>ROTA PROGRESSIVA DA SAFE</h3>
       <p class="mp-note">Fluxo: <b>FECHA 1 → MOVE → FECHA 2 → MOVE → FECHA FINAL</b>. Os respawns da missão não são alterados.</p>
       <div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
@@ -2602,10 +2602,10 @@ z=zones[0];if(!z)return false;
      recriar elemento nenhum (os listeners continuam valendo).
   --------------------------------------------------------------- */
   const PLANNER_TABS=[
-    {id:'zona',label:'ZONA'},
-    {id:'pontos',label:'PONTOS'},
-    {id:'validacao',label:'VALIDAÇÃO'},
-    {id:'entrega',label:'ENTREGA'}
+    {id:'zona',label:'1 · ZONA / SAFE'},
+    {id:'pontos',label:'2 · CDS / SPAWNS'},
+    {id:'validacao',label:'3 · VALIDAR'},
+    {id:'entrega',label:'4 · SIMULAR / SALVAR'}
   ];
   function cardTabKey(card){
     const t=(card.querySelector('h3')?.textContent||'').toUpperCase();
@@ -2627,6 +2627,8 @@ z=zones[0];if(!z)return false;
     qsa('.mp-tab').forEach(b=>{const on=b.dataset.tab===id;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});
     qsa('.mp-tabpanel').forEach(p=>p.classList.toggle('active',p.dataset.tab===id));
     state.plannerTab=id;
+    const m=active(),gas=(m?.category||'dominacao')==='gas';
+    qsa('.mp-tab').forEach(b=>{if(b.dataset.tab==='zona')b.title=gas?'Definir zona inicial e rota progressiva das SAFEs':'Definir geometria e limites da zona';});
     try{localStorage.setItem('highos_mp_tab',id);}catch(e){}
   }
   function fmtBackupData(iso){
