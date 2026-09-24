@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
+safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -1744,7 +1744,8 @@ iconAnchor:[12,
     if(state.safePreviewMask&&state.map){try{state.map.removeLayer(state.safePreviewMask)}catch{}state.safePreviewMask=null;}
     if(state.safePreviewRouteLayer&&state.map){try{state.map.removeLayer(state.safePreviewRouteLayer)}catch{}state.safePreviewRouteLayer=null;}
     const hud=qs('#mpSafePreviewHud');if(hud)hud.remove();
-    qs('#mpSafeTimeline')?.remove();
+    if(state.safeTestPlayerMarker&&state.map){try{state.map.removeLayer(state.safeTestPlayerMarker)}catch{}state.safeTestPlayerMarker=null;}
+    state.safeTestPlayer=null;qs('#mpSafeTimeline')?.remove();
   }
   function ensurePreviewHud(){
     let hud=qs('#mpSafePreviewHud');if(hud)return hud;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;
@@ -1788,6 +1789,22 @@ iconAnchor:[12,
     state.safePreviewMask.setLatLngs([outer,hole]);
   }
 
+  function safeTestPlayerStatus(center,radius,damage){
+    const p=state.safeTestPlayer;if(!p||!center)return null;const distance=distXY(p,center),margin=Number(radius)-distance,inside=margin>=0;
+    return {distance,margin,inside,damage:inside?0:(Number(damage)||0)};
+  }
+  function updateSafeTestPlayerMarker(){
+    if(!state.map||!state.safeTestPlayer)return;
+    if(!state.safeTestPlayerMarker){
+      const icon=L.divIcon({className:'',html:'<div id="mpSafeTestPlayerPin" style="width:28px;height:28px;border-radius:50%;background:#111827;border:3px solid #fff;color:#fff;font:900 12px/22px system-ui;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.5)">P</div>',iconSize:[28,28],iconAnchor:[14,14]});
+      state.safeTestPlayerMarker=L.marker(ll(state.safeTestPlayer.x,state.safeTestPlayer.y),{icon,draggable:true,zIndexOffset:2000}).addTo(state.map);
+      state.safeTestPlayerMarker.on('drag',e=>{const n=e.target.getLatLng();state.safeTestPlayer={x:n.lng,y:n.lat};safePreviewAt(state.safePreviewElapsed);});
+    }else state.safeTestPlayerMarker.setLatLng(ll(state.safeTestPlayer.x,state.safeTestPlayer.y));
+  }
+  function toggleSafeTestPlayer(){
+    if(state.safeTestPlayer){if(state.safeTestPlayerMarker&&state.map){try{state.map.removeLayer(state.safeTestPlayerMarker)}catch{}}state.safeTestPlayer=null;state.safeTestPlayerMarker=null;safePreviewAt(state.safePreviewElapsed);return;}
+    const model=state.safePreviewModel;if(!model?.route?.length)return;const s=model.route[0];state.safeTestPlayer={x:Number(s.x),y:Number(s.y)};updateSafeTestPlayerMarker();safePreviewAt(state.safePreviewElapsed);
+  }
   function safePreviewAt(seconds){
     const model=state.safePreviewModel;if(!model)return;
     const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;
@@ -1798,7 +1815,8 @@ iconAnchor:[12,
     if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}
     state.safePreviewLayer?.setLatLng(ll(x,y));state.safePreviewLayer?.setRadius(rad);updateSafeGasMask({x,y},rad);
     const remain=Math.max(0,Math.ceil(p.seconds-local)),damage=Number(p.damage)||0,hud=ensurePreviewHud();
-    if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+model.routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(total)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>';
+    const player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
+    if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+model.routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(total)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>'+(player?'<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.15);font-size:12px;color:'+(player.inside?'#86efac':'#fca5a5')+'">PLAYER TESTE: <b>'+(player.inside?'DENTRO DA SAFE':'FORA DA SAFE')+'</b> • distância '+Math.round(player.distance)+'m • '+(player.inside?'margem '+Math.round(player.margin)+'m':'fora por '+Math.round(Math.abs(player.margin))+'m')+' • DPS aplicado '+player.damage+'</div>':'');
     const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';
     model.phaseIndex=pi;
   }
@@ -1806,8 +1824,9 @@ iconAnchor:[12,
     const model=state.safePreviewModel;if(!model)return null;let bar=qs('#mpSafeTimeline');if(bar)return bar;
     const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;if(getComputedStyle(wrap).position==='static')wrap.style.position='relative';
     bar=document.createElement('div');bar.id='mpSafeTimeline';Object.assign(bar.style,{position:'absolute',left:'50%',bottom:'18px',transform:'translateX(-50%)',zIndex:'10055',width:'min(760px,calc(100% - 32px))',background:'rgba(8,10,18,.92)',border:'1px solid rgba(255,255,255,.18)',borderRadius:'12px',padding:'9px 12px',color:'#fff',font:'600 12px system-ui',boxShadow:'0 10px 30px rgba(0,0,0,.35)'});
-    bar.innerHTML='<div style="display:flex;gap:6px;align-items:center"><button id="mpSafePrevPhase" title="Fase anterior">|◀</button><button id="mpSafeTimePlay" title="Play/Pause">▶</button><button id="mpSafeNextPhase" title="Próxima fase">▶|</button><button id="mpSafeTimeSpeed" title="Velocidade">1x</button><span id="mpSafeTimeClock" style="min-width:100px;text-align:center">00:00 / '+formatDuration(model.totalSeconds)+'</span><input id="mpSafeTimeRange" type="range" min="0" max="'+model.totalSeconds+'" step="1" value="0" style="flex:1"></div>';
+    bar.innerHTML='<div style="display:flex;gap:6px;align-items:center"><button id="mpSafePrevPhase" title="Fase anterior">|◀</button><button id="mpSafeTimePlay" title="Play/Pause">▶</button><button id="mpSafeNextPhase" title="Próxima fase">▶|</button><button id="mpSafeTimeSpeed" title="Velocidade">1x</button><button id="mpSafeTestPlayer" title="Adicionar/remover Player de Teste">P TESTE</button><span id="mpSafeTimeClock" style="min-width:100px;text-align:center">00:00 / '+formatDuration(model.totalSeconds)+'</span><input id="mpSafeTimeRange" type="range" min="0" max="'+model.totalSeconds+'" step="1" value="0" style="flex:1"></div>';
     wrap.appendChild(bar);
+    qs('#mpSafeTestPlayer',bar).onclick=()=>{toggleSafeTestPlayer();const b=qs('#mpSafeTestPlayer',bar);if(b)b.textContent=state.safeTestPlayer?'REMOVER P':'P TESTE';};
     qs('#mpSafeTimePlay',bar).onclick=()=>{state.safePreviewPlaying=!state.safePreviewPlaying;safePreviewAt(state.safePreviewElapsed);};
     qs('#mpSafeTimeSpeed',bar).onclick=e=>{state.safePreviewSpeed=state.safePreviewSpeed===1?2:state.safePreviewSpeed===2?4:1;e.currentTarget.textContent=state.safePreviewSpeed+'x';};
     qs('#mpSafeTimeRange',bar).oninput=e=>{state.safePreviewPlaying=false;safePreviewAt(Number(e.target.value));};
