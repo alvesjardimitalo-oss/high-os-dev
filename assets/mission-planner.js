@@ -2166,6 +2166,32 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     const commonSame=JSON.stringify(n)===JSON.stringify(b),zoneChanged=nCenter!==bCenter||nRadius!==bRadius||nPoly!==bPoly||(before?.zoneMode||null)!==(now?.zoneMode||null),spawnsOnly=nPoints!==bPoints&&!zoneChanged&&commonSame,zoneOnly=nPoints===bPoints&&zoneChanged&&commonSame;
     const beforePoly=(before?.zonePolygon||[]).filter(p=>validCoord(p?.x)&&validCoord(p?.y)),nowPoly=(now?.zonePolygon||[]).filter(p=>validCoord(p?.x)&&validCoord(p?.y)),beforeZoneMode=before?.zoneMode||(beforePoly.length>=3?'polygon':'radius'),nowZoneMode=now?.zoneMode||(nowPoly.length>=3?'polygon':'radius'),zoneTransition=beforeZoneMode===nowZoneMode?(nowZoneMode==='polygon'&&nPoly!==bPoly?'polygon-to-polygon':null):(beforeZoneMode+'-to-'+nowZoneMode);return {hasBase:true,safeOnly,safeChanged:nowSafe!==beforeSafe,spawnsOnly,zoneOnly,polygonChanged:nPoly!==bPoly,zoneChanged,beforeZoneMode,nowZoneMode,zoneTransition};
   }
+  function safeIssueStage(issue){
+    const s=String(issue||'');let m=s.match(/SAFE\s+(\d+)/i);if(m)return Math.max(0,Number(m[1])-1);
+    m=s.match(/após SAFE\s+(\d+)/i);if(m)return Math.max(0,Number(m[1])-1);
+    return null;
+  }
+  function safePreflight(m){
+    if(!m||(m.category||'dominacao')!=='gas')return {blocking:[],warnings:[],firstStage:null};
+    const blocking=safeRouteAudit(m),r=ensureSafeRoute(m);
+    if(r){
+      r.stages.forEach((st,i)=>{const land=safeStageValid(st)?safeLandCheck(st):null;if(land&&!land.ok)blocking.push('SAFE '+(i+1)+': '+land.reason);});
+      const reach=safeRouteReachability(r);for(let i=1;i<r.stages.length;i++){const opts=safeOptions(r,i);if(opts.length&&!reach[i]?.viable?.some(x=>x.index>=0))blocking.push('SAFE '+(i+1)+' não possui possibilidade com continuidade até a SAFE final.');}
+    }
+    const unique=[...new Set(blocking)],first=unique.map(safeIssueStage).find(x=>x!==null&&Number.isFinite(x));
+    return {blocking:unique,warnings:[],firstStage:first??null};
+  }
+  function focusSafePreflight(stage){
+    const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return;
+    const i=Math.min(Math.max(0,Number(stage)||0),r.stages.length-1);state.safeEditorStage=i;state.safeConfigView=true;state.layerVisibility.spawns=false;renderSafeRouteUi();renderMap();
+    const st=r.stages[i];if(safeStageValid(st)&&state.map)state.map.panTo(ll(st.x,st.y));
+  }
+  function requireSafePreflight(m,action='gerar a solicitação'){
+    const check=safePreflight(m);if(!check.blocking.length)return true;
+    if(check.firstStage!==null)focusSafePreflight(check.firstStage);
+    alert('NÃO É POSSÍVEL '+action.toUpperCase()+'.\n\nCorrija primeiro:\n- '+check.blocking.join('\n- ')+'\n\nA primeira SAFE com problema foi aberta no editor.');
+    return false;
+  }
   function highRequestExport(){
     const m=active();if(!m)return '';const a=plannerAudit(m),pts=(m.points||[]).filter(isValidated),r=(m.category||'dominacao')==='gas'?ensureSafeRoute(m):null,isSurvival=/sobreviv[eê]ncia/i.test(m.event||''),change=requestChangeScope(m),polyRaw=(m.category||'dominacao')==='dominacao'&&Array.isArray(m.zonePolygon)?m.zonePolygon:[],polyAudit=(m.category||'dominacao')==='dominacao'?dominationPolygonAudit(m):null,polyPending=polyRaw.filter(v=>validCoord(v?.x)&&validCoord(v?.y)&&(!validCoord(v?.z)||v?.status!=='validated')).length,polyInvalid=polyRaw.filter(v=>!validCoord(v?.x)||!validCoord(v?.y)).length;
     const operation=zoneOperation(m),creating=operation==='create-event'||operation==='create-zone',zoneName=m.name||'Zona Principal',eventName=m.event||'Sem nome',facXFac=/fac\s*x\s*fac/i.test(eventName),subject=operation==='create-event'?'Solicitação de Criação do Evento '+eventName:(operation==='create-zone'?'Solicitação de Criação de Zona do Evento '+eventName+' — Zona '+zoneName:'Solicitação de Alteração da Zona do Evento '+eventName+' — Zona '+zoneName);
@@ -2257,7 +2283,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
       qs('#mpGoCoord')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();qs('#mpGoCoordBtn')?.click();}});qs('#mpGoCoord')?.addEventListener('input',e=>{const lab=e.target.closest('label')?.querySelector('small');if(lab)lab.textContent=cdsFormatHint(e.target.value)+' • vec é opcional';});
       qs('#mpSavePresetBtn')?.addEventListener('click',()=>saveLocalPreset());
       qsa('[data-mplayer]',box).forEach(c=>{c.checked=state.layerVisibility[c.dataset.mplayer]!==false;c.addEventListener('change',()=>{state.layerVisibility[c.dataset.mplayer]=c.checked;renderMap();});});qs('#mpLegendToggle')?.addEventListener('change',e=>{const x=qs('#mpMapLegend');if(x)x.style.display=e.target.checked?'':'none';});qs('#mpCompareLayerToggle')?.addEventListener('change',e=>{if(!state.editing&&e.target.checked){e.target.checked=false;alert('Entre em EDITAR ZONA para visualizar a versão anterior.');return;}state.compareOverlay=e.target.checked;renderMap();});
-      qs('#mpCopyExportPro')?.addEventListener('click',async()=>{const fmt=qs('#mpExportFormat')?.value||'lua';await copyText(exportMission(fmt));const b=qs('#mpCopyExportPro');if(b){b.textContent='COPIADO ✓';setTimeout(()=>b.textContent='COPIAR EXPORTAÇÃO',900);}});
+      qs('#mpCopyExportPro')?.addEventListener('click',async()=>{const fmt=qs('#mpExportFormat')?.value||'lua',m=active();if(fmt==='high'&&(m?.category||'dominacao')==='gas'&&!requireSafePreflight(m,'copiar a solicitação HIGH'))return;await copyText(exportMission(fmt));const b=qs('#mpCopyExportPro');if(b){b.textContent='COPIADO ✓';setTimeout(()=>b.textContent='COPIAR EXPORTAÇÃO',900);}});
     }
     const a=plannerAudit(active()),el=qs('#mpAuditStatus');if(el)el.innerHTML=a.issues.length?'<b style="color:#ff7474">NÃO PRONTO PARA PUBLICAR</b><br>'+esc(a.issues.join(' • ')):(a.warns.length?'<b style="color:#ffd166">PRONTO COM AVISOS</b><br>'+esc(a.warns.join(' • ')):'<b class="mp-ok">PRONTO PARA PUBLICAR ✓</b><br>Centro, spawns e cobertura passaram nas validações automáticas.');
     qsa('[data-mplayer]',box).forEach(c=>c.checked=state.layerVisibility?.[c.dataset.mplayer]!==false);const lg=qs('#mpMapLegend');if(lg)lg.style.display=qs('#mpLegendToggle')?.checked===false?'none':'';const ct=qs('#mpCompareLayerToggle');if(ct){ct.checked=!!state.compareOverlay;ct.disabled=!state.editing;}const cb=qs('#mpCompareBtn');if(cb)cb.textContent=state.compareOverlay?'OCULTAR ANTES':'ANTES × DEPOIS';renderLocalPresets();
@@ -2596,6 +2622,7 @@ v=m?.points.filter(isValidated)||[];if(!v.length){alert('Nenhum ponto validado p
   async function exportXY(){const m=active();if(!m?.points.length)return;await copyText(m.points.map((p,i)=>`${i+1} - ${isValidated(p)?rawCds(p):tpCds(p)}`).join('\n'));}
   function generateRequest(){
     const m=active();if(!m)return;
+    if((m.category||'dominacao')==='gas'&&!requireSafePreflight(m,'gerar a solicitação'))return;
     const category=m.category||'dominacao',
 all=m.points||[],
 pts=all.filter(isValidated),
