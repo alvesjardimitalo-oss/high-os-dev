@@ -1454,6 +1454,7 @@ iconAnchor:[12,
       <div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
       <div id="mpSafeStages"></div>
       <div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" id="mpSafePlace1">POSICIONAR SAFE 1 NO MAPA</button>
         <button type="button" id="mpSafeUseCenter">SAFE 1 = CENTRO ATUAL</button>
         <button type="button" id="mpSafePlace2">ADICIONAR OPÇÃO SAFE 2</button>
         <button type="button" id="mpSafePlace3">ADICIONAR OPÇÃO SAFE 3</button>
@@ -1463,6 +1464,7 @@ iconAnchor:[12,
         <button type="button" id="mpSafeStop">■ PARAR</button>
       </div>`;
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
+    qs('#mpSafePlace1')?.addEventListener('click',()=>beginSafePlacement(0));
     qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=0;commit('Safe 1 vinculada ao centro da missão');});
     qs('#mpSafePlace2')?.addEventListener('click',()=>beginSafePlacement(1));
     qs('#mpSafePlace3')?.addEventListener('click',()=>beginSafePlacement(2));
@@ -1523,8 +1525,7 @@ iconAnchor:[12,
     if(!check.ok){previewSafePlacement(latlng);if(qs('#mpClicked'))qs('#mpClicked').textContent='SAFE BLOQUEADA • '+check.reason;return false;}
     const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
     s.x=latlng.lng;s.y=latlng.lat;s.z=0;
-    const key=idx===1?'stage2Options':'stage3Options';if(!Array.isArray(r[key]))r[key]=[];
-    r[key].push({x:s.x,y:s.y,z:s.z});
+    if(idx>0){const key=idx===1?'stage2Options':'stage3Options';if(!Array.isArray(r[key]))r[key]=[];r[key].push({x:s.x,y:s.y,z:s.z});}
     state.safePlacementStage=null;clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
     commit(`Safe ${idx+1} marcada no mapa`);
     state.map?.panTo(latlng);renderSafeRouteUi();return true;
@@ -1547,7 +1548,7 @@ iconAnchor:[12,
         <label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="1" value="${s.closeSeconds??''}"></label>
         ${i<2?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${s.moveSeconds??''}"></label>`:''}
       </div></div>`).join('');
-    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}rr.stages[i][k]=v;if(k==='radius')rr.stages[i][k]=Math.max(30,v);commit('Rota da Safe alterada');}));
+    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const before=rr.stages[i][k];rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){let parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];if(parent&&!safeCircleFits(parent,rr.stages[i])){rr.stages[i][k]=before;setSaveState('SAFE '+(i+1)+' rejeitada • precisa caber completamente dentro da etapa anterior');renderSafeRouteUi();return;}const land=safeLandCheck(rr.stages[i]);if(!land.ok){rr.stages[i][k]=before;setSaveState('SAFE '+(i+1)+' rejeitada • '+land.reason);renderSafeRouteUi();return;}}commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
     const o2=r.stage2Options||[],o3=r.stage3Options||[],validO2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0})),parents2=validO2.length?validO2:[r.stages[1]],validO3=o3.filter(p=>parents2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0})));
     const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';const invalid2=o2.map((p,i)=>({p,i})).filter(x=>!validO2.includes(x.p)),invalid3=o3.map((p,i)=>({p,i})).filter(x=>!validO3.includes(x.p));opts.innerHTML=`Modo do preview: <b>${o2.length||o3.length?'ALEATÓRIO/MISTO':'ROTA FIXA'}</b> • Safe 2 válidas: <b>${validO2.length}/${o2.length}</b> • Safe 3 válidas: <b>${validO3.length}/${o3.length}</b> <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`+(invalid2.length||invalid3.length?`<div style="margin-top:7px;color:#ff8b8b"><b>Opções inválidas:</b> ${invalid2.map(x=>`<button type="button" data-safe-remove="2" data-index="${x.i}" title="Remover opção inválida da Safe 2">S2-${x.i+1} ×</button>`).join(' ')} ${invalid3.map(x=>`<button type="button" data-safe-remove="3" data-index="${x.i}" title="Remover opção inválida da Safe 3">S3-${x.i+1} ×</button>`).join(' ')}</div>`:'');host.appendChild(opts);
