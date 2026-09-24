@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,zoneProposal:null,safeHoverMarker:null};
+safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -909,7 +909,7 @@ corpo});
     return mergeMissions(list)>0;
   }
 
-  window.addEventListener('highos:mission-cloud',e=>{const st=e?.detail?.state,err=e?.detail?.error;if(st==='sync')setCloudState('sync','↻ SALVANDO NO FIREBASE...');else if(st==='ok')setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);else if(st==='quota'){const suffix=err?.when?` • tentar após ${err.when}${err.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');}else if(st==='local')setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');});
+  window.addEventListener('highos:mission-cloud',e=>{const st=e?.detail?.state,err=e?.detail?.error;if(st==='sync')setCloudState('sync','↻ SALVANDO NO FIREBASE...');else if(st==='ok'){state.cloudMeta={updatedAtText:e?.detail?.updatedAtText||new Date().toISOString(),updatedBy:e?.detail?.updatedBy||state.cloudMeta?.updatedBy||''};setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);}else if(st==='quota'){const suffix=err?.when?` • tentar após ${err.when}${err.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');}else if(st==='permission'){setCloudState('local','⛔ SEM PERMISSÃO PARA SINCRONIZAR');setSaveState('Firebase recusou a gravação por permissão • dados locais preservados');}else if(st==='local')setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');});
   function setCloudState(kind,text){
     state.cloudState=kind;
     const els=[qs('#mpCloudState'),
@@ -921,7 +921,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     const btn=qs('#mpForceCloudSync');if(btn){btn.disabled=true;btn.textContent='↻ SINCRONIZANDO...';}
     setCloudState('sync','↻ SINCRONIZANDO FIREBASE...');
     try{
-      const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],add=mergeMissions(remote);
+      const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],add=mergeMissions(remote);if(res?.updatedAtText)state.cloudMeta={updatedAtText:res.updatedAtText,updatedBy:res.updatedBy||''};
       const ok=cloud.pushNow?await cloud.pushNow(state.missions):(cloud.push?.(state.missions),true);
       if(!ok){const ce=window.HighOSMissionCloudLastError;if(ce?.quota){const suffix=ce.when?` • tente após ${ce.when}${ce.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');return;}throw new Error('Falha ao confirmar gravação');}
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
@@ -2502,7 +2502,7 @@ z=zones[0];if(!z)return false;
     if(query)events=events.filter(e=>String(e.name||'').toLowerCase().includes(query)||zonesOfEvent(e.id).some(z=>String(z.name||'').toLowerCase().includes(query)));
     const readyTotal=state.missions.filter(z=>isCenterValidated(z)&&z.points?.length&&z.points.every(isValidated)).length;
     const pendingTotal=state.missions.length-readyTotal;
-    host.innerHTML=`<div class="mpc-head"><div><span>BIBLIOTECA DE MAPAS</span><strong>${allEvents.length} eventos <i>•</i> ${state.missions.length} zonas <i>•</i> ${readyTotal} prontas <i>•</i> ${pendingTotal} em revisão</strong></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span id="mpCloudStateCentral" class="mp-cloud-state ${state.cloudState||'local'}">${state.cloudState==='ok'?'☁ SINCRONIZADO':state.cloudState==='sync'?'↻ SINCRONIZANDO...':'⚠ LOCAL'}</span><button type="button" id="mpForceCloudSync" class="mpc-primary" style="white-space:nowrap">↻ SINCRONIZAR FIREBASE</button></div></div>
+    host.innerHTML=`<div class="mpc-head"><div><span>BIBLIOTECA DE MAPAS</span><strong>${allEvents.length} eventos <i>•</i> ${state.missions.length} zonas <i>•</i> ${readyTotal} prontas <i>•</i> ${pendingTotal} em revisão</strong></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px"><span id="mpCloudStateCentral" class="mp-cloud-state ${state.cloudState||'local'}">${state.cloudState==='ok'?'☁ SINCRONIZADO':state.cloudState==='sync'?'↻ SINCRONIZANDO...':'⚠ LOCAL'}</span><small id="mpCloudMeta" style="opacity:.7;text-align:right">${state.cloudMeta?.updatedAtText?'Última: '+new Date(state.cloudMeta.updatedAtText).toLocaleString('pt-BR')+(state.cloudMeta.updatedBy?' • '+esc(state.cloudMeta.updatedBy):''):'Ainda sem sincronização confirmada nesta sessão'}</small></div><button type="button" id="mpForceCloudSync" class="mpc-primary" style="white-space:nowrap">↻ SINCRONIZAR FIREBASE</button></div></div>
       <div class="mpc-toolbar" style="align-items:center;gap:10px;flex-wrap:wrap"><div class="mpc-filters"><button data-cfilter="all" class="${filter==='all'?'active':''}">TODOS</button><button data-cfilter="dominacao" class="${filter==='dominacao'?'active':''}">DOMINAÇÃO</button><button data-cfilter="gas" class="${filter==='gas'?'active':''}">GÁS / SAFE</button></div><div style="display:flex;gap:8px;flex:1;justify-content:flex-end;min-width:280px"><input id="mpCentralSearch" value="${esc(state.centralSearch||'')}" placeholder="Buscar evento ou zona…" style="max-width:300px"><button id="mpCentralNewEvent" class="mpc-primary">+ NOVO EVENTO</button></div></div>
       <div class="mpc-events">${events.length?events.map(e=>{
         const zones=zonesOfEvent(e.id),ready=zones.filter(z=>isCenterValidated(z)&&z.points?.length&&z.points.every(isValidated)).length;
