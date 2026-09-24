@@ -14866,6 +14866,7 @@ return null}
 }
 function missionCloudErrorInfo(e){
  const code=String(e?.code||'').toLowerCase(),msg=String(e?.message||''),raw=(code+' '+msg).toLowerCase();
+ const permission=/permission-denied|unauthorized|forbidden/.test(raw);
  const quota=/resource-exhausted|quota|quota-exceeded|exceeded.*quota|too many requests/.test(raw);
  let retryAt=null,estimated=false;
  const retry=msg.match(/retry(?:\s+after|\s+in)?\s*[:=]?\s*(\d+)\s*(ms|s|sec|seconds?|m|min|minutes?)/i);
@@ -14880,7 +14881,7 @@ function missionCloudErrorInfo(e){
    }catch(_){retryAt=new Date(Date.now()+24*60*60*1000);estimated=true;}
  }
  const when=retryAt?retryAt.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
- return {quota,retryAt,estimated,when,code:code||'firebase-error',message:msg};
+ return {quota,permission,retryAt,estimated,when,code:code||'firebase-error',message:msg};
 }
 
 async function pushMissionsToCloud(missions=[]){
@@ -14906,8 +14907,8 @@ updatedBy:currentUser.email||''},{merge:true});
   missionCloudLastSignature=assinatura;
   missionCloudLastPull={missions:snapshot,updatedAtText:new Date().toISOString(),updatedBy:currentUser.email||''};
   missionCloudLastPullAt=Date.now();
-  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:'ok',
-missions:snapshot.length}}));
+  window.HighOSMissionCloudLastError=null;
+  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:'ok',missions:snapshot.length,updatedAtText:missionCloudLastPull.updatedAtText,updatedBy:missionCloudLastPull.updatedBy}}));
   ok=true;
 
  }catch(e){console.warn('Missoes: falha ao salvar na nuvem',e);
@@ -14915,7 +14916,7 @@ missions:snapshot.length}}));
   missionCloudPendingMissions=snapshot;
   const info=missionCloudErrorInfo(e);
   window.HighOSMissionCloudLastError=info;
-  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:info.quota?'quota':'local',error:info}}));
+  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:info.quota?'quota':info.permission?'permission':'local',error:info}}));
  }finally{
   missionCloudBusy=false;
   const pending=missionCloudPendingMissions;
