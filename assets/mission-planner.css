@@ -421,3 +421,15 @@
  background:rgba(20,15,29,.96)!important;backdrop-filter:blur(10px)
 }
 #page-planejador:not(.mp-library-mode) .mp-safe-stage-toolbar #mpAddSafeTop{flex:1 1 150px!important}
+
+/* V10.80 — editor compacto por etapa de SAFE */
+#page-planejador:not(.mp-library-mode) #mpSafeStages{display:flex!important;flex-direction:column!important;gap:6px!important}
+.mp-safe-stage{border:1px solid rgba(255,255,255,.075);border-radius:10px;background:rgba(255,255,255,.025);overflow:hidden}
+.mp-safe-stage.open{border-color:rgba(157,78,221,.38);background:rgba(109,40,217,.055)}
+.mp-safe-stage.ok .mp-safe-stage-head small{color:#64e6aa}.mp-safe-stage.pending .mp-safe-stage-head small{color:#f0b36a}
+.mp-safe-stage-head{width:100%;min-height:48px!important;display:grid!important;grid-template-columns:minmax(105px,.9fr) minmax(130px,1.3fr) 20px;align-items:center;gap:8px;padding:7px 9px!important;border:0!important;background:transparent!important;color:#fff!important;text-align:left!important}
+.mp-safe-stage-head>span:first-child b{display:block;font-size:9px;letter-spacing:.08em}.mp-safe-stage-head small{display:block;margin-top:3px;font-size:7px;font-weight:900;letter-spacing:.08em}
+.mp-safe-stage-summary{text-align:right;color:#a79eaf;font-size:8px;font-weight:800}.mp-safe-stage-head i{font-style:normal;text-align:center;font-size:16px;color:#b780dc}
+.mp-safe-stage-body{display:none;padding:0 9px 9px;border-top:1px solid rgba(255,255,255,.055)}.mp-safe-stage.open .mp-safe-stage-body{display:block}
+.mp-safe-stage-body .mp-grid{margin-top:8px!important}.mp-safe-stage-actions{margin-top:7px}.mp-safe-stage-actions button{width:100%}
+@media(max-width:700px){.mp-safe-stage-head{grid-template-columns:1fr 20px!important}.mp-safe-stage-summary{grid-column:1;text-align:left}.mp-safe-stage-head i{grid-column:2;grid-row:1/3}}
