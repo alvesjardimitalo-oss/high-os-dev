@@ -1541,7 +1541,7 @@ iconAnchor:[12,
     const prev=r.stages[r.stages.length-1],prevRadius=Number(prev?.radius)||100,radius=Math.max(30,Math.round(prevRadius*.6));
     if(radius>=prevRadius){setSaveState('Não há espaço de raio para adicionar outra SAFE. Reduza o raio da SAFE final atual primeiro.');return;}
     if(prev)prev.moveSeconds=Math.max(60,Number(prev.moveSeconds)||0);
-    r.stages.push({x:null,y:null,z:null,radius,damage:Math.max(5,Number(prev?.damage)||5),closeSeconds:120,moveSeconds:0});
+    r.stages.push({x:null,y:null,z:null,radius,damage:Math.max(5,Number(prev?.damage)||5),closeSeconds:120,moveSeconds:0});state.safeEditorStage=r.stages.length-1;
     commit('Nova etapa de SAFE adicionada');renderSafeRouteUi();
   }
   function removeDynamicSafeStage(){
@@ -1567,15 +1567,27 @@ iconAnchor:[12,
     if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';}
 
     if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
-    host.innerHTML=r.stages.map((s,i)=>`<div class="mp-readout" style="margin-top:8px"><b>SAFE ${i+1}${i===r.stages.length-1?' • FINAL':''}</b>
-      <div class="mp-grid" style="margin-top:6px">
-        <label>X<input data-safe="${i}" data-k="x" inputmode="decimal" value="${s.x??''}"></label>
-        <label>Y<input data-safe="${i}" data-k="y" inputmode="decimal" value="${s.y??''}"></label>
-        <label>Raio final (m)<input data-safe="${i}" data-k="radius" type="number" min="30" value="${s.radius??''}"></label>
-        <label>Dano<input data-safe="${i}" data-k="damage" type="number" min="0" value="${s.damage??''}"></label>
-        <label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="1" value="${s.closeSeconds??''}"></label>
-        ${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${s.moveSeconds??''}"></label>`:''}
-      </div></div>`).join('');
+    const openSafe=Math.min(Math.max(0,Number(state.safeEditorStage)||0),r.stages.length-1);state.safeEditorStage=openSafe;
+    host.innerHTML=r.stages.map((st,i)=>{const valid=safeStageValid(st),land=valid?safeLandCheck(st):{ok:false},parent=i===0?{x:m.center?.x,y:m.center?.y,z:0,radius:initial}:r.stages[i-1],fits=valid&&safeCircleFits(parent,st),stageOk=valid&&land.ok&&fits,open=i===openSafe;return `<section class="mp-safe-stage ${open?'open':''} ${stageOk?'ok':'pending'}" data-safe-card="${i}">
+      <button type="button" class="mp-safe-stage-head" data-safe-toggle="${i}" aria-expanded="${open?'true':'false'}">
+        <span><b>SAFE ${i+1}${i===r.stages.length-1?' • FINAL':''}</b><small>${stageOk?'✓ VÁLIDA':valid?'⚠ REVISAR':'○ PENDENTE'}</small></span>
+        <span class="mp-safe-stage-summary">${Math.round(Number(st.radius)||0)} m · ${formatDuration(Number(st.closeSeconds)||0)}${i<r.stages.length-1?' · move '+formatDuration(Number(st.moveSeconds)||0):''}</span>
+        <i>${open?'−':'+'}</i>
+      </button>
+      <div class="mp-safe-stage-body">
+        <div class="mp-grid">
+          <label>X<input data-safe="${i}" data-k="x" inputmode="decimal" value="${st.x??''}"></label>
+          <label>Y<input data-safe="${i}" data-k="y" inputmode="decimal" value="${st.y??''}"></label>
+          <label>Raio final (m)<input data-safe="${i}" data-k="radius" type="number" min="30" value="${st.radius??''}"></label>
+          <label>Dano<input data-safe="${i}" data-k="damage" type="number" min="0" value="${st.damage??''}"></label>
+          <label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="1" value="${st.closeSeconds??''}"></label>
+          ${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${st.moveSeconds??''}"></label>`:''}
+        </div>
+        <div class="mp-actions mp-safe-stage-actions"><button type="button" data-safe-place="${i}">◎ POSICIONAR SAFE ${i+1} NO MAPA</button></div>
+      </div>
+    </section>`;}).join('');
+    qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeToggle);renderSafeRouteUi();}));
+    qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safePlace);beginSafePlacement(Number(btn.dataset.safePlace));}));
     qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i===0){const bad=(rr.stage2Options||[]).some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[0],{...rr.stages[1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE 2';}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
     const o2=r.stage2Options||[],o3=r.stage3Options||[],validO2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0})),parents2=validO2.length?validO2:[r.stages[1]],validO3=o3.filter(p=>parents2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0})));
