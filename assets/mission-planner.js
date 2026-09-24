@@ -1341,6 +1341,25 @@ iconAnchor:[12,
     if(!Array.isArray(m.safeRoute.stage3Options))m.safeRoute.stage3Options=safeStageValid?.(s[2])?[{x:s[2].x,y:s[2].y,z:s[2].z}]:[];
     return m.safeRoute;
   }
+  function safeOptions(r,idx,create=false){
+    if(!r||idx<=0)return [];
+    if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
+    const key=String(idx);
+    if(!Array.isArray(r.stageOptions[key])){
+      const legacy=idx===1?r.stage2Options:idx===2?r.stage3Options:null;
+      if(Array.isArray(legacy))r.stageOptions[key]=legacy;
+      else if(create)r.stageOptions[key]=[];
+    }
+    const out=Array.isArray(r.stageOptions[key])?r.stageOptions[key]:[];
+    if(idx===1)r.stage2Options=out;if(idx===2)r.stage3Options=out;
+    return out;
+  }
+  function setSafeOptions(r,idx,arr){
+    if(!r||idx<=0)return;if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
+    r.stageOptions[String(idx)]=Array.isArray(arr)?arr:[];
+    if(idx===1)r.stage2Options=r.stageOptions[String(idx)];if(idx===2)r.stage3Options=r.stageOptions[String(idx)];
+  }
+  function safeOptionStage(r,idx,p){return {...r.stages[idx],x:Number(p.x),y:Number(p.y),z:0};}
   function safeStageValid(s){return !!s&&validCoord(s.x)&&validCoord(s.y)&&Number(s.radius)>0;}
   function safeTimeline(m){
     const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO DO EVENTO',at:0,radius:effectiveEventRadius(m),duration:0,type:'start'}];
@@ -1491,10 +1510,8 @@ iconAnchor:[12,
       const prev=r.stages[idx-1];
       parents=safeStageValid(prev)?[prev]:[];
       // Compatibilidade: as SAFEs 2 e 3 ainda podem ter múltiplas opções aleatórias.
-      if(idx===2){
-        const options=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>({...r.stages[1],x:p.x,y:p.y,z:0}));
-        if(options.length)parents=options;
-      }
+      const options=safeOptions(r,idx-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,idx-1,p));
+      if(options.length)parents=options;
     }
     if(!parents.length)return {ok:false,reason:'Defina uma SAFE anterior válida primeiro.'};
     const fitting=parents.filter(parent=>safeCircleFits(parent,candidate));
@@ -1534,7 +1551,7 @@ iconAnchor:[12,
     const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
     s.x=latlng.lng;s.y=latlng.lat;s.z=0;
     // SAFE 2/3 preservam o sistema legado de candidatos aleatórios. SAFE 4+ é rota fixa e não contamina stage3Options.
-    if(idx===1||idx===2){const key=idx===1?'stage2Options':'stage3Options';if(!Array.isArray(r[key]))r[key]=[];const exists=r[key].some(p=>distXY(p,s)<1);if(!exists)r[key].push({x:s.x,y:s.y,z:s.z});}
+    if(idx>0){const opts=safeOptions(r,idx,true);const exists=opts.some(p=>distXY(p,s)<1);if(!exists)opts.push({x:s.x,y:s.y,z:s.z});}
     state.safeEditorStage=idx;state.safePlacementStage=null;clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
     commit(`Safe ${idx+1} marcada no mapa`);
     state.map?.panTo(latlng);renderSafeRouteUi();return true;
@@ -1643,7 +1660,7 @@ iconAnchor:[12,
   }
   function fitSafeRouteForPresentation(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!state.map)return;const pts=[];
-    [...(r.stages||[]),...(r.stage2Options||[]),...(r.stage3Options||[])].forEach(p=>{if(validCoord(p?.x)&&validCoord(p?.y))pts.push(ll(p.x,p.y));});
+    [...(r.stages||[]),...Object.keys(r.stageOptions||{}).flatMap(k=>safeOptions(r,Number(k)))].forEach(p=>{if(validCoord(p?.x)&&validCoord(p?.y))pts.push(ll(p.x,p.y));});
     if(validCoord(m.center?.x)&&validCoord(m.center?.y))pts.push(ll(m.center.x,m.center.y));
     if(pts.length>1)state.map.fitBounds(L.latLngBounds(pts).pad(.18),{maxZoom:5});else if(pts.length)state.map.setView(pts[0],4);
   }
@@ -1680,29 +1697,15 @@ iconAnchor:[12,
 
   function startSafePreview(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
-    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),fixed2=safeStageValid(r.stages[1]),fixed3=safeStageValid(r.stages[2]);
-    if(!o2.length&&!fixed2){alert('Configure a Safe 2 ou adicione pelo menos uma opção de Safe 2 no mapa.');return;}
-    if(!o3.length&&!fixed3){alert('Configure a Safe 3 ou adicione pelo menos uma opção de Safe 3 no mapa.');return;}
-    const valid2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0}));
-    if(o2.length&&!valid2.length){alert('Nenhuma opção da Safe 2 cabe dentro da Safe 1. Corrija as opções antes do preview.');return;}
-    const fixedP2=r.stages[1],fixedP3=r.stages[2];let p2=fixedP2,p3=fixedP3,random2=false,random3=false;
-    if(valid2.length&&o3.length){
-      const pairs=[];valid2.forEach(a=>{const parent={...r.stages[1],x:a.x,y:a.y,z:0};o3.forEach(b=>{if(safeCircleFits(parent,{...r.stages[2],x:b.x,y:b.y,z:0}))pairs.push([a,b]);});});
-      if(!pairs.length){alert('Não existe nenhuma combinação válida entre as opções de Safe 2 e Safe 3. Corrija a rota antes do preview.');return;}
-      [p2,p3]=pairs[Math.floor(Math.random()*pairs.length)];random2=random3=true;
-    }else if(valid2.length){
-      const compatible2=valid2.filter(a=>safeCircleFits({...r.stages[1],x:a.x,y:a.y,z:0},fixedP3));
-      if(!compatible2.length){alert('Nenhuma opção da Safe 2 é compatível com a Safe 3 fixa. Corrija a rota antes do preview.');return;}
-      p2=compatible2[Math.floor(Math.random()*compatible2.length)];random2=true;
-    }else if(o3.length){
-      const valid3=o3.filter(b=>safeCircleFits(fixedP2,{...r.stages[2],x:b.x,y:b.y,z:0}));
-      if(!valid3.length){alert('Nenhuma opção da Safe 3 é compatível com a Safe 2 fixa. Corrija a rota antes do preview.');return;}
-      p3=valid3[Math.floor(Math.random()*valid3.length)];random3=true;
+    const route=[{...r.stages[0]}];let randomized=false;
+    for(let i=1;i<r.stages.length;i++){
+      const opts=safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)),fixed=r.stages[i],parent=route[i-1],choices=[];
+      opts.forEach(p=>{const c=safeOptionStage(r,i,p);if(safeStageValid(c)&&safeCircleFits(parent,c)&&safeLandCheck(c).ok)choices.push(c);});
+      if(safeStageValid(fixed)&&safeCircleFits(parent,fixed)&&safeLandCheck(fixed).ok)choices.push({...fixed});
+      if(!choices.length){alert('A SAFE '+(i+1)+' não possui posição compatível com a SAFE '+i+'. Corrija a rota antes do preview.');return;}
+      const chosen=choices[Math.floor(Math.random()*choices.length)];if(opts.length)randomized=true;route.push(chosen);
     }
-    // Preview usa cópias: rota sorteada ou fixa nunca altera a configuração salva.
-    const s1={...r.stages[0]},s2={...r.stages[1],x:p2.x,y:p2.y,z:0},s3={...r.stages[2],x:p3.x,y:p3.y,z:0},routeMode=(random2||random3)?((random2&&random3)?'ALEATÓRIA':'MISTA'):'FIXA';
-    const route=[s1,s2,s3,...r.stages.slice(3).map(x=>({...x}))];
-    for(let i=0;i<route.length;i++){if(!safeStageValid(route[i])){alert('Configure a SAFE '+(i+1)+' antes do preview.');return;}if(i>0&&!safeCircleFits(route[i-1],route[i])){alert('A SAFE '+(i+1)+' não cabe completamente dentro da SAFE '+i+'.');return;}}
+    const routeMode=randomized?'ALEATÓRIA/MISTA':'FIXA',s1=route[0];
     stopSafePreview();
     state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
     const initial=effectiveEventRadius(m),phases=[];
