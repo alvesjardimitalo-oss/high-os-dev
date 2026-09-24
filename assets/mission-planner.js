@@ -1360,6 +1360,13 @@ iconAnchor:[12,
     if(idx===1)r.stage2Options=r.stageOptions[String(idx)];if(idx===2)r.stage3Options=r.stageOptions[String(idx)];
   }
   function safeOptionStage(r,idx,p){return {...r.stages[idx],x:Number(p.x),y:Number(p.y),z:0};}
+  function safeOptionAudit(r,idx){
+    const opts=safeOptions(r,idx).filter(p=>validCoord(p.x)&&validCoord(p.y));if(idx<=0)return {all:opts,valid:opts,invalid:[]};
+    let parents=safeOptions(r,idx-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,idx-1,p));
+    if(!parents.length&&safeStageValid(r.stages[idx-1]))parents=[r.stages[idx-1]];
+    const valid=[],invalid=[];opts.forEach((p,j)=>{const c=safeOptionStage(r,idx,p),land=safeLandCheck(c),fits=parents.some(parent=>safeCircleFits(parent,c));(fits&&land.ok?valid:invalid).push({p,index:j,reason:!fits?'fora da SAFE anterior':land.reason||'posição inválida'});});
+    return {all:opts,valid,invalid};
+  }
   function safeStageValid(s){return !!s&&validCoord(s.x)&&validCoord(s.y)&&Number(s.radius)>0;}
   function safeTimeline(m){
     const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO DO EVENTO',at:0,radius:effectiveEventRadius(m),duration:0,type:'start'}];
@@ -1590,10 +1597,10 @@ iconAnchor:[12,
 
     if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
     const openSafe=Math.min(Math.max(0,Number(state.safeEditorStage)||0),r.stages.length-1);state.safeEditorStage=openSafe;
-    host.innerHTML=r.stages.map((st,i)=>{const valid=safeStageValid(st),land=valid?safeLandCheck(st):{ok:false},parent=i===0?{x:m.center?.x,y:m.center?.y,z:0,radius:initial}:r.stages[i-1],fits=valid&&safeCircleFits(parent,st),stageOk=valid&&land.ok&&fits,open=i===openSafe;return `<section class="mp-safe-stage ${open?'open':''} ${stageOk?'ok':'pending'}" data-safe-card="${i}">
+    host.innerHTML=r.stages.map((st,i)=>{const valid=safeStageValid(st),land=valid?safeLandCheck(st):{ok:false},optAudit=i>0?safeOptionAudit(r,i):null,parent=i===0?{x:m.center?.x,y:m.center?.y,z:0,radius:initial}:r.stages[i-1],fits=valid&&safeCircleFits(parent,st),stageOk=valid&&land.ok&&fits,open=i===openSafe;return `<section class="mp-safe-stage ${open?'open':''} ${stageOk?'ok':'pending'}" data-safe-card="${i}">
       <button type="button" class="mp-safe-stage-head" data-safe-toggle="${i}" aria-expanded="${open?'true':'false'}">
         <span><b>SAFE ${i+1}${i===r.stages.length-1?' • FINAL':''}</b><small>${stageOk?'✓ VÁLIDA':valid?'⚠ REVISAR':'○ PENDENTE'}</small></span>
-        <span class="mp-safe-stage-summary">${Math.round(Number(st.radius)||0)} m · ${formatDuration(Number(st.closeSeconds)||0)}${i<r.stages.length-1?' · move '+formatDuration(Number(st.moveSeconds)||0):''}</span>
+        <span class="mp-safe-stage-summary">${Math.round(Number(st.radius)||0)} m · ${formatDuration(Number(st.closeSeconds)||0)}${i<r.stages.length-1?' · move '+formatDuration(Number(st.moveSeconds)||0):''}${i>0&&optAudit.all.length?' · opções '+optAudit.valid.length+'/'+optAudit.all.length:''}</span>
         <i>${open?'−':'+'}</i>
       </button>
       <div class="mp-safe-stage-body">
@@ -1605,6 +1612,7 @@ iconAnchor:[12,
           <label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="1" value="${st.closeSeconds??''}"></label>
           ${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${st.moveSeconds??''}"></label>`:''}
         </div>
+        ${i>0&&optAudit.all.length?`<div class="mp-safe-option-audit ${optAudit.invalid.length?'has-invalid':'all-valid'}"><b>POSSIBILIDADES: ${optAudit.valid.length}/${optAudit.all.length} VÁLIDAS</b>${optAudit.invalid.length?`<div>${optAudit.invalid.map(x=>`<button type="button" data-safe-option-remove="${i}" data-index="${x.index}" title="${esc(x.reason)}">S${i+1}-${x.index+1} ×</button>`).join(' ')}</div>`:''}</div>`:''}
         <div class="mp-actions mp-safe-stage-actions">
           <button type="button" data-safe-place="${i}">◎ POSICIONAR SAFE ${i+1} NO MAPA</button>
           ${i>0?`<button type="button" data-safe-option="${i}">＋ ADICIONAR POSSIBILIDADE</button><button type="button" data-safe-clear="${i}" ${safeOptions(r,i).length?'':'disabled'}>LIMPAR ${safeOptions(r,i).length} OPÇ${safeOptions(r,i).length===1?'ÃO':'ÕES'}</button>`:''}
@@ -1615,6 +1623,7 @@ iconAnchor:[12,
     qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safePlace);beginSafePlacement(Number(btn.dataset.safePlace));}));
     qsa('[data-safe-option]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeOption);state.safePlacementAsOption=true;beginSafePlacement(Number(btn.dataset.safeOption));}));
     qsa('[data-safe-clear]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeClear);setSafeOptions(r,i,[]);commit('Possibilidades da SAFE '+(i+1)+' removidas');renderSafeRouteUi();renderMap();}));
+    qsa('[data-safe-option-remove]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeOptionRemove),n=Number(btn.dataset.index),opts=safeOptions(r,i,true);if(!opts[n])return;opts.splice(n,1);commit('Possibilidade inválida S'+(i+1)+'-'+(n+1)+' removida');renderSafeRouteUi();renderMap();}));
     qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i===0){const bad=(rr.stage2Options||[]).some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[0],{...rr.stages[1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE 2';}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
     const o2=r.stage2Options||[],o3=r.stage3Options||[],validO2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0})),parents2=validO2.length?validO2:[r.stages[1]],validO3=o3.filter(p=>parents2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0})));
