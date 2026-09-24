@@ -916,6 +916,21 @@ corpo});
 qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     els.forEach(el=>{el.className='mp-cloud-state '+kind;el.textContent=text||(kind==='ok'?'☁ SINCRONIZADO':kind==='sync'?'↻ SINCRONIZANDO...':'⚠ MODO LOCAL');});
   }
+  async function forcePlannerCloudSync(){
+    const cloud=window.HighOSMissionCloud;if(!cloud?.pull){setCloudState('local','⚠ FIREBASE INDISPONÍVEL');return;}
+    const btn=qs('#mpForceCloudSync');if(btn){btn.disabled=true;btn.textContent='↻ SINCRONIZANDO...';}
+    setCloudState('sync','↻ SINCRONIZANDO FIREBASE...');
+    try{
+      const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],add=mergeMissions(remote);
+      const ok=cloud.pushNow?await cloud.pushNow(state.missions):(cloud.push?.(state.missions),true);
+      if(!ok)throw new Error('Falha ao confirmar gravação');
+      setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
+      setSaveState(`Sincronização manual concluída ✓${add?' • '+add+' zona(s) recebida(s)':''}`);
+      render();
+    }catch(e){
+      console.warn('Planejador: sincronização manual falhou',e);setCloudState('local','⚠ FIREBASE PENDENTE');setSaveState('Falha ao sincronizar Firebase • dados locais preservados');
+    }finally{const b=qs('#mpForceCloudSync');if(b){b.disabled=false;b.textContent='↻ SINCRONIZAR FIREBASE';}}
+  }
   function syncMissionsFromCloud(tries=0){
     const cloud=window.HighOSMissionCloud;
     if(!cloud||!cloud.pull){if(tries<12)setTimeout(()=>syncMissionsFromCloud(tries+1),1500);else setCloudState('local');return;}
@@ -2487,7 +2502,7 @@ z=zones[0];if(!z)return false;
     if(query)events=events.filter(e=>String(e.name||'').toLowerCase().includes(query)||zonesOfEvent(e.id).some(z=>String(z.name||'').toLowerCase().includes(query)));
     const readyTotal=state.missions.filter(z=>isCenterValidated(z)&&z.points?.length&&z.points.every(isValidated)).length;
     const pendingTotal=state.missions.length-readyTotal;
-    host.innerHTML=`<div class="mpc-head"><div><span>BIBLIOTECA DE MAPAS</span><strong>${allEvents.length} eventos <i>•</i> ${state.missions.length} zonas <i>•</i> ${readyTotal} prontas <i>•</i> ${pendingTotal} em revisão</strong></div><span id="mpCloudStateCentral" class="mp-cloud-state ${state.cloudState||'local'}">${state.cloudState==='synced'?'☁ SINCRONIZADO':'↻ SINCRONIZANDO'}</span></div>
+    host.innerHTML=`<div class="mpc-head"><div><span>BIBLIOTECA DE MAPAS</span><strong>${allEvents.length} eventos <i>•</i> ${state.missions.length} zonas <i>•</i> ${readyTotal} prontas <i>•</i> ${pendingTotal} em revisão</strong></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span id="mpCloudStateCentral" class="mp-cloud-state ${state.cloudState||'local'}">${state.cloudState==='ok'?'☁ SINCRONIZADO':state.cloudState==='sync'?'↻ SINCRONIZANDO...':'⚠ LOCAL'}</span><button type="button" id="mpForceCloudSync" class="mpc-primary" style="white-space:nowrap">↻ SINCRONIZAR FIREBASE</button></div></div>
       <div class="mpc-toolbar" style="align-items:center;gap:10px;flex-wrap:wrap"><div class="mpc-filters"><button data-cfilter="all" class="${filter==='all'?'active':''}">TODOS</button><button data-cfilter="dominacao" class="${filter==='dominacao'?'active':''}">DOMINAÇÃO</button><button data-cfilter="gas" class="${filter==='gas'?'active':''}">GÁS / SAFE</button></div><div style="display:flex;gap:8px;flex:1;justify-content:flex-end;min-width:280px"><input id="mpCentralSearch" value="${esc(state.centralSearch||'')}" placeholder="Buscar evento ou zona…" style="max-width:300px"><button id="mpCentralNewEvent" class="mpc-primary">+ NOVO EVENTO</button></div></div>
       <div class="mpc-events">${events.length?events.map(e=>{
         const zones=zonesOfEvent(e.id),ready=zones.filter(z=>isCenterValidated(z)&&z.points?.length&&z.points.every(isValidated)).length;
@@ -2499,6 +2514,7 @@ z=zones[0];if(!z)return false;
     qsa('[data-newzone]',host).forEach(btn=>btn.onclick=()=>{if(selectEventForAction(btn.dataset.newzone))createZone();});
     qsa('[data-delevent]',host).forEach(btn=>btn.onclick=()=>{if(selectEventForAction(btn.dataset.delevent))deleteEvent();});
     qs('#mpCentralNewEvent',host)?.addEventListener('click',()=>{if(filter!=='all')state.libraryCategory=filter;createEvent();});
+    qs('#mpForceCloudSync',host)?.addEventListener('click',forcePlannerCloudSync);
   }
 
   function bindFormAutosave(){
