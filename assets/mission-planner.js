@@ -909,7 +909,7 @@ corpo});
     return mergeMissions(list)>0;
   }
 
-  window.addEventListener('highos:mission-cloud',e=>{const st=e?.detail?.state;if(st==='sync')setCloudState('sync','↻ SALVANDO NO FIREBASE...');else if(st==='ok')setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);else if(st==='local')setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');});
+  window.addEventListener('highos:mission-cloud',e=>{const st=e?.detail?.state,err=e?.detail?.error;if(st==='sync')setCloudState('sync','↻ SALVANDO NO FIREBASE...');else if(st==='ok')setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);else if(st==='quota'){const suffix=err?.when?` • tentar após ${err.when}${err.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');}else if(st==='local')setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');});
   function setCloudState(kind,text){
     state.cloudState=kind;
     const els=[qs('#mpCloudState'),
@@ -923,7 +923,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     try{
       const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],add=mergeMissions(remote);
       const ok=cloud.pushNow?await cloud.pushNow(state.missions):(cloud.push?.(state.missions),true);
-      if(!ok)throw new Error('Falha ao confirmar gravação');
+      if(!ok){const ce=window.HighOSMissionCloudLastError;if(ce?.quota){const suffix=ce.when?` • tente após ${ce.when}${ce.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');return;}throw new Error('Falha ao confirmar gravação');}
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
       setSaveState(`Sincronização manual concluída ✓${add?' • '+add+' zona(s) recebida(s)':''}`);
       render();
