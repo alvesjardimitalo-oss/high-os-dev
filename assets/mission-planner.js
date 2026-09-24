@@ -1516,7 +1516,7 @@ iconAnchor:[12,
     if(!anchor&&!zonePanel)return;
     const box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
     box.innerHTML=`<h3>ROTA PROGRESSIVA DA SAFE</h3>
-      <p class="mp-note">Fluxo: <b>FECHA 1 → MOVE → FECHA 2 → MOVE → FECHA FINAL</b>. Os respawns da missão não são alterados.</p>
+      <p class="mp-note">Fluxo progressivo: <b>FECHA → MOVE → FECHA</b>, com quantas etapas forem necessárias até a SAFE final. Cada etapa define o dano por segundo fora da zona.</p>
       <div id="mpSafeRouteStatus" class="mp-readout"></div>
       <div id="mpSafeStageToolbar" class="mp-actions mp-safe-stage-toolbar" style="display:none;margin-top:8px">
         <button type="button" id="mpAddSafeTop" class="primary">＋ ADICIONAR SAFE</button>
@@ -2580,21 +2580,17 @@ intro='';
 - A nova zona deverá ser adicionada à seleção de zonas do evento "${eventName}".`:'';
     const safeRoute=category==='gas'?ensureSafeRoute(m):null;
     const safeRouteText=category==='gas'&&safeRoute?(()=>{
-      const s=safeRoute.stages||[],o2=safeOptions(safeRoute,1).filter(p=>validCoord(p.x)&&validCoord(p.y)),o3=safeOptions(safeRoute,2).filter(p=>validCoord(p.x)&&validCoord(p.y));
-      if(!o2.length&&!o3.length)return '';
-      const fmtOpt=(p,i,prefix)=>`- ${prefix}${String.fromCharCode(65+i)}: ${f(p.x)},${f(p.y)} • raio da etapa: ${Math.round(Number(s[prefix==='SAFE 2'?1:2]?.radius)||0)} m`;
-      return `
-
-MOVIMENTAÇÃO DA SAFE:
-
-- SAFE 1: ${f(s[0]?.x)},${f(s[0]?.y)} • fecha até ${Math.round(Number(s[0]?.radius)||0)} m • dano ${Number(s[0]?.damage)||0} • fechamento ${Number(s[0]?.closeSeconds)||0}s.
-${o2.map((p,i)=>fmtOpt(p,i,'SAFE 2')).join('\n')}
-${o3.map((p,i)=>fmtOpt(p,i,'SAFE 3')).join('\n')}
-
-- A cada execução, sortear uma opção de SAFE 2 e uma opção de SAFE 3 dentre as CDS configuradas.
-- Fluxo: SAFE 1 fecha → círculo inteiro se desloca até SAFE 2 mantendo o raio alcançado → fecha novamente → desloca até SAFE 3 → fechamento final.
-- Movimento SAFE 1→2: ${Number(s[0]?.moveSeconds)||0}s. Movimento SAFE 2→3: ${Number(s[1]?.moveSeconds)||0}s.
-- Durante o deslocamento, centro e área do gás devem se mover continuamente, sem teleporte da zona.`;
+      const stages=safeRoute.stages||[];if(!stages.length)return '';
+      const lines=['','MOVIMENTAÇÃO DA SAFE:',''];
+      stages.forEach((st,i)=>{
+        const opts=i>0?safeOptions(safeRoute,i).filter(p=>validCoord(p.x)&&validCoord(p.y)):[];
+        const pos=validCoord(st.x)&&validCoord(st.y)?f(st.x)+','+f(st.y):'posição definida pelas possibilidades abaixo';
+        lines.push('- SAFE '+(i+1)+': '+pos+' • raio '+Math.round(Number(st.radius)||0)+' m • dano fora da SAFE: '+(Number(st.damage)||0)+' HP por segundo • fechamento '+(Number(st.closeSeconds)||0)+'s'+(i<stages.length-1?' • movimento para próxima SAFE '+(Number(st.moveSeconds)||0)+'s.':'.'));
+        opts.forEach((p,j)=>lines.push('  - Opção '+String.fromCharCode(65+j)+': '+f(p.x)+','+f(p.y)));
+      });
+      lines.push('','DANO FORA DA SAFE:','- O dano deve ser aplicado continuamente por segundo enquanto o player estiver fora do círculo ativo.','- O valor do dano deve acompanhar automaticamente a etapa atual da SAFE.','- Enquanto estiver fora da SAFE, exibir aviso visível ao player no padrão: "VOCÊ ESTÁ FORA DA SAFE — TOMANDO X DE DANO POR SEGUNDO".','- Substituir X pelo dano configurado na SAFE ativa e atualizar o aviso quando a etapa mudar.','- Ao retornar para dentro da SAFE, interromper imediatamente o dano e remover o aviso.');
+      lines.push('','REGRA DE MOVIMENTAÇÃO:','- A progressão não fica limitada a 3 SAFEs. Utilizar todas as etapas configuradas no Planejador, incluindo SAFE 4, SAFE 5 e seguintes, até a SAFE final.','- Quando uma etapa possuir múltiplas possibilidades, sortear somente uma opção que mantenha uma rota geometricamente compatível até a etapa seguinte.','- Durante cada deslocamento, centro e área do gás devem se mover continuamente, sem teleporte da zona.');
+      return lines.join('\n');
     })():'';
     const gasHeightNote=category==='gas'?`
 
