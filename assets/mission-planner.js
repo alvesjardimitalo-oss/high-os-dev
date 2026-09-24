@@ -1772,8 +1772,19 @@ iconAnchor:[12,
       const circle=L.circle(ll(s.x,s.y),{radius:Number(s.radius),weight:isCurrent?6:(isParent||isNext?4:2),opacity:isCurrent?1:(isParent||isNext?.82:.42),fillOpacity:isCurrent?.08:.018,dashArray:i===r.stages.length-1?'4 4':'10 7',color,fillColor:color,interactive:false}).addTo(state.map);
       const bg=!routeOk?'#991b1b':isCurrent?'#6d28d9':isParent?'#075985':isNext?'#854d0e':'';
       const icon=L.divIcon({className:'',html:`<div class="mp-center-pin ${routeOk?'validated':''} ${isCurrent?'mp-safe-current':''}" style="font-size:11px;font-weight:900;${bg?'background:'+bg+';':''}${!routeOk?'border-color:#f87171':''}">S${i+1}</div>`,iconSize:[isCurrent?38:32,isCurrent?38:32],iconAnchor:[isCurrent?19:16,isCurrent?19:16]});
-      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true}).addTo(state.map).bindPopup(`<b>SAFE ${i+1}${context?' • '+context:''}</b><br><b style="color:${routeOk?'#4ade80':'#f87171'}">${routeOk?'✓ ROTA VÁLIDA':'⚠ ROTA INVÁLIDA'}</b><br>Raio final: ${Math.round(Number(s.radius))}m<br>Dano: ${Number(s.damage)||0}<br>Fecha: ${Number(s.closeSeconds)||0}s${i<r.stages.length-1?`<br>Move: ${Number(s.moveSeconds)||0}s`:''}`);
+      const canDrag=!!state.editing&&isCurrent&&!state.safePresentation;
+      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true,draggable:canDrag}).addTo(state.map).bindPopup(`<b>SAFE ${i+1}${context?' • '+context:''}</b><br><b style="color:${routeOk?'#4ade80':'#f87171'}">${routeOk?'✓ ROTA VÁLIDA':'⚠ ROTA INVÁLIDA'}</b><br>Raio final: ${Math.round(Number(s.radius))}m<br>Dano: ${Number(s.damage)||0}<br>Fecha: ${Number(s.closeSeconds)||0}s${i<r.stages.length-1?`<br>Move: ${Number(s.moveSeconds)||0}s`:''}${canDrag?'<br><small>Arraste para reposicionar • verde = válido</small>':''}`);
       pin.on('click',()=>{state.safeEditorStage=i;renderSafeRouteUi();renderMap();});
+      if(canDrag){
+        const original={x:Number(s.x),y:Number(s.y)};
+        pin.on('drag',e=>{const pos=e.target.getLatLng(),candidate={...s,x:pos.lng,y:pos.lat,z:0},parents=i===0?[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}]:safeParentCandidates(r,i),fits=parents.length&&parents.some(p=>safeCircleFits(p,candidate)),land=safeLandCheck(candidate),next=r.stages[i+1],nextOk=!next||!safeStageValid(next)||safeCircleFits(candidate,next),ok=fits&&land.ok&&nextOk;
+          circle.setLatLng(pos);circle.setStyle({color:ok?'#22c55e':'#ef4444',fillColor:ok?'#22c55e':'#ef4444',opacity:1,fillOpacity:.1});
+          const el=e.target.getElement()?.querySelector('.mp-center-pin');if(el){el.style.background=ok?'#14532d':'#991b1b';el.style.borderColor=ok?'#4ade80':'#f87171';}
+          const status=qs('#mpSafeRouteStatus');if(status){let reason='POSIÇÃO VÁLIDA • solte para confirmar';if(!fits)reason='FORA DO ENCAIXE DA SAFE ANTERIOR';else if(!land.ok)reason=land.reason;else if(!nextOk)reason='A SAFE seguinte deixaria de caber nesta posição';status.innerHTML='<b>ARRASTANDO SAFE '+(i+1)+'</b><br><span style="color:'+(ok?'#52ff9a':'#ff7474')+'"><b>'+esc(reason)+'</b></span>'; }
+          e.target._mpDragValid=ok;e.target._mpDragCandidate={x:pos.lng,y:pos.lat};
+        });
+        pin.on('dragend',e=>{const candidate=e.target._mpDragCandidate,ok=e.target._mpDragValid;if(!candidate||!ok){s.x=original.x;s.y=original.y;renderSafeRouteUi();renderMap();setSaveState('Posição inválida • SAFE '+(i+1)+' mantida na CDS anterior');return;}s.x=candidate.x;s.y=candidate.y;s.z=0;commit('SAFE '+(i+1)+' reposicionada pelo mapa');});
+      }
       state.drawn.push(circle,pin);
     });
   }
