@@ -1324,20 +1324,19 @@ iconAnchor:[12,
     const host=qs('.mission-planner-mapwrap')||qs('#missionPlannerMap')?.parentElement;if(host){let legend=qs('#mpCompareLegend');if(!legend){legend=document.createElement('div');legend.id='mpCompareLegend';Object.assign(legend.style,{position:'absolute',right:'12px',bottom:'12px',zIndex:'901',background:'rgba(17,24,39,.9)',border:'1px dashed #d1d5db',borderRadius:'9px',padding:'7px 9px',fontSize:'10px',lineHeight:'1.55',color:'#f3f4f6',pointerEvents:'none'});host.appendChild(legend);}legend.innerHTML='<b>ANTES × DEPOIS</b><br>Tracejado = configuração anterior<br>V = vértice antigo • S = spawn antigo<br>Zona sólida = configuração atual';}
   }
   // V12.6 — rota progressiva da Safe: FECHA -> MOVE -> FECHA -> MOVE -> FECHA FINAL
-  function ensureSafeRoute(m){
+  function hasDynamicSafe(m){return !!(m?.safeRoute&&Array.isArray(m.safeRoute.stages)&&m.safeRoute.stages.length);}
+  function ensureSafeRoute(m,create=false){
     if(!m||((m.category||'dominacao')!=='gas'))return null;
     const initial=effectiveEventRadius(m);
-    if(!m.safeRoute||!Array.isArray(m.safeRoute.stages)){
-      m.safeRoute={version:1,stages:[
+    if(!hasDynamicSafe(m)){
+      if(!create)return null;
+      m.safeRoute={version:2,enabled:true,stages:[
         {x:num(m.center?.x),y:num(m.center?.y),z:0,radius:Math.max(50,Math.round(initial*.65)),damage:5,closeSeconds:180,moveSeconds:90},
         {x:null,y:null,z:null,radius:Math.max(50,Math.round(initial*.35)),damage:10,closeSeconds:150,moveSeconds:75},
         {x:null,y:null,z:null,radius:Math.max(30,Math.round(initial*.12)),damage:20,closeSeconds:120,moveSeconds:0}
-      ]};
+      ],stage2Options:[],stage3Options:[]};
     }
     const s=m.safeRoute.stages;
-    while(s.length<3)s.push({x:null,y:null,z:null,radius:100,damage:5,closeSeconds:120,moveSeconds:60});
-    s.length=3;
-    if(!validCoord(s[0].x)&&validCoord(m.center?.x)){s[0].x=num(m.center.x);s[0].y=num(m.center.y);s[0].z=0;}
     if(!Array.isArray(m.safeRoute.stage2Options))m.safeRoute.stage2Options=safeStageValid?.(s[1])?[{x:s[1].x,y:s[1].y,z:s[1].z}]:[];
     if(!Array.isArray(m.safeRoute.stage3Options))m.safeRoute.stage3Options=safeStageValid?.(s[2])?[{x:s[2].x,y:s[2].y,z:s[2].z}]:[];
     return m.safeRoute;
@@ -1403,7 +1402,7 @@ iconAnchor:[12,
   }
   function generateSafeCandidates(){
     if(!requireEdit())return;
-    const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;
+    const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;
     if(!safeStageValid(r.stages[0])){alert('Defina primeiro a SAFE 1.');return;}
     const s1=r.stages[0],s2=r.stages[1],s3=r.stages[2];
     const radial=(parent,child,count=12)=>{
@@ -1536,8 +1535,16 @@ iconAnchor:[12,
     box.style.display=gas?'block':'none';if(!gas)return;
     const coverage=qs('#mpCoverageBox');
     if(coverage&&box.previousElementSibling!==coverage)coverage.insertAdjacentElement('afterend',box);
-    const r=ensureSafeRoute(m),host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus');if(!r||!host)return;
-    const initial=effectiveEventRadius(m),timeline=safeTimeline(m),audit=safeRouteAudit(m),tl=qs('#mpSafeTimeline');
+    const host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus');if(!host)return;
+    if(!hasDynamicSafe(m)){
+      const tl=qs('#mpSafeTimeline');if(tl)tl.innerHTML='<b>SAFE DINÂMICA • NÃO CONFIGURADA</b><br><span style="opacity:.78">Esta missão permanece com a configuração atual até você implementar e salvar a nova rota.</span>';
+      host.innerHTML='<div class="mp-readout mp-safe-legacy"><b>CONFIGURAÇÃO LEGADA PRESERVADA</b><br><span style="opacity:.8">Você pode preparar a SAFE dinâmica, validar CDS, tempos e simular tudo antes de salvar. Nada será aplicado automaticamente.</span><div class="mp-actions" style="margin-top:10px"><button type="button" id="mpEnableDynamicSafe" class="primary">IMPLEMENTAR SAFE DINÂMICA</button></div></div>';
+      if(status)status.innerHTML='<b>SAFE DINÂMICA DISPONÍVEL</b> • ainda não implementada';
+      qs('#mpEnableDynamicSafe',host)?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('Safe dinâmica preparada para implementação');renderSafeRouteUi();renderMap();});
+      return;
+    }
+    const r=ensureSafeRoute(m),timeline=safeTimeline(m),audit=safeRouteAudit(m),initial=effectiveEventRadius(m),tl=qs('#mpSafeTimeline');
+
     if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
     host.innerHTML=r.stages.map((s,i)=>`<div class="mp-readout" style="margin-top:8px"><b>SAFE ${i+1}${i===2?' • FINAL':''}</b>
       <div class="mp-grid" style="margin-top:6px">
