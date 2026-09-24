@@ -835,16 +835,8 @@ official:false,zoneMode:cat==='dominacao'?'radius':null,zonePolygon:[]};
       'facxfac-cayo-perico':'Cayo Perico'
     };
     state.missions.forEach(m=>{if(rename[m.id]){if(m.eventId!==target||m.event!=='Fac x Fac'||m.name!==rename[m.id]||m.mapName||m.facxfacScenarios){m.eventId=target;m.event='Fac x Fac';m.name=rename[m.id];m.category='gas';delete m.mapName;delete m.facxfacScenarios;delete m.activeScenario;changed=true;}}});
-    // Remove duplicatas legadas do Fac x Fac, preservando apenas as quatro zonas oficiais e zonas criadas manualmente.
-    const officialIds=new Set(Object.keys(rename));
-    const seen=new Set();
-    state.missions=state.missions.filter(m=>{
-      if(m.eventId!==target)return true;
-      if(officialIds.has(m.id))return true;
-      const n=normalizeText(m.name||'');
-      if(n==='norte'||n==='sul'||n==='zona principal'||n==='mapa principal')return false;
-      const key=n;if(seen.has(key))return false;seen.add(key);return true;
-    });
+    // Recuperação V10.98.2: migração nunca apaga registros. Duplicatas/legados
+    // permanecem disponíveis até uma revisão explícita do usuário.
     return changed;
   }
 
@@ -973,12 +965,49 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     return changed;
   }
 
-  function loadStore(){
+  function persistBootStateLocalOnly(){
     try{
-      const raw=JSON.parse(localStorage.getItem(STORE)||'null');
-      if(Array.isArray(raw)&&raw.length){state.missions=raw;state.missions.forEach(m=>{normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);});repairKnownZoneAssignments();repairFacxFacHierarchy();mergeOfficialPresets();state.activeId=localStorage.getItem(ACTIVE)||raw[0].id;const am=state.missions.find(m=>m.id===state.activeId)||raw[0];state.libraryCategory=(am?.category||'dominacao');state.activeEventId=am?.eventId||null;saveStore();return;}
-    }catch{}
-    state.missions=presets.map(presetMission);state.activeId=state.missions[0].id;state.libraryCategory=state.missions[0]?.category||'dominacao';state.activeEventId=state.missions[0]?.eventId||null;saveStore();
+      localStorage.setItem(STORE,JSON.stringify(state.missions));
+      localStorage.setItem(ACTIVE,state.activeId||'');
+      pushBackup(state.missions);
+    }catch(e){console.warn('Planejador: falha ao preservar estado local no boot',e);}
+  }
+  function recoverMissingFromLocalBackups(){
+    const backups=readBackups();let recovered=0;
+    const key=m=>m?.id||(`${String(m?.eventId||'')}|${normalizeText(m?.name||'')}`);
+    const known=new Set(state.missions.map(key));
+    backups.forEach(b=>{
+      let list=[];try{list=JSON.parse(b?.corpo||'[]')}catch(e){}
+      if(!Array.isArray(list))return;
+      list.forEach(raw=>{
+        if(!raw||!raw.id)return;
+        const k=key(raw);if(known.has(k))return;
+        const m=JSON.parse(JSON.stringify(raw));normalizeCenter(m);
+        if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');
+        inferLegacyStructure(m);state.missions.push(m);known.add(k);recovered++;
+      });
+    });
+    return recovered;
+  }
+  function loadStore(){
+    let raw=null;
+    try{raw=JSON.parse(localStorage.getItem(STORE)||'null')}catch(e){}
+    if(Array.isArray(raw)&&raw.length){
+      state.missions=raw;
+      state.missions.forEach(m=>{normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);});
+    }else{
+      // Nunca envia presets para o Firebase antes do primeiro pull.
+      state.missions=presets.map(presetMission);
+    }
+    const recovered=recoverMissingFromLocalBackups();
+    repairKnownZoneAssignments();repairFacxFacHierarchy();mergeOfficialPresets();
+    const preferred=localStorage.getItem(ACTIVE)||raw?.[0]?.id||state.missions[0]?.id||null;
+    state.activeId=state.missions.some(m=>m.id===preferred)?preferred:(state.missions[0]?.id||null);
+    const am=state.missions.find(m=>m.id===state.activeId)||state.missions[0];
+    state.libraryCategory=(am?.category||'dominacao');state.activeEventId=am?.eventId||null;
+    // Boot é somente leitura da nuvem: persiste localmente, sem HighOSMissionCloud.push.
+    persistBootStateLocalOnly();
+    if(recovered)console.info('Planejador: '+recovered+' missão(ões) recuperada(s) dos backups locais no boot.');
   }
 
   function openDb(){
