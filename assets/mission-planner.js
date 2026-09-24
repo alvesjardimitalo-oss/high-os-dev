@@ -1709,6 +1709,22 @@ iconAnchor:[12,
     const distance=distXY(parent,child),available=Number(parent.radius)-Number(child.radius),margin=available-distance;
     return {distance,available,margin,ok:margin>=-.01,overflow:Math.max(0,-margin)};
   }
+  function drawSafePlacementEnvelope(m,r){
+    if(!state.map||!r?.stages?.length)return;
+    const idx=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1)),child=r.stages[idx];
+    if(!Number(child?.radius)>0)return;
+    const parents=idx===0?[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}]:safeParentCandidates(r,idx);
+    parents.filter(safeStageValid).forEach((parent,j)=>{
+      const allowed=Math.max(0,Number(parent.radius)-Number(child.radius));if(!allowed)return;
+      const circle=L.circle(ll(parent.x,parent.y),{radius:allowed,weight:3,color:'#38bdf8',opacity:.82,fillColor:'#38bdf8',fillOpacity:.045,dashArray:'6 7',interactive:true}).addTo(state.map);
+      circle.bindPopup('<b>ÁREA VÁLIDA DO CENTRO • SAFE '+(idx+1)+'</b><br>O centro da SAFE '+(idx+1)+' pode ficar dentro deste limite.<br>Raio da SAFE anterior: '+Math.round(Number(parent.radius))+'m<br>Raio da SAFE '+(idx+1)+': '+Math.round(Number(child.radius))+'m<br><b>Deslocamento máximo: '+Math.round(allowed)+'m</b>');
+      state.drawn.push(circle);
+      if(j===0){
+        const icon=L.divIcon({className:'',html:'<div style="white-space:nowrap;background:#075985;color:#e0f2fe;border:1px solid #38bdf8;border-radius:7px;padding:3px 6px;font:800 9px system-ui">CENTRO S'+(idx+1)+' ≤ '+Math.round(allowed)+'m</div>',iconSize:[112,20],iconAnchor:[56,-8]});
+        state.drawn.push(L.marker(ll(parent.x,parent.y),{icon,interactive:false,zIndexOffset:900}).addTo(state.map));
+      }
+    });
+  }
   function drawSafeTransitionDiagnostics(m,r){
     if(!state.map||!r?.stages?.length)return;
     const chain=[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)},...r.stages];
@@ -1731,7 +1747,7 @@ iconAnchor:[12,
   function drawSafeRoute(m){
     if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;
     const r=ensureSafeRoute(m);if(!r)return;
-    const valid=r.stages.filter(safeStageValid),reach=safeRouteReachability(r);drawSafeTransitionDiagnostics(m,r);
+    const valid=r.stages.filter(safeStageValid),reach=safeRouteReachability(r);drawSafePlacementEnvelope(m,r);drawSafeTransitionDiagnostics(m,r);
     for(let idx=1;idx<r.stages.length;idx++){const opts=safeOptions(r,idx).filter(p=>validCoord(p.x)&&validCoord(p.y)),audit=safeOptionAudit(r,idx);opts.forEach((p,j)=>{const ok=audit.valid.some(x=>x.index===j),viable=!!reach[idx]?.viable?.some(x=>x.index===j),parent=r.stages[idx-1];if(safeStageValid(parent)){const line=L.polyline([ll(parent.x,parent.y),ll(p.x,p.y)],{weight:1.6,dashArray:'6 7',opacity:ok?.5:.8,color:ok&&viable?'#22c55e':'#ef4444',interactive:false}).addTo(state.map);state.drawn.push(line);}const quality=Number(p.score)||0,bg=!ok||!viable?'#991b1b':quality>=90?'#14532d':quality>=80?'#166534':'#365314',icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:9px;font-weight:900;background:${bg};border-color:${ok&&viable?'#4ade80':'#f87171'}">S${idx+1}-${j+1}</div>`,iconSize:[38,30],iconAnchor:[19,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE ${idx+1} • OPÇÃO ${j+1}</b><br>${ok&&viable?'✓ Rota viável':'⚠ Sem continuidade válida'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok&&viable)pin.on('click',()=>{if(state.editing)selectSafeCandidate(idx,p);});state.drawn.push(pin);});}
     if(valid.length>1){const line=L.polyline(valid.map(st=>ll(st.x,st.y)),{weight:4,dashArray:'10 8',opacity:.85,interactive:false}).addTo(state.map);state.drawn.push(line);}
     const selectedOptStage=Math.max(1,Math.min(Number(state.safeEditorStage)||1,r.stages.length-1)),selectedOpts=safeOptions(r,selectedOptStage).filter(p=>validCoord(p.x)&&validCoord(p.y)),reachStage=reach[selectedOptStage];
