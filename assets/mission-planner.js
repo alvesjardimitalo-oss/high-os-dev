@@ -1278,13 +1278,14 @@ cayoPostal});
     applyOceanColor(OCEAN_FALLBACK);
     state.map.on('baselayerchange',ev=>{state.oceanLocked=false;watchOcean(ev.layer);setTimeout(()=>{if(!state.oceanLocked)applyOceanColor(OCEAN_FALLBACK);},1200);});
     state.map.on('mousemove',e=>{
-      if(qs('#mpCursor'))qs('#mpCursor').textContent=`X ${f(e.latlng.lng)} | Y ${f(e.latlng.lat)}`;
+      if(qs('#mpCursor')){const m=active(),sg=m?suggestedMapCoord(m,e.latlng):null;qs('#mpCursor').textContent=sg?`X ${f(sg.x)} | Y ${f(sg.y)} | Z~ ${sg.elevation.count?f(sg.z):'?'} | ${sg.elevation.confidence}%`:`X ${f(e.latlng.lng)} | Y ${f(e.latlng.lat)}`;}
       if(state.safePlacementStage!==null)previewSafePlacement(e.latlng);
     });
     state.map.on('click',e=>{
       const m=active();if(!m)return;
       if(!state.editing){if(qs('#mpClicked'))qs('#mpClicked').textContent='Modo visualização: clique em EDITAR EVENTO para alterar posições.';return;}
-      if(qs('#mpClicked'))qs('#mpClicked').textContent=`${f(e.latlng.lng)},${f(e.latlng.lat)}`;
+      const suggested=suggestedMapCoord(m,e.latlng);
+      if(qs('#mpClicked'))qs('#mpClicked').innerHTML=`MAPA ${f(e.latlng.lng)}, ${f(e.latlng.lat)} → <b>CDS SUGERIDA ${f(suggested.x)}, ${f(suggested.y)}, ${suggested.elevation.count?f(suggested.z):'Z ?'}</b>${suggested.elevation.count?` • confiança Z ${suggested.elevation.confidence}% • ${suggested.elevation.count} ref.`:''}`;
       if(state.calibrationCapture){state.calibrationCapture=false;const x=qs('#mpCalMapX'),y=qs('#mpCalMapY');if(x)x.value=f(e.latlng.lng);if(y)y.value=f(e.latlng.lat);setSaveState('CALIBRADOR • ponto do mapa capturado; informe a CDS real correspondente');return;}
       if(state.safePlacementStage!==null){placeSafeOnMap(e.latlng);return;}
       if(state.polygonPlacement){if((m.category||'dominacao')!=='dominacao')return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:e.latlng.lng,y:e.latlng.lat,z:0,status:'planned',validatedAt:null,validationReason:'map-placement'});m.zoneMode='polygon';commit('Vértice '+String(m.zonePolygon.length).padStart(2,'0')+' marcado no mapa');return;}
@@ -1480,6 +1481,27 @@ iconAnchor:[12,
     commit('SAFE '+(stageIndex+1)+' fixada a partir da possibilidade selecionada');
   }
 
+  function elevationSamples(){
+    const out=[];state.missions.forEach(m=>{
+      const add=(p,source)=>{if(!p||!validCoord(p.x)||!validCoord(p.y)||!Number.isFinite(Number(p.z))||Number(p.z)===0||!isValidated(p))return;out.push({x:Number(p.x),y:Number(p.y),z:Number(p.z),source,missionId:m.id});};
+      add(m.center,'centro');(m.points||[]).forEach(p=>add(p,'spawn'));(m.zonePolygon||[]).forEach(p=>add(p,'zona'));
+      const r=hasDynamicSafe(m)?m.safeRoute:null;(r?.stages||[]).forEach(p=>add(p,'safe'));
+    });return out;
+  }
+  function estimateElevation(x,y){
+    const samples=elevationSamples().map(p=>({...p,d:Math.hypot(Number(x)-p.x,Number(y)-p.y)})).sort((a,b)=>a.d-b.d).slice(0,8);
+    if(!samples.length)return {z:0,confidence:0,count:0,nearest:null};
+    const near=samples.filter(p=>p.d<=1200),use=(near.length>=2?near:samples.slice(0,Math.min(3,samples.length)));
+    let sw=0,sz=0;use.forEach(p=>{const w=1/Math.max(25,p.d)**2;sw+=w;sz+=p.z*w;});
+    const z=sw?sz/sw:use[0].z,nearest=samples[0],spread=use.reduce((a,p)=>a+Math.abs(p.z-z),0)/use.length;
+    let confidence=Math.round(Math.max(5,Math.min(98,100-(nearest.d/15)-(spread*1.5)+(Math.min(use.length,5)*5))));
+    if(nearest.d>1500)confidence=Math.min(confidence,25);else if(nearest.d>700)confidence=Math.min(confidence,50);
+    return {z,confidence,count:use.length,nearest,spread};
+  }
+  function suggestedMapCoord(m,latlng){
+    const c=calibrationModel(m),x=Number(latlng.lng)+(c?.dx||0),y=Number(latlng.lat)+(c?.dy||0),e=estimateElevation(x,y);
+    return {x,y,z:e.z,elevation:e,calibration:c};
+  }
   function calibrationModel(m){
     const refs=(m?.calibrationRefs||[]).filter(r=>[r.realX,r.realY,r.mapX,r.mapY].every(Number.isFinite));if(!refs.length)return null;
     const dx=refs.reduce((a,r)=>a+(Number(r.realX)-Number(r.mapX)),0)/refs.length,dy=refs.reduce((a,r)=>a+(Number(r.realY)-Number(r.mapY)),0)/refs.length;
