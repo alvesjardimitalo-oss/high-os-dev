@@ -348,3 +348,69 @@
 #page-planejador #mpBackLibrary{white-space:nowrap}
 #page-planejador .mp-editor-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
 #page-planejador .mp-cloud-state{white-space:nowrap}
+
+
+/* ================================================================
+   V10.78 — fluxo operacional do editor de missões
+   Prioriza definição > CDS > validação > simulação/entrega.
+   ================================================================ */
+#page-planejador:not(.mp-library-mode) .mp-tabbar{
+  display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:5px!important;padding:5px!important;position:sticky!important;top:0!important;
+  z-index:40!important;background:rgba(15,12,21,.96)!important;backdrop-filter:blur(12px)
+}
+#page-planejador:not(.mp-library-mode) .mp-tab{
+  min-height:42px!important;height:auto!important;padding:7px 8px!important;
+  border-radius:9px!important;font-size:9px!important;line-height:1.25!important;
+  white-space:normal!important;text-align:center!important
+}
+#page-planejador:not(.mp-library-mode) .mp-tab.active{
+  background:linear-gradient(135deg,rgba(116,38,199,.95),rgba(150,48,223,.82))!important;
+  color:#fff!important;box-shadow:0 6px 18px rgba(112,37,193,.22)!important
+}
+#page-planejador:not(.mp-library-mode) .mp-tabpanel.active{
+  display:flex!important;flex-direction:column!important;gap:8px!important
+}
+#page-planejador:not(.mp-library-mode) .mp-tabpanel>.mp-card{
+  margin:0!important;flex:0 0 auto
+}
+#page-planejador:not(.mp-library-mode) .mp-card h3{
+  position:relative;padding-left:11px!important
+}
+#page-planejador:not(.mp-library-mode) .mp-card h3:before{
+  content:"";position:absolute;left:0;top:1px;bottom:1px;width:3px;border-radius:3px;
+  background:linear-gradient(#9d4edd,#6d28d9)
+}
+#page-planejador:not(.mp-library-mode) .mp-actions{
+  gap:6px!important;align-items:stretch!important
+}
+#page-planejador:not(.mp-library-mode) .mp-actions button{
+  min-height:34px!important;height:auto!important;padding:7px 10px!important;
+  line-height:1.2!important;white-space:normal!important
+}
+#page-planejador:not(.mp-library-mode) #mpSafeRouteBox{
+  border-color:rgba(157,78,221,.28)!important;
+  background:linear-gradient(180deg,rgba(38,22,51,.78),rgba(20,18,26,.96))!important
+}
+#page-planejador:not(.mp-library-mode) #mpSafeStages{
+  display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important
+}
+#page-planejador:not(.mp-library-mode) #mpSafeStages>.mp-readout{
+  margin:0!important;min-width:0!important
+}
+#page-planejador:not(.mp-library-mode) #mpSafeTimeline{
+  max-height:180px!important;overflow:auto!important;scrollbar-width:thin
+}
+#page-planejador:not(.mp-library-mode) .mission-planner-side{
+  scrollbar-width:thin;scrollbar-color:rgba(157,78,221,.5) rgba(255,255,255,.04)
+}
+#page-planejador:not(.mp-library-mode) .mission-planner-side::-webkit-scrollbar{width:7px}
+#page-planejador:not(.mp-library-mode) .mission-planner-side::-webkit-scrollbar-thumb{background:rgba(157,78,221,.48);border-radius:8px}
+#page-planejador:not(.mp-library-mode) .mission-planner-side::-webkit-scrollbar-track{background:rgba(255,255,255,.03)}
+@media(max-width:1180px){
+ #page-planejador:not(.mp-library-mode) #mpSafeStages{grid-template-columns:1fr!important}
+}
+@media(max-width:700px){
+ #page-planejador:not(.mp-library-mode) .mp-tabbar{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ #page-planejador:not(.mp-library-mode) .mp-tab{min-height:38px!important}
+}
