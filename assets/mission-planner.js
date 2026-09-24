@@ -1386,11 +1386,18 @@ iconAnchor:[12,
     r.stageOptions[String(idx)]=Array.isArray(arr)?arr:[];
   }
   function safeOptionStage(r,idx,p){return {...r.stages[idx],x:Number(p.x),y:Number(p.y),z:0};}
+  function safeParentCandidates(r,idx){
+    if(!r||idx<=0)return [];
+    const fixed=r.stages[idx-1];
+    // Se a etapa anterior já foi escolhida/fixada, ela é a única referência
+    // geométrica. Opções antigas não podem invalidar a cadeia selecionada.
+    if(safeStageValid(fixed))return [fixed];
+    return safeOptions(r,idx-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,idx-1,p));
+  }
   function safeOptionAudit(r,idx){
     const opts=safeOptions(r,idx).filter(p=>validCoord(p.x)&&validCoord(p.y));if(idx<=0)return {all:opts,valid:opts,invalid:[]};
-    let parents=safeOptions(r,idx-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,idx-1,p));
-    if(!parents.length&&safeStageValid(r.stages[idx-1]))parents=[r.stages[idx-1]];
-    const valid=[],invalid=[];opts.forEach((p,j)=>{const c=safeOptionStage(r,idx,p),land=safeLandCheck(c),fits=parents.some(parent=>safeCircleFits(parent,c));(fits&&land.ok?valid:invalid).push({p,index:j,reason:!fits?'fora da SAFE anterior':land.reason||'posição inválida'});});
+    const parents=safeParentCandidates(r,idx);
+    const valid=[],invalid=[];opts.forEach((p,j)=>{const candidate=safeOptionStage(r,idx,p),land=safeLandCheck(candidate),fits=parents.some(parent=>safeCircleFits(parent,candidate));(fits&&land.ok?valid:invalid).push({p,index:j,reason:!fits?'fora da SAFE anterior selecionada':land.reason||'posição inválida'});});
     return {all:opts,valid,invalid};
   }
   function safeRouteReachability(r){
@@ -1541,8 +1548,6 @@ iconAnchor:[12,
       <div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap">
         <button type="button" id="mpSafePlace1">POSICIONAR SAFE 1 NO MAPA</button>
         <button type="button" id="mpSafeUseCenter">SAFE 1 = CENTRO ATUAL</button>
-        <button type="button" id="mpSafePlace2">ADICIONAR OPÇÃO SAFE 2</button>
-        <button type="button" id="mpSafePlace3">ADICIONAR OPÇÃO SAFE 3</button>
         <button type="button" id="mpSafeAuto">⚡ GERAR POSSIBILIDADES</button>
         <button type="button" id="mpSafeFocus">◎ CONFIGURAR SAFES SEM SPAWNS</button>
         <button type="button" id="mpSafePreview" class="primary">▶ SIMULAR EVENTO</button><button type="button" id="mpSafePresent">⛶ APRESENTAR / GRAVAR</button>
@@ -1551,8 +1556,6 @@ iconAnchor:[12,
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
         qs('#mpSafePlace1')?.addEventListener('click',()=>beginSafePlacement(0));
     qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=0;commit('Safe 1 vinculada ao centro da missão');});
-    qs('#mpSafePlace2')?.addEventListener('click',()=>beginSafePlacement(1));
-    qs('#mpSafePlace3')?.addEventListener('click',()=>beginSafePlacement(2));
     qs('#mpSafeAuto')?.addEventListener('click',generateSafeCandidates);
     qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));
     qs('#mpSafePreview')?.addEventListener('click',startSafePreview);
@@ -1571,11 +1574,7 @@ iconAnchor:[12,
     let parents=[];
     if(idx===0)parents=[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}];
     else{
-      const prev=r.stages[idx-1];
-      parents=safeStageValid(prev)?[prev]:[];
-      // Compatibilidade: as SAFEs 2 e 3 ainda podem ter múltiplas opções aleatórias.
-      const options=safeOptions(r,idx-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,idx-1,p));
-      if(options.length)parents=options;
+      parents=safeParentCandidates(r,idx);
     }
     if(!parents.length)return {ok:false,reason:'Defina uma SAFE anterior válida primeiro.'};
     const fitting=parents.filter(parent=>safeCircleFits(parent,candidate));
@@ -1673,6 +1672,7 @@ iconAnchor:[12,
         <div class="mp-actions mp-safe-stage-actions">
           <button type="button" data-safe-place="${i}">◎ POSICIONAR SAFE ${i+1} NO MAPA</button>
           ${i>0?`<button type="button" data-safe-option="${i}">＋ ADICIONAR POSSIBILIDADE</button><button type="button" data-safe-clear="${i}" ${safeOptions(r,i).length?'':'disabled'}>LIMPAR ${safeOptions(r,i).length} OPÇ${safeOptions(r,i).length===1?'ÃO':'ÕES'}</button>`:''}
+          ${i===r.stages.length-1?`<button type="button" data-safe-add-next="${i+1}" class="primary">＋ ADICIONAR SAFE ${i+2}</button>`:''}
         </div>
       </div>
     </section>`;}).join('');
@@ -1680,6 +1680,7 @@ iconAnchor:[12,
     qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safePlace);beginSafePlacement(Number(btn.dataset.safePlace));}));
     qsa('[data-safe-option]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeOption);state.safePlacementAsOption=true;beginSafePlacement(Number(btn.dataset.safeOption));}));
     qsa('[data-safe-clear]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeClear);setSafeOptions(r,i,[]);commit('Possibilidades da SAFE '+(i+1)+' removidas');renderSafeRouteUi();renderMap();}));
+    qsa('[data-safe-add-next]',host).forEach(btn=>btn.addEventListener('click',()=>addDynamicSafeStage()));
     qsa('[data-safe-option-remove]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeOptionRemove),n=Number(btn.dataset.index),opts=safeOptions(r,i,true);if(!opts[n])return;opts.splice(n,1);commit('Possibilidade inválida S'+(i+1)+'-'+(n+1)+' removida');renderSafeRouteUi();renderMap();}));
     qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i===0){const bad=safeOptions(rr,1).some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[0],{...rr.stages[1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE 2';}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
