@@ -877,24 +877,30 @@ corpo});
   function readBackups(){
     try{return JSON.parse(localStorage.getItem(BACKUPS)||'[]')}catch(e){return []}
   }
-  /* Fusao: nunca remove missao existente, so acrescenta o que faltar. */
+  /* Fusão multi-PC: adiciona zonas novas e resolve a mesma zona pela versão
+     mais recente. Em empate com conteúdo diferente, preserva o local e registra conflito. */
+  function missionComparable(m){const x=JSON.parse(JSON.stringify(m||{}));delete x._syncConflict;return JSON.stringify(x);}
+  function missionTime(m){const t=Date.parse(m?.updatedAt||'');return Number.isFinite(t)?t:0;}
   function mergeMissions(entrada=[]){
-    if(!Array.isArray(entrada)||!entrada.length)return 0;
-    const porId=new Set(state.missions.map(m=>m.id));
+    const result={added:0,updated:0,keptLocal:0,conflicts:[]};
+    if(!Array.isArray(entrada)||!entrada.length)return result;
     const chave=m=>`${String(m.eventId||'')}|${normalizeText(m.name||'')}`;
-    const porChave=new Set(state.missions.map(chave));
-    let add=0;
-    entrada.forEach(m=>{
-      if(!m||!m.id)return;
-      if(porId.has(m.id)||porChave.has(chave(m)))return;
-      normalizeCenter(m);
-      if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');
-      inferLegacyStructure(m);
-      state.missions.push(m);porId.add(m.id);porChave.add(chave(m));add++;
+    entrada.forEach(raw=>{
+      if(!raw||!raw.id)return;
+      const m=JSON.parse(JSON.stringify(raw));normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);
+      let idx=state.missions.findIndex(x=>x.id===m.id);if(idx<0)idx=state.missions.findIndex(x=>chave(x)===chave(m));
+      if(idx<0){state.missions.push(m);result.added++;return;}
+      const local=state.missions[idx];if(missionComparable(local)===missionComparable(m))return;
+      const lt=missionTime(local),rt=missionTime(m);
+      if(rt>lt){state.missions[idx]=m;result.updated++;result.conflicts.push({id:m.id,name:m.name,resolution:'firebase',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});}
+      else if(lt>rt){result.keptLocal++;result.conflicts.push({id:local.id,name:local.name,resolution:'local',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});}
+      else{local._syncConflict={at:nowIso(),remote:m};result.keptLocal++;result.conflicts.push({id:local.id,name:local.name,resolution:'manual',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});}
     });
-    if(add){saveStore();render();}
-    return add;
+    if(result.added||result.updated){state.applyingCloud=true;try{saveStore();}finally{state.applyingCloud=false;}render();}
+    state.lastMergeResult=result;
+    return result;
   }
+
   function saveStore(){
     try{
       localStorage.setItem(STORE,JSON.stringify(state.missions));
@@ -906,7 +912,7 @@ corpo});
     try{window.HighOSMissionCloud?.push?.(state.missions);}catch(e){console.warn('Planejador: falha ao enfileirar sincronizacao',e);}
   }
   function applyCloudMissions(list){
-    return mergeMissions(list)>0;
+    const r=mergeMissions(list);return !!(r.added||r.updated);
   }
 
   window.addEventListener('highos:mission-cloud',e=>{const st=e?.detail?.state,err=e?.detail?.error;if(st==='sync')setCloudState('sync','↻ SALVANDO NO FIREBASE...');else if(st==='ok'){state.cloudMeta={updatedAtText:e?.detail?.updatedAtText||new Date().toISOString(),updatedBy:e?.detail?.updatedBy||state.cloudMeta?.updatedBy||''};setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);}else if(st==='quota'){const suffix=err?.when?` • tentar após ${err.when}${err.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');}else if(st==='permission'){setCloudState('local','⛔ SEM PERMISSÃO PARA SINCRONIZAR');setSaveState('Firebase recusou a gravação por permissão • dados locais preservados');}else if(st==='local')setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');});
@@ -921,11 +927,11 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     const btn=qs('#mpForceCloudSync');if(btn){btn.disabled=true;btn.textContent='↻ SINCRONIZANDO...';}
     setCloudState('sync','↻ SINCRONIZANDO FIREBASE...');
     try{
-      const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],add=mergeMissions(remote);if(res?.updatedAtText)state.cloudMeta={updatedAtText:res.updatedAtText,updatedBy:res.updatedBy||''};
+      const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],merge=mergeMissions(remote);if(res?.updatedAtText)state.cloudMeta={updatedAtText:res.updatedAtText,updatedBy:res.updatedBy||''};
       const ok=cloud.pushNow?await cloud.pushNow(state.missions):(cloud.push?.(state.missions),true);
       if(!ok){const ce=window.HighOSMissionCloudLastError;if(ce?.quota){const suffix=ce.when?` • tente após ${ce.when}${ce.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');return;}throw new Error('Falha ao confirmar gravação');}
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
-      setSaveState(`Sincronização manual concluída ✓${add?' • '+add+' zona(s) recebida(s)':''}`);
+      setSaveState(`Sincronização manual concluída ✓${merge.added?' • '+merge.added+' nova(s)':''}${merge.updated?' • '+merge.updated+' atualizada(s) do Firebase':''}${merge.keptLocal?' • '+merge.keptLocal+' versão(ões) locais mais recentes':''}${merge.conflicts.some(x=>x.resolution==='manual')?' • ⚠ conflito(s) para revisar':''}`);
       render();
     }catch(e){
       console.warn('Planejador: sincronização manual falhou',e);setCloudState('local','⚠ FIREBASE PENDENTE');setSaveState('Falha ao sincronizar Firebase • dados locais preservados');
@@ -937,14 +943,14 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     setCloudState('sync');
     cloud.pull().then(async res=>{
       const remote=Array.isArray(res?.missions)?res.missions:[];
-      const add=mergeMissions(remote);
+      const merge=mergeMissions(remote);
       // V9.5: primeira sincronizacao e sempre uma UNIAO segura. O navegador
       // nunca e substituido pela nuvem; depois da fusao, a lista completa volta
       // ao Firestore para que outros computadores recebam as zonas que so
       // existiam localmente.
       if(cloud.pushNow){await cloud.pushNow(state.missions);}else cloud.push?.(state.missions);
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
-      if(add)setStatus(`${add} missao(oes) da equipe adicionadas.`,'ok');
+      if(merge.added||merge.updated)setStatus(`${merge.added} nova(s) • ${merge.updated} atualizada(s) recebidas do Firebase.`,'ok');if(merge.conflicts.some(x=>x.resolution==='manual'))setSaveState('⚠ Existem conflitos de sincronização que não foram sobrescritos.');
     }).catch(()=>setCloudState('local'));
   }
 
