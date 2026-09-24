@@ -1367,6 +1367,22 @@ iconAnchor:[12,
     const valid=[],invalid=[];opts.forEach((p,j)=>{const c=safeOptionStage(r,idx,p),land=safeLandCheck(c),fits=parents.some(parent=>safeCircleFits(parent,c));(fits&&land.ok?valid:invalid).push({p,index:j,reason:!fits?'fora da SAFE anterior':land.reason||'posição inválida'});});
     return {all:opts,valid,invalid};
   }
+  function safeRouteReachability(r){
+    const result={};if(!r?.stages?.length)return result;
+    let next=[r.stages.length-1];
+    for(let i=r.stages.length-1;i>=1;i--){
+      const audit=safeOptionAudit(r,i),fixed=safeStageValid(r.stages[i])?[{p:r.stages[i],index:-1}]:[],nodes=[...audit.valid,...fixed];
+      const viable=nodes.filter(node=>{
+        const cur=node.index===-1?r.stages[i]:safeOptionStage(r,i,node.p);
+        if(i===r.stages.length-1)return true;
+        const downstream=result[i+1]?.viableStages||[];
+        return downstream.some(child=>safeCircleFits(cur,child));
+      });
+      result[i]={...audit,viable,dead:nodes.filter(n=>!viable.includes(n)),viableStages:viable.map(n=>n.index===-1?r.stages[i]:safeOptionStage(r,i,n.p))};
+      next=result[i].viableStages;
+    }
+    return result;
+  }
   function safeStageValid(s){return !!s&&validCoord(s.x)&&validCoord(s.y)&&Number(s.radius)>0;}
   function safeTimeline(m){
     const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO DO EVENTO',at:0,radius:effectiveEventRadius(m),duration:0,type:'start'}];
@@ -1597,7 +1613,7 @@ iconAnchor:[12,
 
     if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
     const openSafe=Math.min(Math.max(0,Number(state.safeEditorStage)||0),r.stages.length-1);state.safeEditorStage=openSafe;
-    host.innerHTML=r.stages.map((st,i)=>{const valid=safeStageValid(st),land=valid?safeLandCheck(st):{ok:false},optAudit=i>0?safeOptionAudit(r,i):null,parent=i===0?{x:m.center?.x,y:m.center?.y,z:0,radius:initial}:r.stages[i-1],fits=valid&&safeCircleFits(parent,st),stageOk=valid&&land.ok&&fits,open=i===openSafe;return `<section class="mp-safe-stage ${open?'open':''} ${stageOk?'ok':'pending'}" data-safe-card="${i}">
+    host.innerHTML=r.stages.map((st,i)=>{const valid=safeStageValid(st),land=valid?safeLandCheck(st):{ok:false},optAudit=i>0?safeOptionAudit(r,i):null,reach=i>0?safeRouteReachability(r)[i]:null,parent=i===0?{x:m.center?.x,y:m.center?.y,z:0,radius:initial}:r.stages[i-1],fits=valid&&safeCircleFits(parent,st),stageOk=valid&&land.ok&&fits,open=i===openSafe;return `<section class="mp-safe-stage ${open?'open':''} ${stageOk?'ok':'pending'}" data-safe-card="${i}">
       <button type="button" class="mp-safe-stage-head" data-safe-toggle="${i}" aria-expanded="${open?'true':'false'}">
         <span><b>SAFE ${i+1}${i===r.stages.length-1?' • FINAL':''}</b><small>${stageOk?'✓ VÁLIDA':valid?'⚠ REVISAR':'○ PENDENTE'}</small></span>
         <span class="mp-safe-stage-summary">${Math.round(Number(st.radius)||0)} m · ${formatDuration(Number(st.closeSeconds)||0)}${i<r.stages.length-1?' · move '+formatDuration(Number(st.moveSeconds)||0):''}${i>0&&optAudit.all.length?' · opções '+optAudit.valid.length+'/'+optAudit.all.length:''}</span>
@@ -1612,7 +1628,7 @@ iconAnchor:[12,
           <label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="1" value="${st.closeSeconds??''}"></label>
           ${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${st.moveSeconds??''}"></label>`:''}
         </div>
-        ${i>0&&optAudit.all.length?`<div class="mp-safe-option-audit ${optAudit.invalid.length?'has-invalid':'all-valid'}"><b>POSSIBILIDADES: ${optAudit.valid.length}/${optAudit.all.length} VÁLIDAS</b>${optAudit.invalid.length?`<div>${optAudit.invalid.map(x=>`<button type="button" data-safe-option-remove="${i}" data-index="${x.index}" title="${esc(x.reason)}">S${i+1}-${x.index+1} ×</button>`).join(' ')}</div>`:''}</div>`:''}
+        ${i>0&&optAudit.all.length?`<div class="mp-safe-option-audit ${optAudit.invalid.length||reach?.dead?.some(x=>x.index>=0)?'has-invalid':'all-valid'}"><b>POSSIBILIDADES: ${optAudit.valid.length}/${optAudit.all.length} VÁLIDAS • ${reach?.viable?.filter(x=>x.index>=0).length||0} CHEGAM À FINAL</b>${optAudit.invalid.length||reach?.dead?.some(x=>x.index>=0)?`<div>${optAudit.invalid.map(x=>`<button type="button" data-safe-option-remove="${i}" data-index="${x.index}" title="${esc(x.reason)}">S${i+1}-${x.index+1} INVÁLIDA ×</button>`).join(' ')} ${(reach?.dead||[]).filter(x=>x.index>=0&&!optAudit.invalid.some(y=>y.index===x.index)).map(x=>`<button type="button" data-safe-option-remove="${i}" data-index="${x.index}" title="Caminho sem continuidade até a SAFE final">S${i+1}-${x.index+1} SEM SAÍDA ×</button>`).join(' ')}</div>`:''}</div>`:''}
         <div class="mp-actions mp-safe-stage-actions">
           <button type="button" data-safe-place="${i}">◎ POSICIONAR SAFE ${i+1} NO MAPA</button>
           ${i>0?`<button type="button" data-safe-option="${i}">＋ ADICIONAR POSSIBILIDADE</button><button type="button" data-safe-clear="${i}" ${safeOptions(r,i).length?'':'disabled'}>LIMPAR ${safeOptions(r,i).length} OPÇ${safeOptions(r,i).length===1?'ÃO':'ÕES'}</button>`:''}
@@ -1722,7 +1738,8 @@ iconAnchor:[12,
 
   function startSafePreview(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
-    const route=[{...r.stages[0]}];let randomized=false;
+    const reach=safeRouteReachability(r),route=[{...r.stages[0]}];let randomized=false;
+    for(let i=1;i<r.stages.length;i++){if(safeOptions(r,i).length&&!(reach[i]?.viable?.some(x=>x.index>=0))){alert('A SAFE '+(i+1)+' possui possibilidades, mas nenhuma mantém caminho até a SAFE final. Corrija a cadeia antes do preview.');return;}}
     for(let i=1;i<r.stages.length;i++){
       const opts=safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)),fixed=r.stages[i],parent=route[i-1],choices=[];
       opts.forEach(p=>{const c=safeOptionStage(r,i,p);if(safeStageValid(c)&&safeCircleFits(parent,c)&&safeLandCheck(c).ok)choices.push(c);});
