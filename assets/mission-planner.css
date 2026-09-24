@@ -76,8 +76,8 @@
 #page-planejador.mp-library-mode>.page-head{margin-bottom:10px!important;padding-bottom:10px!important}
 #page-planejador.mp-library-mode>.page-head p{display:none!important}
 #page-planejador.mp-library-mode .mp-mission-select-wrap{display:none!important}
-#page-planejador.mp-library-mode #mpCentralV952{display:block}
-#page-planejador:not(.mp-library-mode) #mpCentralV952{display:none!important}
+
+
 .mp-central-v952{max-width:1180px;margin:0 auto;padding:0 0 24px}
 .mpc-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid rgba(255,255,255,.08);border-radius:13px;background:#111018}
 .mpc-head>div{display:flex;align-items:baseline;gap:12px}.mpc-head span{font-size:10px;font-weight:900;letter-spacing:.12em;color:#d8b8ef}.mpc-head strong{font-size:10px;color:#81778a}.mpc-head strong i{font-style:normal;color:#493d52;margin:0 4px}
