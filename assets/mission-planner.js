@@ -1788,6 +1788,9 @@ iconAnchor:[12,
 
   function startSafePreview(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
+    const audit=safeRouteAudit(m);
+    const blocking=audit.filter(x=>/sem centro\/raio válido|precisa ser menor|ultrapassa os limites|Tempo de fechamento|Tempo de movimento/.test(x));
+    if(blocking.length){alert('Não é possível simular enquanto a rota possui erro técnico:\n\n- '+blocking.join('\n- '));return;}
     const reach=safeRouteReachability(r),route=[{...r.stages[0]}];let randomized=false;
     for(let i=1;i<r.stages.length;i++){if(safeOptions(r,i).length&&!(reach[i]?.viable?.some(x=>x.index>=0))){alert('A SAFE '+(i+1)+' possui possibilidades, mas nenhuma mantém caminho até a SAFE final. Corrija a cadeia antes do preview.');return;}}
     for(let i=1;i<r.stages.length;i++){
@@ -1801,14 +1804,20 @@ iconAnchor:[12,
     stopSafePreview();
     state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
     const initial=effectiveEventRadius(m),phases=[];
-    route.forEach((st,i)=>{phases.push({type:'close',label:'FECHANDO SAFE '+(i+1)+(i===route.length-1?' FINAL':''),a:st,from:i?route[i-1].radius:initial,to:st.radius,seconds:Number(st.closeSeconds)||120});if(i<route.length-1)phases.push({type:'move',label:'MOVENDO PARA SAFE '+(i+2),a:st,b:route[i+1],from:st.radius,to:st.radius,seconds:Number(st.moveSeconds)||60});});
+    route.forEach((st,i)=>{
+      phases.push({type:'close',label:'FECHANDO SAFE '+(i+1)+(i===route.length-1?' FINAL':''),a:st,from:i?route[i-1].radius:initial,to:st.radius,damage:Number(st.damage)||0,seconds:Number(st.closeSeconds)||120});
+      if(i<route.length-1){
+        const next=route[i+1];
+        phases.push({type:'move',label:'MOVENDO PARA SAFE '+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:Number(next.damage)||0,seconds:Number(st.moveSeconds)||60});
+      }
+    });
     let pi=0,t=0,elapsed=0;const steps=90,hud=ensurePreviewHud();
     const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
     state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{...gasStyle,fillOpacity:0}).addTo(state.map);
     state.safePreviewMask=safeGasMask(s1,initial);
     state.safePreviewRouteLayer=state.safePresentation?null:L.polyline(route.map(x=>ll(x.x,x.y)),{color:'#c084fc',weight:3,opacity:.72,dashArray:'8 8',interactive:false}).addTo(state.map);
     const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0),status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>SIMULAÇÃO DO EVENTO</b> • rota ${routeMode.toLowerCase()} • duração ${formatDuration(totalSeconds)}<br><small>A área sem cor é a SAFE. Todo o roxo opaco representa o gás fora da zona segura.</small>`;
-    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];if(!p){stopSafePreview();if(!state.safePresentation)renderMap();return;}t++;const u=Math.min(1,t/steps);elapsed=phases.slice(0,pi).reduce((a,x)=>a+x.seconds,0)+p.seconds*u,smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);updateSafeGasMask({x,y},rad);if(hud){const remain=Math.max(0,Math.ceil(p.seconds*(1-u))),damage=Number(p.a?.damage)||0;hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(totalSeconds)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>';}if(u>=1){pi++;t=0;if(pi>=phases.length){if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>SAFE FINAL CONCLUÍDA</div><div style="font-size:13px;font-weight:500">Raio final '+Math.round(Number(route[route.length-1].radius))+' m</div>';clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;if(!state.safePresentation)setTimeout(()=>{stopSafePreview();renderMap();},900);}}},45);
+    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];if(!p){stopSafePreview();if(!state.safePresentation)renderMap();return;}t++;const u=Math.min(1,t/steps);elapsed=phases.slice(0,pi).reduce((a,x)=>a+x.seconds,0)+p.seconds*u,smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);updateSafeGasMask({x,y},rad);if(hud){const remain=Math.max(0,Math.ceil(p.seconds*(1-u))),damage=Number(p.damage)||0;hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(totalSeconds)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>';}if(u>=1){pi++;t=0;if(pi>=phases.length){if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>SAFE FINAL CONCLUÍDA</div><div style="font-size:13px;font-weight:500">Raio final '+Math.round(Number(route[route.length-1].radius))+' m</div>';clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;if(!state.safePresentation)setTimeout(()=>{stopSafePreview();renderMap();},900);}}},45);
   }
 
   function drawElevationKnowledge(m){
