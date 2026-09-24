@@ -1335,30 +1335,28 @@ iconAnchor:[12,
         {x:num(m.center?.x),y:num(m.center?.y),z:0,radius:Math.max(50,Math.round(initial*.65)),damage:5,closeSeconds:180,moveSeconds:90},
         {x:null,y:null,z:null,radius:Math.max(50,Math.round(initial*.35)),damage:10,closeSeconds:150,moveSeconds:75},
         {x:null,y:null,z:null,radius:Math.max(30,Math.round(initial*.12)),damage:20,closeSeconds:120,moveSeconds:0}
-      ],stage2Options:[],stage3Options:[]};
+      ],stageOptions:{}};
     }
-    const s=m.safeRoute.stages;
-    if(!Array.isArray(m.safeRoute.stage2Options))m.safeRoute.stage2Options=safeStageValid?.(s[1])?[{x:s[1].x,y:s[1].y,z:s[1].z}]:[];
-    if(!Array.isArray(m.safeRoute.stage3Options))m.safeRoute.stage3Options=safeStageValid?.(s[2])?[{x:s[2].x,y:s[2].y,z:s[2].z}]:[];
-    return m.safeRoute;
+    const r=m.safeRoute;
+    if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
+    // Migração única: lê o formato legado, converte para stageOptions e o remove do runtime.
+    if(Array.isArray(r.stage2Options)&&!Array.isArray(r.stageOptions['1']))r.stageOptions['1']=r.stage2Options;
+    if(Array.isArray(r.stage3Options)&&!Array.isArray(r.stageOptions['2']))r.stageOptions['2']=r.stage3Options;
+    delete r.stage2Options;delete r.stage3Options;
+    return r;
   }
   function safeOptions(r,idx,create=false){
     if(!r||idx<=0)return [];
     if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
     const key=String(idx);
     if(!Array.isArray(r.stageOptions[key])){
-      const legacy=idx===1?r.stage2Options:idx===2?r.stage3Options:null;
-      if(Array.isArray(legacy))r.stageOptions[key]=legacy;
-      else if(create)r.stageOptions[key]=[];
+      if(create)r.stageOptions[key]=[];
     }
-    const out=Array.isArray(r.stageOptions[key])?r.stageOptions[key]:[];
-    if(idx===1)r.stage2Options=out;if(idx===2)r.stage3Options=out;
-    return out;
+    return Array.isArray(r.stageOptions[key])?r.stageOptions[key]:[];
   }
   function setSafeOptions(r,idx,arr){
     if(!r||idx<=0)return;if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
     r.stageOptions[String(idx)]=Array.isArray(arr)?arr:[];
-    if(idx===1)r.stage2Options=r.stageOptions[String(idx)];if(idx===2)r.stage3Options=r.stageOptions[String(idx)];
   }
   function safeOptionStage(r,idx,p){return {...r.stages[idx],x:Number(p.x),y:Number(p.y),z:0};}
   function safeOptionAudit(r,idx){
@@ -1401,14 +1399,10 @@ iconAnchor:[12,
     const initialStage={x:m.center?.x,y:m.center?.y,radius:initial};
     if(safeStageValid(r.stages[0])&&!safeCircleFits(initialStage,r.stages[0]))issues.push('SAFE 1 não cabe completamente dentro da Safe inicial.');
     for(let i=1;i<r.stages.length;i++)if(safeStageValid(r.stages[i-1])&&safeStageValid(r.stages[i])&&!safeCircleFits(r.stages[i-1],r.stages[i]))issues.push('SAFE '+(i+1)+' ultrapassa os limites da SAFE '+i+'.');
-    const o2=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),o3=(r.stage3Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));
-    const valid2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0}));
-    o2.forEach((p,j)=>{if(!valid2.includes(p))issues.push('Opção '+(j+1)+' da SAFE 2 ultrapassa os limites da SAFE 1.');});
-    if(o3.length){
-      const parents=valid2.length?valid2:(safeStageValid(r.stages[1])?[r.stages[1]]:[]);
-      o3.forEach((p,j)=>{const candidate={...r.stages[2],x:p.x,y:p.y,z:0},fits=parents.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},candidate));if(!fits)issues.push('Opção '+(j+1)+' da SAFE 3 não cabe em nenhuma SAFE 2 válida.');});
-      if(valid2.length&&!o3.some(p=>valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0}))))issues.push('Não existe combinação válida entre as opções da SAFE 2 e SAFE 3.');
-    }else if(valid2.length&&safeStageValid(r.stages[2])&&!valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},r.stages[2])))issues.push('Nenhuma opção da SAFE 2 é compatível com a SAFE 3 fixa.');
+    for(let i=1;i<r.stages.length;i++){
+      const audit=safeOptionAudit(r,i);audit.invalid.forEach(x=>issues.push('Opção '+(x.index+1)+' da SAFE '+(i+1)+': '+x.reason+'.'));
+      const reach=safeRouteReachability(r)[i];if(audit.valid.length&&!(reach?.viable?.length))issues.push('SAFE '+(i+1)+' possui opções locais, mas nenhuma mantém caminho até a SAFE final.');
+    }
     return [...new Set(issues)];
   }
   function gtaLandHeuristic(x,y){
@@ -1464,7 +1458,7 @@ iconAnchor:[12,
     const c3all=[];c2.forEach(parent=>radial({...s2,...parent},s3,10).forEach(p=>{const c={...s3,...p};if(safeCircleFits({...s2,...parent},c)&&safeLandCheck(c).ok)c3all.push({...safeCandidateScore({...s2,...parent},s3,p),parentScore:parent.score});}));
     let c3=dedupe(c3all.sort((a,b)=>(b.score+b.parentScore*.15)-(a.score+a.parentScore*.15)),Math.max(20,Number(s3.radius)*.16)).slice(0,10);
     if(!c2.length||!c3.length){alert('Não encontrei uma cadeia automática válida em terra com os raios atuais. Revise os raios ou a posição da SAFE inicial.');return;}
-    r.stage2Options=c2;r.stage3Options=c3;
+    setSafeOptions(r,1,c2);setSafeOptions(r,2,c3);
     commit(`Geradas ${c2.length} opções ranqueadas de SAFE 2 e ${c3.length} de SAFE 3`);
     const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MODO AUTOMÁTICO INTELIGENTE</b><br>Opções ordenadas por qualidade: terra disponível + margem de fechamento + continuidade da próxima SAFE. <b>S2-1</b> e <b>S3-1</b> são as melhores sugestões atuais.`;
   }
@@ -1677,12 +1671,12 @@ iconAnchor:[12,
     qsa('[data-safe-option]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeOption);state.safePlacementAsOption=true;beginSafePlacement(Number(btn.dataset.safeOption));}));
     qsa('[data-safe-clear]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeClear);setSafeOptions(r,i,[]);commit('Possibilidades da SAFE '+(i+1)+' removidas');renderSafeRouteUi();renderMap();}));
     qsa('[data-safe-option-remove]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeOptionRemove),n=Number(btn.dataset.index),opts=safeOptions(r,i,true);if(!opts[n])return;opts.splice(n,1);commit('Possibilidade inválida S'+(i+1)+'-'+(n+1)+' removida');renderSafeRouteUi();renderMap();}));
-    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i===0){const bad=(rr.stage2Options||[]).some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[0],{...rr.stages[1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE 2';}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
+    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i===0){const bad=safeOptions(rr,1).some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[0],{...rr.stages[1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE 2';}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
-    const o2=r.stage2Options||[],o3=r.stage3Options||[],validO2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0})),parents2=validO2.length?validO2:[r.stages[1]],validO3=o3.filter(p=>parents2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0})));
+    const o2=safeOptions(r,1),o3=safeOptions(r,2),validO2=safeOptionAudit(r,1).valid.map(x=>x.p),validO3=safeOptionAudit(r,2).valid.map(x=>x.p);
     const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';const invalid2=o2.map((p,i)=>({p,i})).filter(x=>!validO2.includes(x.p)),invalid3=o3.map((p,i)=>({p,i})).filter(x=>!validO3.includes(x.p));opts.innerHTML=`Modo do preview: <b>${o2.length||o3.length?'ALEATÓRIO/MISTO':'ROTA FIXA'}</b> • Safe 2 válidas: <b>${validO2.length}/${o2.length}</b> • Safe 3 válidas: <b>${validO3.length}/${o3.length}</b> <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`+(invalid2.length||invalid3.length?`<div style="margin-top:7px;color:#ff8b8b"><b>Opções inválidas:</b> ${invalid2.map(x=>`<button type="button" data-safe-remove="2" data-index="${x.i}" title="Remover opção inválida da Safe 2">S2-${x.i+1} ×</button>`).join(' ')} ${invalid3.map(x=>`<button type="button" data-safe-remove="3" data-index="${x.i}" title="Remover opção inválida da Safe 3">S3-${x.i+1} ×</button>`).join(' ')}</div>`:'');host.appendChild(opts);
-    qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),key=stage===2?'stage2Options':'stage3Options';if(!Array.isArray(r[key])||!r[key][idx])return;r[key].splice(idx,1);commit('Opção inválida da Safe '+stage+' removida');}));
-    qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;r.stage2Options=[];r.stage3Options=[];r.stages[1].x=r.stages[1].y=null;r.stages[2].x=r.stages[2].y=null;commit('Opções aleatórias da Safe removidas');});
+    qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),arr=safeOptions(r,stage-1);if(!arr[idx])return;arr.splice(idx,1);setSafeOptions(r,stage-1,arr);commit('Opção inválida da Safe '+stage+' removida');}));
+    qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;for(let i=1;i<r.stages.length;i++)setSafeOptions(r,i,[]);r.stages.slice(1).forEach(st=>{st.x=null;st.y=null;});commit('Opções aleatórias da Safe removidas');});
     status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas válidas: <b>${ok}/${r.stages.length}</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>SAFE selecionada: <b>${openSafe+1}</b>${openSafe>0?` • caminhos viáveis: <b>${safeRouteReachability(r)[openSafe]?.viable?.length||0}</b>`:''} • Qualquer SAFE 2+ pode ter múltiplas possibilidades. A simulação monta apenas combinações compatíveis etapa por etapa.</small>`;
   }
   function focusSafeStage(index){
@@ -1694,7 +1688,7 @@ iconAnchor:[12,
   function drawSafeRoute(m){
     if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;
     const r=ensureSafeRoute(m);if(!r)return;
-    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
+    const o2=safeOptions(r,1).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=safeOptions(r,2).filter(s=>validCoord(s.x)&&validCoord(s.y));
     const s1=r.stages[0],valid=r.stages.filter(safeStageValid),valid2=o2.filter(p=>safeCircleFits(s1,{...r.stages[1],x:p.x,y:p.y,z:0}));
     if(safeStageValid(s1)){o2.forEach((p,i)=>{const ok=valid2.includes(p),line=L.polyline([ll(s1.x,s1.y),ll(p.x,p.y)],{weight:2,dashArray:'7 7',opacity:ok?.62:.85,color:ok?'#22c55e':'#ef4444',interactive:false}).addTo(state.map);const quality=Number(p.score)||0,bg=!ok?'#991b1b':quality>=90?'#14532d':quality>=80?'#166534':'#365314';const icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:10px;font-weight:900;background:${bg};border-color:${ok?'#4ade80':'#f87171'}">S2-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE 2 • OPÇÃO ${i+1}</b><br>${ok?`✓ Válida • qualidade ${quality}% • terra ${Math.round((p.landRatio||1)*100)}% • clique para selecionar`:'⚠ Inválida: ultrapassa a Safe 1'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok)pin.on('click',()=>{if(state.editing)selectSafeCandidate(1,p);});state.drawn.push(line,pin);});}
     o2.forEach(a=>o3.forEach((b,i)=>{const line=L.polyline([ll(a.x,a.y),ll(b.x,b.y)],{weight:1.5,dashArray:'4 8',opacity:.28,interactive:false}).addTo(state.map);state.drawn.push(line);}));
