@@ -1586,7 +1586,7 @@ iconAnchor:[12,
         <div class="mp-actions mp-safe-stage-actions"><button type="button" data-safe-place="${i}">◎ POSICIONAR SAFE ${i+1} NO MAPA</button></div>
       </div>
     </section>`;}).join('');
-    qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeToggle);renderSafeRouteUi();}));
+    qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeToggle);renderSafeRouteUi();renderMap();focusSafeStage(state.safeEditorStage);}));
     qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safePlace);beginSafePlacement(Number(btn.dataset.safePlace));}));
     qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i===0){const bad=(rr.stage2Options||[]).some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[0],{...rr.stages[1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE 2';}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
@@ -1595,6 +1595,12 @@ iconAnchor:[12,
     qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),key=stage===2?'stage2Options':'stage3Options';if(!Array.isArray(r[key])||!r[key][idx])return;r[key].splice(idx,1);commit('Opção inválida da Safe '+stage+' removida');}));
     qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;r.stage2Options=[];r.stage3Options=[];r.stages[1].x=r.stages[1].y=null;r.stages[2].x=r.stages[2].y=null;commit('Opções aleatórias da Safe removidas');});
     status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas válidas: <b>${ok}/${r.stages.length}</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>Adicione várias opções de Safe 2 e Safe 3 clicando no mapa. A execução poderá sortear uma rota.</small>`;
+  }
+  function focusSafeStage(index){
+    const m=active(),r=ensureSafeRoute(m);if(!state.map||!r)return;const i=Math.max(0,Math.min(Number(index)||0,r.stages.length-1)),st=r.stages[i];
+    if(!safeStageValid(st))return;
+    const radius=Math.max(80,Number(st.radius)||80),pad=Math.max(radius*1.35,160);
+    try{state.map.fitBounds([[Number(st.y)-pad,Number(st.x)-pad],[Number(st.y)+pad,Number(st.x)+pad]],{maxZoom:5,animate:true,duration:.35});}catch(e){}
   }
   function drawSafeRoute(m){
     if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;
@@ -1607,11 +1613,16 @@ iconAnchor:[12,
     if(valid.length>1){
       const line=L.polyline(valid.map(s=>ll(s.x,s.y)),{weight:4,dashArray:'10 8',opacity:.85,interactive:false}).addTo(state.map);state.drawn.push(line);
     }
+    const selected=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));
     r.stages.forEach((s,i)=>{if(!safeStageValid(s))return;
-      const parent=i===0?{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}:r.stages[i-1],routeOk=!!parent&&safeCircleFits(parent,s)&&safeLandCheck(s).ok;
-      const circle=L.circle(ll(s.x,s.y),{radius:Number(s.radius),weight:routeOk?3:4,fillOpacity:.025,dashArray:i===2?'4 4':'10 7',color:routeOk?undefined:'#ef4444',fillColor:routeOk?undefined:'#ef4444',interactive:false}).addTo(state.map);
-      const icon=L.divIcon({className:'',html:`<div class="mp-center-pin ${routeOk?'validated':''}" style="font-size:11px;font-weight:900;${routeOk?'':'background:#991b1b;border-color:#f87171'}">S${i+1}</div>`,iconSize:[32,32],iconAnchor:[16,16]});
-      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true}).addTo(state.map).bindPopup(`<b>SAFE ${i+1}</b><br><b style="color:${routeOk?'#4ade80':'#f87171'}">${routeOk?'✓ ROTA VÁLIDA':'⚠ ROTA INVÁLIDA'}</b><br>Raio final: ${Math.round(Number(s.radius))}m<br>Dano: ${Number(s.damage)||0}<br>Fecha: ${Number(s.closeSeconds)||0}s${i<2?`<br>Move: ${Number(s.moveSeconds)||0}s`:''}`);
+      const parent=i===0?{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}:r.stages[i-1],routeOk=!!parent&&safeCircleFits(parent,s)&&safeLandCheck(s).ok,isCurrent=i===selected,isParent=i===selected-1,isNext=i===selected+1;
+      const context=isCurrent?'ATUAL':isParent?'ANTERIOR':isNext?'PRÓXIMA':'';
+      const color=!routeOk?'#ef4444':isCurrent?'#d8b4fe':isParent?'#38bdf8':isNext?'#facc15':undefined;
+      const circle=L.circle(ll(s.x,s.y),{radius:Number(s.radius),weight:isCurrent?6:(isParent||isNext?4:2),opacity:isCurrent?1:(isParent||isNext?.82:.42),fillOpacity:isCurrent?.08:.018,dashArray:i===r.stages.length-1?'4 4':'10 7',color,fillColor:color,interactive:false}).addTo(state.map);
+      const bg=!routeOk?'#991b1b':isCurrent?'#6d28d9':isParent?'#075985':isNext?'#854d0e':'';
+      const icon=L.divIcon({className:'',html:`<div class="mp-center-pin ${routeOk?'validated':''} ${isCurrent?'mp-safe-current':''}" style="font-size:11px;font-weight:900;${bg?'background:'+bg+';':''}${!routeOk?'border-color:#f87171':''}">S${i+1}</div>`,iconSize:[isCurrent?38:32,isCurrent?38:32],iconAnchor:[isCurrent?19:16,isCurrent?19:16]});
+      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true}).addTo(state.map).bindPopup(`<b>SAFE ${i+1}${context?' • '+context:''}</b><br><b style="color:${routeOk?'#4ade80':'#f87171'}">${routeOk?'✓ ROTA VÁLIDA':'⚠ ROTA INVÁLIDA'}</b><br>Raio final: ${Math.round(Number(s.radius))}m<br>Dano: ${Number(s.damage)||0}<br>Fecha: ${Number(s.closeSeconds)||0}s${i<r.stages.length-1?`<br>Move: ${Number(s.moveSeconds)||0}s`:''}`);
+      pin.on('click',()=>{state.safeEditorStage=i;renderSafeRouteUi();renderMap();});
       state.drawn.push(circle,pin);
     });
   }
