@@ -442,3 +442,7 @@
 .mp-safe-option-audit.all-valid{border:1px solid rgba(74,222,128,.22);background:rgba(22,101,52,.12);color:#86efac}
 .mp-safe-option-audit.has-invalid{border:1px solid rgba(248,113,113,.3);background:rgba(153,27,27,.13);color:#fca5a5}
 .mp-safe-option-audit>div{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}.mp-safe-option-audit button{min-height:25px!important;padding:3px 7px!important;font-size:8px!important;border-color:rgba(248,113,113,.35)!important}
+
+/* V10.89 — calibrador assistido de coordenadas */
+.mp-calibrator{margin-top:8px;padding:8px;border:1px solid rgba(56,189,248,.22);border-radius:9px;background:rgba(7,89,133,.07)}
+.mp-calibrator summary{cursor:pointer;font-size:9px;font-weight:900;letter-spacing:.08em;color:#7dd3fc}.mp-calibrator[open] summary{margin-bottom:4px}
