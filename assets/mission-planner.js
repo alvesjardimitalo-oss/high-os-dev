@@ -1666,6 +1666,9 @@ iconAnchor:[12,
     }
     const selectedOptStage=Math.max(1,Math.min(Number(state.safeEditorStage)||1,r.stages.length-1)),selectedOpts=safeOptions(r,selectedOptStage).filter(p=>validCoord(p.x)&&validCoord(p.y)),reach=safeRouteReachability(r),reachStage=reach[selectedOptStage];
     if(selectedOpts.length){
+      const graphStages=[selectedOptStage-1,selectedOptStage,selectedOptStage+1].filter(i=>i>=0&&i<r.stages.length),graphNodes={};
+      graphStages.forEach(i=>{const opts=i>0?safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)):[];graphNodes[i]=opts.length?opts.map((p,j)=>({stage:safeOptionStage(r,i,p),index:j,viable:!!reach[i]?.viable?.some(x=>x.index===j)})):(safeStageValid(r.stages[i])?[{stage:r.stages[i],index:-1,viable:i===0||i===r.stages.length-1||!!reach[i]?.viable?.some(x=>x.index===-1)}]:[]);});
+      for(let gi=0;gi<graphStages.length-1;gi++){const aIdx=graphStages[gi],bIdx=graphStages[gi+1];if(bIdx!==aIdx+1)continue;(graphNodes[aIdx]||[]).forEach(a=>(graphNodes[bIdx]||[]).forEach(b=>{if(!safeCircleFits(a.stage,b.stage))return;const full=!!a.viable&&!!b.viable,line=L.polyline([ll(a.stage.x,a.stage.y),ll(b.stage.x,b.stage.y)],{weight:full?3:1.5,dashArray:full?'8 6':'3 8',opacity:full?.72:.24,color:full?'#4ade80':'#facc15',interactive:false}).addTo(state.map);state.drawn.push(line);}));}
       let parents=selectedOptStage===1?[r.stages[0]]:safeOptions(r,selectedOptStage-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,selectedOptStage-1,p));
       if(!parents.length&&safeStageValid(r.stages[selectedOptStage-1]))parents.push(r.stages[selectedOptStage-1]);
       selectedOpts.forEach((p,j)=>{const candidate=safeOptionStage(r,selectedOptStage,p),localOk=parents.some(parent=>safeCircleFits(parent,candidate))&&safeLandCheck(candidate).ok,viable=!!reachStage?.viable?.some(x=>x.index===j),dead=localOk&&!viable;
