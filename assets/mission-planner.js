@@ -1450,7 +1450,12 @@ iconAnchor:[12,
     const box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
     box.innerHTML=`<h3>ROTA PROGRESSIVA DA SAFE</h3>
       <p class="mp-note">Fluxo: <b>FECHA 1 → MOVE → FECHA 2 → MOVE → FECHA FINAL</b>. Os respawns da missão não são alterados.</p>
-      <div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
+      <div id="mpSafeRouteStatus" class="mp-readout"></div>
+      <div id="mpSafeStageToolbar" class="mp-actions mp-safe-stage-toolbar" style="display:none;margin-top:8px">
+        <button type="button" id="mpAddSafeTop" class="primary">＋ ADICIONAR SAFE</button>
+        <button type="button" id="mpRemoveSafeTop" style="display:none">REMOVER ÚLTIMA SAFE</button>
+      </div>
+      <div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
       <div id="mpSafeStages"></div>
       <div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap">
         <button type="button" id="mpSafePlace1">POSICIONAR SAFE 1 NO MAPA</button>
@@ -1472,6 +1477,8 @@ iconAnchor:[12,
     qs('#mpSafePreview')?.addEventListener('click',startSafePreview);
     qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);
     qs('#mpSafeStop')?.addEventListener('click',()=>{stopSafePreview();exitSafePresentation();});
+    qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
+    qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
   }
   function safePlacementCheck(latlng){
     const m=active(),idx=state.safePlacementStage;if(!m||idx===null||!latlng)return {ok:false,reason:'Marcação inativa.'};
@@ -1529,14 +1536,27 @@ iconAnchor:[12,
     commit(`Safe ${idx+1} marcada no mapa`);
     state.map?.panTo(latlng);renderSafeRouteUi();return true;
   }
+  function addDynamicSafeStage(){
+    if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;
+    const prev=r.stages[r.stages.length-1],prevRadius=Number(prev?.radius)||100,radius=Math.max(30,Math.round(prevRadius*.6));
+    if(radius>=prevRadius){setSaveState('Não há espaço de raio para adicionar outra SAFE. Reduza o raio da SAFE final atual primeiro.');return;}
+    if(prev)prev.moveSeconds=Math.max(60,Number(prev.moveSeconds)||0);
+    r.stages.push({x:null,y:null,z:null,radius,damage:Math.max(5,Number(prev?.damage)||5),closeSeconds:120,moveSeconds:0});
+    commit('Nova etapa de SAFE adicionada');renderSafeRouteUi();
+  }
+  function removeDynamicSafeStage(){
+    if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!r||r.stages.length<=3)return;
+    r.stages.pop();r.stages[r.stages.length-1].moveSeconds=0;commit('Última etapa de SAFE removida');renderSafeRouteUi();
+  }
   function renderSafeRouteUi(){
     ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;
     const gas=(m.category||'dominacao')==='gas';
     box.style.display=gas?'block':'none';if(!gas)return;
     const coverage=qs('#mpCoverageBox');
     if(coverage&&box.previousElementSibling!==coverage)coverage.insertAdjacentElement('afterend',box);
-    const host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus');if(!host)return;
+    const host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus'),toolbar=qs('#mpSafeStageToolbar');if(!host)return;
     if(!hasDynamicSafe(m)){
+      if(toolbar)toolbar.style.display='none';
       const tl=qs('#mpSafeTimeline');if(tl)tl.innerHTML='<b>SAFE DINÂMICA • NÃO CONFIGURADA</b><br><span style="opacity:.78">Esta missão permanece com a configuração atual até você implementar e salvar a nova rota.</span>';
       host.innerHTML='<div class="mp-readout mp-safe-legacy"><b>CONFIGURAÇÃO LEGADA PRESERVADA</b><br><span style="opacity:.8">Você pode preparar a SAFE dinâmica, validar CDS, tempos e simular tudo antes de salvar. Nada será aplicado automaticamente.</span><div class="mp-actions" style="margin-top:10px"><button type="button" id="mpEnableDynamicSafe" class="primary">IMPLEMENTAR SAFE DINÂMICA</button></div></div>';
       if(status)status.innerHTML='<b>SAFE DINÂMICA DISPONÍVEL</b> • ainda não implementada';
@@ -1544,6 +1564,7 @@ iconAnchor:[12,
       return;
     }
     const r=ensureSafeRoute(m),timeline=safeTimeline(m),audit=safeRouteAudit(m),initial=effectiveEventRadius(m),tl=qs('#mpSafeTimeline');
+    if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';}
 
     if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
     host.innerHTML=r.stages.map((s,i)=>`<div class="mp-readout" style="margin-top:8px"><b>SAFE ${i+1}${i===r.stages.length-1?' • FINAL':''}</b>
@@ -1556,15 +1577,12 @@ iconAnchor:[12,
         ${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${s.moveSeconds??''}"></label>`:''}
       </div></div>`).join('');
     qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i===0){const bad=(rr.stage2Options||[]).some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[0],{...rr.stages[1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE 2';}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
-    const addWrap=document.createElement('div');addWrap.className='mp-actions';addWrap.style.marginTop='8px';addWrap.innerHTML='<button type="button" id="mpAddSafe" class="primary">＋ ADICIONAR SAFE</button>'+(r.stages.length>3?'<button type="button" id="mpRemoveLastSafe">REMOVER ÚLTIMA SAFE</button>':'');host.appendChild(addWrap);
-    qs('#mpAddSafe',addWrap)?.addEventListener('click',()=>{if(!requireEdit())return;const prev=r.stages[r.stages.length-1],radius=Math.max(30,Math.round((Number(prev?.radius)||100)*.6));if(radius>=Number(prev?.radius)){setSaveState('Não há espaço de raio para adicionar outra SAFE.');return;}r.stages.push({x:null,y:null,z:null,radius,damage:Math.max(5,Number(prev?.damage)||5),closeSeconds:120,moveSeconds:0});if(prev)prev.moveSeconds=Math.max(60,Number(prev.moveSeconds)||0);commit('Nova etapa de SAFE adicionada');renderSafeRouteUi();});
-    qs('#mpRemoveLastSafe',addWrap)?.addEventListener('click',()=>{if(!requireEdit()||r.stages.length<=3)return;r.stages.pop();r.stages[r.stages.length-1].moveSeconds=0;commit('Última etapa de SAFE removida');renderSafeRouteUi();});
     const ok=r.stages.filter(safeStageValid).length;
     const o2=r.stage2Options||[],o3=r.stage3Options||[],validO2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0})),parents2=validO2.length?validO2:[r.stages[1]],validO3=o3.filter(p=>parents2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0})));
     const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';const invalid2=o2.map((p,i)=>({p,i})).filter(x=>!validO2.includes(x.p)),invalid3=o3.map((p,i)=>({p,i})).filter(x=>!validO3.includes(x.p));opts.innerHTML=`Modo do preview: <b>${o2.length||o3.length?'ALEATÓRIO/MISTO':'ROTA FIXA'}</b> • Safe 2 válidas: <b>${validO2.length}/${o2.length}</b> • Safe 3 válidas: <b>${validO3.length}/${o3.length}</b> <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`+(invalid2.length||invalid3.length?`<div style="margin-top:7px;color:#ff8b8b"><b>Opções inválidas:</b> ${invalid2.map(x=>`<button type="button" data-safe-remove="2" data-index="${x.i}" title="Remover opção inválida da Safe 2">S2-${x.i+1} ×</button>`).join(' ')} ${invalid3.map(x=>`<button type="button" data-safe-remove="3" data-index="${x.i}" title="Remover opção inválida da Safe 3">S3-${x.i+1} ×</button>`).join(' ')}</div>`:'');host.appendChild(opts);
     qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),key=stage===2?'stage2Options':'stage3Options';if(!Array.isArray(r[key])||!r[key][idx])return;r[key].splice(idx,1);commit('Opção inválida da Safe '+stage+' removida');}));
     qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;r.stage2Options=[];r.stage3Options=[];r.stages[1].x=r.stages[1].y=null;r.stages[2].x=r.stages[2].y=null;commit('Opções aleatórias da Safe removidas');});
-    status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas configuradas: <b>${ok}/3</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>Adicione várias opções de Safe 2 e Safe 3 clicando no mapa. A execução poderá sortear uma rota.</small>`;
+    status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas válidas: <b>${ok}/${r.stages.length}</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>Adicione várias opções de Safe 2 e Safe 3 clicando no mapa. A execução poderá sortear uma rota.</small>`;
   }
   function drawSafeRoute(m){
     if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;
