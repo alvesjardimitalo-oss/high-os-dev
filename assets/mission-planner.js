@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
+safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -1739,10 +1739,12 @@ iconAnchor:[12,
   }
   function stopSafePreview(){
     if(state.safePreviewTimer){clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;}
+    state.safePreviewModel=null;state.safePreviewElapsed=0;state.safePreviewPlaying=false;
     if(state.safePreviewLayer&&state.map){try{state.map.removeLayer(state.safePreviewLayer)}catch{}state.safePreviewLayer=null;}
     if(state.safePreviewMask&&state.map){try{state.map.removeLayer(state.safePreviewMask)}catch{}state.safePreviewMask=null;}
     if(state.safePreviewRouteLayer&&state.map){try{state.map.removeLayer(state.safePreviewRouteLayer)}catch{}state.safePreviewRouteLayer=null;}
     const hud=qs('#mpSafePreviewHud');if(hud)hud.remove();
+    qs('#mpSafeTimeline')?.remove();
   }
   function ensurePreviewHud(){
     let hud=qs('#mpSafePreviewHud');if(hud)return hud;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;
@@ -1786,6 +1788,34 @@ iconAnchor:[12,
     state.safePreviewMask.setLatLngs([outer,hole]);
   }
 
+  function safePreviewAt(seconds){
+    const model=state.safePreviewModel;if(!model)return;
+    const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;
+    let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
+    for(let i=0;i<model.phases.length;i++){if(elapsed<=acc+model.phases[i].seconds||i===model.phases.length-1){p=model.phases[i];pi=i;break;}acc+=model.phases[i].seconds;}
+    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,smooth=u*u*(3-2*u);
+    let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;
+    if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}
+    state.safePreviewLayer?.setLatLng(ll(x,y));state.safePreviewLayer?.setRadius(rad);updateSafeGasMask({x,y},rad);
+    const remain=Math.max(0,Math.ceil(p.seconds-local)),damage=Number(p.damage)||0,hud=ensurePreviewHud();
+    if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+model.routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(total)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>';
+    const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';
+    model.phaseIndex=pi;
+  }
+  function ensureSafeTimeline(){
+    const model=state.safePreviewModel;if(!model)return null;let bar=qs('#mpSafeTimeline');if(bar)return bar;
+    const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;if(getComputedStyle(wrap).position==='static')wrap.style.position='relative';
+    bar=document.createElement('div');bar.id='mpSafeTimeline';Object.assign(bar.style,{position:'absolute',left:'50%',bottom:'18px',transform:'translateX(-50%)',zIndex:'10055',width:'min(760px,calc(100% - 32px))',background:'rgba(8,10,18,.92)',border:'1px solid rgba(255,255,255,.18)',borderRadius:'12px',padding:'9px 12px',color:'#fff',font:'600 12px system-ui',boxShadow:'0 10px 30px rgba(0,0,0,.35)'});
+    bar.innerHTML='<div style="display:flex;gap:6px;align-items:center"><button id="mpSafePrevPhase" title="Fase anterior">|◀</button><button id="mpSafeTimePlay" title="Play/Pause">▶</button><button id="mpSafeNextPhase" title="Próxima fase">▶|</button><button id="mpSafeTimeSpeed" title="Velocidade">1x</button><span id="mpSafeTimeClock" style="min-width:100px;text-align:center">00:00 / '+formatDuration(model.totalSeconds)+'</span><input id="mpSafeTimeRange" type="range" min="0" max="'+model.totalSeconds+'" step="1" value="0" style="flex:1"></div>';
+    wrap.appendChild(bar);
+    qs('#mpSafeTimePlay',bar).onclick=()=>{state.safePreviewPlaying=!state.safePreviewPlaying;safePreviewAt(state.safePreviewElapsed);};
+    qs('#mpSafeTimeSpeed',bar).onclick=e=>{state.safePreviewSpeed=state.safePreviewSpeed===1?2:state.safePreviewSpeed===2?4:1;e.currentTarget.textContent=state.safePreviewSpeed+'x';};
+    qs('#mpSafeTimeRange',bar).oninput=e=>{state.safePreviewPlaying=false;safePreviewAt(Number(e.target.value));};
+    const phaseStart=i=>model.phases.slice(0,Math.max(0,i)).reduce((n,p)=>n+p.seconds,0);
+    qs('#mpSafePrevPhase',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.max(0,(model.phaseIndex||0)-1)));};
+    qs('#mpSafeNextPhase',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.min(model.phases.length-1,(model.phaseIndex||0)+1)));};
+    return bar;
+  }
   function startSafePreview(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
     const audit=safeRouteAudit(m);
@@ -1811,13 +1841,13 @@ iconAnchor:[12,
         phases.push({type:'move',label:'MOVENDO PARA SAFE '+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:Number(next.damage)||0,seconds:Number(st.moveSeconds)||60});
       }
     });
-    let pi=0,t=0,elapsed=0;const steps=90,hud=ensurePreviewHud();
     const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
     state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{...gasStyle,fillOpacity:0}).addTo(state.map);
     state.safePreviewMask=safeGasMask(s1,initial);
     state.safePreviewRouteLayer=state.safePresentation?null:L.polyline(route.map(x=>ll(x.x,x.y)),{color:'#c084fc',weight:3,opacity:.72,dashArray:'8 8',interactive:false}).addTo(state.map);
     const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0),status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>SIMULAÇÃO DO EVENTO</b> • rota ${routeMode.toLowerCase()} • duração ${formatDuration(totalSeconds)}<br><small>A área sem cor é a SAFE. Todo o roxo opaco representa o gás fora da zona segura.</small>`;
-    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];if(!p){stopSafePreview();if(!state.safePresentation)renderMap();return;}t++;const u=Math.min(1,t/steps);elapsed=phases.slice(0,pi).reduce((a,x)=>a+x.seconds,0)+p.seconds*u,smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);updateSafeGasMask({x,y},rad);if(hud){const remain=Math.max(0,Math.ceil(p.seconds*(1-u))),damage=Number(p.damage)||0;hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(totalSeconds)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>';}if(u>=1){pi++;t=0;if(pi>=phases.length){if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>SAFE FINAL CONCLUÍDA</div><div style="font-size:13px;font-weight:500">Raio final '+Math.round(Number(route[route.length-1].radius))+' m</div>';clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;if(!state.safePresentation)setTimeout(()=>{stopSafePreview();renderMap();},900);}}},45);
+    state.safePreviewModel={route,phases,totalSeconds,routeMode,phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
+    let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);return;}safePreviewAt(next);},50);
   }
 
   function drawElevationKnowledge(m){
