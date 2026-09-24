@@ -255,3 +255,21 @@
     max-height:none!important;
   }
 }
+
+
+/* V10.96 — ações compactas por simbologia */
+#page-planejador:not(.mp-library-mode) .mp-icon-action{
+  width:32px!important;min-width:32px!important;padding:0!important;
+  display:inline-grid!important;place-items:center!important;
+  font-size:16px!important;line-height:1!important;font-weight:800!important;
+}
+#page-planejador:not(.mp-library-mode) #mpBackLibrary.mp-icon-action{
+  width:34px!important;min-width:34px!important;font-size:18px!important;
+}
+#page-planejador:not(.mp-library-mode) .mp-icon-action:hover{
+  transform:translateY(-1px);border-color:rgba(183,111,231,.48)!important;
+  background:#211a29!important;
+}
+#page-planejador:not(.mp-library-mode) .mp-icon-action.primary:hover{
+  background:linear-gradient(135deg,#7f2bd3,#a13be8)!important;
+}
