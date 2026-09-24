@@ -1495,6 +1495,7 @@ iconAnchor:[12,
       <div id="mpSafeStageToolbar" class="mp-actions mp-safe-stage-toolbar" style="display:none;margin-top:8px">
         <button type="button" id="mpAddSafeTop" class="primary">＋ ADICIONAR SAFE</button>
         <button type="button" id="mpRemoveSafeTop" style="display:none">REMOVER ÚLTIMA SAFE</button>
+        <button type="button" id="mpSafeViableOnly">GRAFO: TODAS</button>
       </div>
       <div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
       <div id="mpSafeStages"></div>
@@ -1520,6 +1521,7 @@ iconAnchor:[12,
     qs('#mpSafeStop')?.addEventListener('click',()=>{stopSafePreview();exitSafePresentation();});
     qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
     qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
+    qs('#mpSafeViableOnly')?.addEventListener('click',()=>{state.safeGraphViableOnly=!state.safeGraphViableOnly;const b=qs('#mpSafeViableOnly');if(b)b.textContent=state.safeGraphViableOnly?'GRAFO: VIÁVEIS':'GRAFO: TODAS';renderMap();});
   }
   function safePlacementCheck(latlng){
     const m=active(),idx=state.safePlacementStage;if(!m||idx===null||!latlng)return {ok:false,reason:'Marcação inativa.'};
@@ -1608,7 +1610,7 @@ iconAnchor:[12,
       return;
     }
     const r=ensureSafeRoute(m),timeline=safeTimeline(m),audit=safeRouteAudit(m),initial=effectiveEventRadius(m),tl=qs('#mpSafeTimeline');
-    if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';}
+    if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';const gv=qs('#mpSafeViableOnly');if(gv)gv.textContent=state.safeGraphViableOnly?'GRAFO: VIÁVEIS':'GRAFO: TODAS';}
 
     if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
     const openSafe=Math.min(Math.max(0,Number(state.safeEditorStage)||0),r.stages.length-1);state.safeEditorStage=openSafe;
@@ -1645,7 +1647,7 @@ iconAnchor:[12,
     const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';const invalid2=o2.map((p,i)=>({p,i})).filter(x=>!validO2.includes(x.p)),invalid3=o3.map((p,i)=>({p,i})).filter(x=>!validO3.includes(x.p));opts.innerHTML=`Modo do preview: <b>${o2.length||o3.length?'ALEATÓRIO/MISTO':'ROTA FIXA'}</b> • Safe 2 válidas: <b>${validO2.length}/${o2.length}</b> • Safe 3 válidas: <b>${validO3.length}/${o3.length}</b> <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`+(invalid2.length||invalid3.length?`<div style="margin-top:7px;color:#ff8b8b"><b>Opções inválidas:</b> ${invalid2.map(x=>`<button type="button" data-safe-remove="2" data-index="${x.i}" title="Remover opção inválida da Safe 2">S2-${x.i+1} ×</button>`).join(' ')} ${invalid3.map(x=>`<button type="button" data-safe-remove="3" data-index="${x.i}" title="Remover opção inválida da Safe 3">S3-${x.i+1} ×</button>`).join(' ')}</div>`:'');host.appendChild(opts);
     qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),key=stage===2?'stage2Options':'stage3Options';if(!Array.isArray(r[key])||!r[key][idx])return;r[key].splice(idx,1);commit('Opção inválida da Safe '+stage+' removida');}));
     qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;r.stage2Options=[];r.stage3Options=[];r.stages[1].x=r.stages[1].y=null;r.stages[2].x=r.stages[2].y=null;commit('Opções aleatórias da Safe removidas');});
-    status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas válidas: <b>${ok}/${r.stages.length}</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>Qualquer SAFE 2+ pode ter múltiplas possibilidades. A simulação monta apenas combinações compatíveis etapa por etapa.</small>`;
+    status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas válidas: <b>${ok}/${r.stages.length}</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>SAFE selecionada: <b>${openSafe+1}</b>${openSafe>0?` • caminhos viáveis: <b>${safeRouteReachability(r)[openSafe]?.viable?.length||0}</b>`:''} • Qualquer SAFE 2+ pode ter múltiplas possibilidades. A simulação monta apenas combinações compatíveis etapa por etapa.</small>`;
   }
   function focusSafeStage(index){
     const m=active(),r=ensureSafeRoute(m);if(!state.map||!r)return;const i=Math.max(0,Math.min(Number(index)||0,r.stages.length-1)),st=r.stages[i];
@@ -1668,7 +1670,7 @@ iconAnchor:[12,
     if(selectedOpts.length){
       const graphStages=[selectedOptStage-1,selectedOptStage,selectedOptStage+1].filter(i=>i>=0&&i<r.stages.length),graphNodes={};
       graphStages.forEach(i=>{const opts=i>0?safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)):[];graphNodes[i]=opts.length?opts.map((p,j)=>({stage:safeOptionStage(r,i,p),index:j,viable:!!reach[i]?.viable?.some(x=>x.index===j)})):(safeStageValid(r.stages[i])?[{stage:r.stages[i],index:-1,viable:i===0||i===r.stages.length-1||!!reach[i]?.viable?.some(x=>x.index===-1)}]:[]);});
-      for(let gi=0;gi<graphStages.length-1;gi++){const aIdx=graphStages[gi],bIdx=graphStages[gi+1];if(bIdx!==aIdx+1)continue;(graphNodes[aIdx]||[]).forEach(a=>(graphNodes[bIdx]||[]).forEach(b=>{if(!safeCircleFits(a.stage,b.stage))return;const full=!!a.viable&&!!b.viable,line=L.polyline([ll(a.stage.x,a.stage.y),ll(b.stage.x,b.stage.y)],{weight:full?3:1.5,dashArray:full?'8 6':'3 8',opacity:full?.72:.24,color:full?'#4ade80':'#facc15',interactive:false}).addTo(state.map);state.drawn.push(line);}));}
+      for(let gi=0;gi<graphStages.length-1;gi++){const aIdx=graphStages[gi],bIdx=graphStages[gi+1];if(bIdx!==aIdx+1)continue;(graphNodes[aIdx]||[]).forEach(a=>(graphNodes[bIdx]||[]).forEach(b=>{if(!safeCircleFits(a.stage,b.stage))return;const full=!!a.viable&&!!b.viable;if(state.safeGraphViableOnly&&!full)return;const line=L.polyline([ll(a.stage.x,a.stage.y),ll(b.stage.x,b.stage.y)],{weight:full?3:1.5,dashArray:full?'8 6':'3 8',opacity:full?.72:.24,color:full?'#4ade80':'#facc15',interactive:false}).addTo(state.map);state.drawn.push(line);}));}
       let parents=selectedOptStage===1?[r.stages[0]]:safeOptions(r,selectedOptStage-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,selectedOptStage-1,p));
       if(!parents.length&&safeStageValid(r.stages[selectedOptStage-1]))parents.push(r.stages[selectedOptStage-1]);
       selectedOpts.forEach((p,j)=>{const candidate=safeOptionStage(r,selectedOptStage,p),localOk=parents.some(parent=>safeCircleFits(parent,candidate))&&safeLandCheck(candidate).ok,viable=!!reachStage?.viable?.some(x=>x.index===j),dead=localOk&&!viable;
