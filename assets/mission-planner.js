@@ -1470,14 +1470,13 @@ iconAnchor:[12,
 
   function selectSafeCandidate(stageIndex,p){
     if(!requireEdit())return;
-    const m=active(),r=ensureSafeRoute(m),s=r?.stages?.[stageIndex];if(!s)return;
-    const old={x:s.x,y:s.y,z:s.z};s.x=Number(p.x);s.y=Number(p.y);s.z=0;
-    if(stageIndex===1){
-      const valid3=(r.stage3Options||[]).filter(q=>safeCircleFits(s,{...r.stages[2],x:q.x,y:q.y,z:0}));
-      if(valid3.length)r.stage3Options=valid3;
-      else {s.x=old.x;s.y=old.y;s.z=old.z;alert('Essa opção não mantém nenhuma possibilidade válida para a SAFE 3.');return;}
-    }
-    commit(`SAFE ${stageIndex+1} selecionada entre as possibilidades automáticas`);
+    const m=active(),r=ensureSafeRoute(m),st=r?.stages?.[stageIndex];if(!st||stageIndex<=0)return;
+    const reach=safeRouteReachability(r),opts=safeOptions(r,stageIndex),idx=opts.indexOf(p);
+    if(idx>=0&&!reach[stageIndex]?.viable?.some(x=>x.index===idx)){alert('Essa possibilidade não possui continuidade válida até a SAFE final.');return;}
+    const candidate=safeOptionStage(r,stageIndex,p),parent=r.stages[stageIndex-1];
+    if(!safeStageValid(candidate)||!safeCircleFits(parent,candidate)||!safeLandCheck(candidate).ok){alert('Essa possibilidade não é válida para a posição fixa atual da SAFE anterior.');return;}
+    st.x=candidate.x;st.y=candidate.y;st.z=0;
+    commit('SAFE '+(stageIndex+1)+' fixada a partir da possibilidade selecionada');
   }
 
   function ensureSafeRouteUi(){
@@ -1665,12 +1664,14 @@ iconAnchor:[12,
     if(valid.length>1){
       const line=L.polyline(valid.map(s=>ll(s.x,s.y)),{weight:4,dashArray:'10 8',opacity:.85,interactive:false}).addTo(state.map);state.drawn.push(line);
     }
-    const selectedOptStage=Math.max(1,Math.min(Number(state.safeEditorStage)||1,r.stages.length-1)),selectedOpts=safeOptions(r,selectedOptStage).filter(p=>validCoord(p.x)&&validCoord(p.y));
+    const selectedOptStage=Math.max(1,Math.min(Number(state.safeEditorStage)||1,r.stages.length-1)),selectedOpts=safeOptions(r,selectedOptStage).filter(p=>validCoord(p.x)&&validCoord(p.y)),reach=safeRouteReachability(r),reachStage=reach[selectedOptStage];
     if(selectedOpts.length){
-      const parents=selectedOptStage===1?[r.stages[0]]:safeOptions(r,selectedOptStage-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,selectedOptStage-1,p));
+      let parents=selectedOptStage===1?[r.stages[0]]:safeOptions(r,selectedOptStage-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,selectedOptStage-1,p));
       if(!parents.length&&safeStageValid(r.stages[selectedOptStage-1]))parents.push(r.stages[selectedOptStage-1]);
-      selectedOpts.forEach((p,j)=>{const candidate=safeOptionStage(r,selectedOptStage,p),ok=parents.some(parent=>safeCircleFits(parent,candidate))&&safeLandCheck(candidate).ok;
-        const pin=L.marker(ll(p.x,p.y),{icon:L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:9px;font-weight:900;background:${ok?'#365314':'#991b1b'};border-color:${ok?'#4ade80':'#f87171'}">S${selectedOptStage+1}-${j+1}</div>`,iconSize:[38,28],iconAnchor:[19,14]})}).addTo(state.map).bindPopup(`<b>SAFE ${selectedOptStage+1} • POSSIBILIDADE ${j+1}</b><br>${ok?'✓ Compatível':'⚠ Incompatível'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);
+      selectedOpts.forEach((p,j)=>{const candidate=safeOptionStage(r,selectedOptStage,p),localOk=parents.some(parent=>safeCircleFits(parent,candidate))&&safeLandCheck(candidate).ok,viable=!!reachStage?.viable?.some(x=>x.index===j),dead=localOk&&!viable;
+        const bg=!localOk?'#991b1b':dead?'#854d0e':'#14532d',border=!localOk?'#f87171':dead?'#facc15':'#4ade80',label=dead?'SEM SAÍDA':localOk?'CHEGA À FINAL':'INVÁLIDA';
+        const pin=L.marker(ll(p.x,p.y),{icon:L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:9px;font-weight:900;background:${bg};border-color:${border}">S${selectedOptStage+1}-${j+1}</div>`,iconSize:[38,28],iconAnchor:[19,14]})}).addTo(state.map).bindPopup(`<b>SAFE ${selectedOptStage+1} • POSSIBILIDADE ${j+1}</b><br><b style="color:${border}">${label}</b><br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00${viable?'<br><small>Clique no marcador para usar como posição fixa.</small>':''}`);
+        if(viable)pin.on('click',()=>{if(!state.editing)return;selectSafeCandidate(selectedOptStage,p);state.safeEditorStage=selectedOptStage;renderSafeRouteUi();renderMap();focusSafeStage(selectedOptStage);});
         state.drawn.push(pin);
       });
     }
