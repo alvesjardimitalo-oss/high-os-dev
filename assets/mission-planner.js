@@ -1344,6 +1344,28 @@ iconAnchor:[12,
     }else if(valid2.length&&safeStageValid(r.stages[2])&&!valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},r.stages[2])))issues.push('Nenhuma opção da SAFE 2 é compatível com a SAFE 3 fixa.');
     return [...new Set(issues)];
   }
+  function gtaLandHeuristic(x,y){
+    x=Number(x);y=Number(y);if(!Number.isFinite(x)||!Number.isFinite(y))return false;
+    // Máscara conservadora de terra para impedir propostas óbvias em oceano.
+    // LS/Blaine: envelope do continente; Cayo: elipse aproximada da ilha.
+    const cayo=((x-4900)/1050)**2+((y+5450)/900)**2<=1;
+    if(cayo)return true;
+    if(x<-3900||x>4700||y<-4200||y>8500)return false;
+    // Recortes costeiros grosseiros: evitam mar aberto sem fingir precisão de colisão GTA.
+    if(y<-3500&&(x<-900||x>2100))return false;
+    if(x<-3200&&y<1000)return false;
+    if(x>3900&&y<1800)return false;
+    return true;
+  }
+  function safeLandCheck(candidate,samples=20){
+    if(!candidate||!gtaLandHeuristic(candidate.x,candidate.y))return {ok:false,landRatio:0,reason:'Centro sobre área de mar / fora da terra jogável.'};
+    const radius=Math.max(0,Number(candidate.radius)||0);if(!radius)return {ok:true,landRatio:1};
+    let land=1,total=1;
+    [0.45,0.78,1].forEach(fr=>{for(let i=0;i<samples;i++){const a=Math.PI*2*i/samples,x=Number(candidate.x)+Math.cos(a)*radius*fr,y=Number(candidate.y)+Math.sin(a)*radius*fr;total++;if(gtaLandHeuristic(x,y))land++;}});
+    const ratio=land/total;
+    return {ok:ratio>=.82,landRatio:ratio,reason:ratio>=.82?'':`SAFE invade demais o mar (${Math.round((1-ratio)*100)}% das amostras fora da terra).`};
+  }
+
   function generateSafeCandidates(){
     if(!requireEdit())return;
     const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;
@@ -1355,13 +1377,13 @@ iconAnchor:[12,
       return out;
     };
     const dedupe=(arr,min=20)=>arr.filter((p,i,a)=>a.findIndex(q=>distXY(p,q)<min)===i);
-    let c2=dedupe(radial(s1,s2,8),Math.max(15,Number(s2.radius)*.08)).filter(p=>safeCircleFits(s1,{...s2,...p}));
+    let c2=dedupe(radial(s1,s2,8),Math.max(15,Number(s2.radius)*.08)).filter(p=>{const c={...s2,...p};return safeCircleFits(s1,c)&&safeLandCheck(c).ok;});
     // Só oferece S2 que ainda permita ao menos uma S3 geometricamente válida.
     c2=c2.filter(p=>radial({...s2,...p},s3,6).some(q=>safeCircleFits({...s2,...p},{...s3,...q})));
     // Distribui opções ao redor do espaço válido em vez de concentrar tudo no centro.
     const pick=(arr,n)=>{if(arr.length<=n)return arr;const out=[];for(let i=0;i<n;i++)out.push(arr[Math.floor(i*(arr.length-1)/(n-1))]);return dedupe(out);};
     c2=pick(c2,8);
-    const c3all=[];c2.forEach(parent=>radial({...s2,...parent},s3,8).forEach(p=>{if(safeCircleFits({...s2,...parent},{...s3,...p}))c3all.push(p);}));
+    const c3all=[];c2.forEach(parent=>radial({...s2,...parent},s3,8).forEach(p=>{if(safeCircleFits({...s2,...parent},{...s3,...p})&&safeLandCheck({...s3,...p}).ok)c3all.push(p);}));
     const c3=pick(dedupe(c3all,Math.max(12,Number(s3.radius)*.1)),10);
     if(!c2.length||!c3.length){alert('Não encontrei uma cadeia automática válida com os raios atuais. Revise os raios da SAFE 1, 2 e 3.');return;}
     r.stage2Options=c2;r.stage3Options=c3;
@@ -1415,6 +1437,7 @@ iconAnchor:[12,
     const m=active(),idx=state.safePlacementStage;if(!m||idx===null||!latlng)return {ok:false,reason:'Marcação inativa.'};
     const r=ensureSafeRoute(m),child=r?.stages?.[idx];if(!child||!Number(child.radius)>0)return {ok:false,reason:'Defina primeiro o raio desta SAFE.'};
     const candidate={...child,x:latlng.lng,y:latlng.lat,z:0};
+    const land=safeLandCheck(candidate);if(!land.ok)return {ok:false,reason:land.reason};
     let parents=[];
     if(idx===0)parents=[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}];
     else if(idx===1)parents=safeStageValid(r.stages[0])?[r.stages[0]]:[];
