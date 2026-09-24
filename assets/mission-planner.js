@@ -1366,30 +1366,42 @@ iconAnchor:[12,
     return {ok:ratio>=.82,landRatio:ratio,reason:ratio>=.82?'':`SAFE invade demais o mar (${Math.round((1-ratio)*100)}% das amostras fora da terra).`};
   }
 
+  function safeCandidateScore(parent,stage,p,nextStage=null){
+    const c={...stage,...p},land=safeLandCheck(c),limit=Math.max(1,Number(parent.radius)-Number(stage.radius)),d=distXY(parent,c),margin=Math.max(0,1-d/limit);
+    let future=1;
+    if(nextStage){
+      const room=Math.max(0,Number(stage.radius)-Number(nextStage.radius));
+      future=room>0?Math.min(1,room/Math.max(1,Number(stage.radius))):0;
+    }
+    const score=Math.round((land.landRatio*.62+margin*.25+future*.13)*100);
+    return {...p,score,landRatio:land.landRatio,margin};
+  }
   function generateSafeCandidates(){
     if(!requireEdit())return;
     const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;
     if(!safeStageValid(r.stages[0])){alert('Defina primeiro a SAFE 1.');return;}
     const s1=r.stages[0],s2=r.stages[1],s3=r.stages[2];
-    const radial=(parent,child,count=8)=>{
-      const limit=Math.max(0,Number(parent.radius)-Number(child.radius)),rings=[0,.42,.72,.92],out=[];
+    const radial=(parent,child,count=12)=>{
+      const limit=Math.max(0,Number(parent.radius)-Number(child.radius)),rings=[0,.25,.45,.65,.82,.94],out=[];
       rings.forEach(fr=>{const d=limit*fr;for(let i=0;i<count;i++){const a=(Math.PI*2*i/count)+(fr>.5?Math.PI/count:0);out.push({x:Number(parent.x)+Math.cos(a)*d,y:Number(parent.y)+Math.sin(a)*d,z:0});}});
       return out;
     };
     const dedupe=(arr,min=20)=>arr.filter((p,i,a)=>a.findIndex(q=>distXY(p,q)<min)===i);
-    let c2=dedupe(radial(s1,s2,8),Math.max(15,Number(s2.radius)*.08)).filter(p=>{const c={...s2,...p};return safeCircleFits(s1,c)&&safeLandCheck(c).ok;});
-    // Só oferece S2 que ainda permita ao menos uma S3 geometricamente válida.
-    c2=c2.filter(p=>radial({...s2,...p},s3,6).some(q=>safeCircleFits({...s2,...p},{...s3,...q})));
-    // Distribui opções ao redor do espaço válido em vez de concentrar tudo no centro.
-    const pick=(arr,n)=>{if(arr.length<=n)return arr;const out=[];for(let i=0;i<n;i++)out.push(arr[Math.floor(i*(arr.length-1)/(n-1))]);return dedupe(out);};
-    c2=pick(c2,8);
-    const c3all=[];c2.forEach(parent=>radial({...s2,...parent},s3,8).forEach(p=>{if(safeCircleFits({...s2,...parent},{...s3,...p})&&safeLandCheck({...s3,...p}).ok)c3all.push(p);}));
-    const c3=pick(dedupe(c3all,Math.max(12,Number(s3.radius)*.1)),10);
-    if(!c2.length||!c3.length){alert('Não encontrei uma cadeia automática válida com os raios atuais. Revise os raios da SAFE 1, 2 e 3.');return;}
+    let c2=dedupe(radial(s1,s2),Math.max(15,Number(s2.radius)*.08)).filter(p=>{const c={...s2,...p};return safeCircleFits(s1,c)&&safeLandCheck(c).ok;});
+    c2=c2.map(p=>{
+      const future=radial({...s2,...p},s3,8).filter(q=>safeCircleFits({...s2,...p},{...s3,...q})&&safeLandCheck({...s3,...q}).ok);
+      return {...safeCandidateScore(s1,s2,p,s3),futureCount:future.length};
+    }).filter(p=>p.futureCount>0).sort((a,b)=>b.score-a.score||b.futureCount-a.futureCount);
+    // Mantém as melhores opções, mas exige separação espacial para não sugerir pontos quase iguais.
+    const diverse=[];for(const p of c2){if(diverse.every(q=>distXY(p,q)>=Math.max(35,Number(s2.radius)*.18)))diverse.push(p);if(diverse.length>=8)break;}c2=diverse;
+    const c3all=[];c2.forEach(parent=>radial({...s2,...parent},s3,10).forEach(p=>{const c={...s3,...p};if(safeCircleFits({...s2,...parent},c)&&safeLandCheck(c).ok)c3all.push({...safeCandidateScore({...s2,...parent},s3,p),parentScore:parent.score});}));
+    let c3=dedupe(c3all.sort((a,b)=>(b.score+b.parentScore*.15)-(a.score+a.parentScore*.15)),Math.max(20,Number(s3.radius)*.16)).slice(0,10);
+    if(!c2.length||!c3.length){alert('Não encontrei uma cadeia automática válida em terra com os raios atuais. Revise os raios ou a posição da SAFE inicial.');return;}
     r.stage2Options=c2;r.stage3Options=c3;
-    commit(`Geradas automaticamente ${c2.length} opções de SAFE 2 e ${c3.length} de SAFE 3`);
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MODO AUTOMÁTICO</b><br>${c2.length} possibilidades para SAFE 2 e ${c3.length} para SAFE 3. Clique em uma opção no mapa para selecioná-la.`;
+    commit(`Geradas ${c2.length} opções ranqueadas de SAFE 2 e ${c3.length} de SAFE 3`);
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MODO AUTOMÁTICO INTELIGENTE</b><br>Opções ordenadas por qualidade: terra disponível + margem de fechamento + continuidade da próxima SAFE. <b>S2-1</b> e <b>S3-1</b> são as melhores sugestões atuais.`;
   }
+
   function selectSafeCandidate(stageIndex,p){
     if(!requireEdit())return;
     const m=active(),r=ensureSafeRoute(m),s=r?.stages?.[stageIndex];if(!s)return;
@@ -1521,9 +1533,9 @@ iconAnchor:[12,
     const r=ensureSafeRoute(m);if(!r)return;
     const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
     const s1=r.stages[0],valid=r.stages.filter(safeStageValid),valid2=o2.filter(p=>safeCircleFits(s1,{...r.stages[1],x:p.x,y:p.y,z:0}));
-    if(safeStageValid(s1)){o2.forEach((p,i)=>{const ok=valid2.includes(p),line=L.polyline([ll(s1.x,s1.y),ll(p.x,p.y)],{weight:2,dashArray:'7 7',opacity:ok?.62:.85,color:ok?'#22c55e':'#ef4444',interactive:false}).addTo(state.map);const icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:10px;font-weight:900;background:${ok?'#166534':'#991b1b'};border-color:${ok?'#4ade80':'#f87171'}">S2-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE 2 • OPÇÃO ${i+1}</b><br>${ok?'✓ Válida • clique no marcador para selecionar':'⚠ Inválida: ultrapassa a Safe 1'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok)pin.on('click',()=>{if(state.editing)selectSafeCandidate(1,p);});state.drawn.push(line,pin);});}
+    if(safeStageValid(s1)){o2.forEach((p,i)=>{const ok=valid2.includes(p),line=L.polyline([ll(s1.x,s1.y),ll(p.x,p.y)],{weight:2,dashArray:'7 7',opacity:ok?.62:.85,color:ok?'#22c55e':'#ef4444',interactive:false}).addTo(state.map);const quality=Number(p.score)||0,bg=!ok?'#991b1b':quality>=90?'#14532d':quality>=80?'#166534':'#365314';const icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:10px;font-weight:900;background:${bg};border-color:${ok?'#4ade80':'#f87171'}">S2-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE 2 • OPÇÃO ${i+1}</b><br>${ok?`✓ Válida • qualidade ${quality}% • terra ${Math.round((p.landRatio||1)*100)}% • clique para selecionar`:'⚠ Inválida: ultrapassa a Safe 1'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok)pin.on('click',()=>{if(state.editing)selectSafeCandidate(1,p);});state.drawn.push(line,pin);});}
     o2.forEach(a=>o3.forEach((b,i)=>{const line=L.polyline([ll(a.x,a.y),ll(b.x,b.y)],{weight:1.5,dashArray:'4 8',opacity:.28,interactive:false}).addTo(state.map);state.drawn.push(line);}));
-    o3.forEach((p,i)=>{const ok=valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0}))||(!o2.length&&safeStageValid(r.stages[1])&&safeCircleFits(r.stages[1],{...r.stages[2],x:p.x,y:p.y,z:0}));const icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:10px;font-weight:900;background:${ok?'#166534':'#991b1b'};border-color:${ok?'#4ade80':'#f87171'}">S3-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE 3 • OPÇÃO ${i+1}</b><br>${ok?'✓ Válida • clique no marcador para selecionar':'⚠ Inválida: não cabe em nenhuma Safe 2 válida'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok)pin.on('click',()=>{if(state.editing)selectSafeCandidate(2,p);});state.drawn.push(pin);});
+    o3.forEach((p,i)=>{const ok=valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0}))||(!o2.length&&safeStageValid(r.stages[1])&&safeCircleFits(r.stages[1],{...r.stages[2],x:p.x,y:p.y,z:0}));const quality=Number(p.score)||0,bg=!ok?'#991b1b':quality>=90?'#14532d':quality>=80?'#166534':'#365314';const icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:10px;font-weight:900;background:${bg};border-color:${ok?'#4ade80':'#f87171'}">S3-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE 3 • OPÇÃO ${i+1}</b><br>${ok?`✓ Válida • qualidade ${quality}% • terra ${Math.round((p.landRatio||1)*100)}% • clique para selecionar`:'⚠ Inválida: não cabe em nenhuma Safe 2 válida'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok)pin.on('click',()=>{if(state.editing)selectSafeCandidate(2,p);});state.drawn.push(pin);});
     if(valid.length>1){
       const line=L.polyline(valid.map(s=>ll(s.x,s.y)),{weight:4,dashArray:'10 8',opacity:.85,interactive:false}).addTo(state.map);state.drawn.push(line);
     }
