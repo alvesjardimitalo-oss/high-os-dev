@@ -897,7 +897,6 @@ corpo});
       else{local._syncConflict={at:nowIso(),remote:m};result.keptLocal++;result.conflicts.push({id:local.id,name:local.name,resolution:'manual',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});}
     });
     if(result.added||result.updated){state.applyingCloud=true;try{saveStore();}finally{state.applyingCloud=false;}render();}
-    state.lastMergeResult=result;
     return result;
   }
 
@@ -1041,7 +1040,6 @@ errorTileUrl:TRANSPARENT_TILE});
   const OCEAN_FALLBACK='#0d1b2a';
   function applyOceanColor(hex){
     if(!hex)return;
-    state.oceanColor=hex;
     try{state.cayoOceanLayer?.setStyle({fillColor:hex});}catch(e){}
     const box=qs('#missionPlannerMap');
     if(box)box.style.setProperty('--mp-ocean',hex);
@@ -1266,7 +1264,7 @@ crossOrigin:true});
 sat,
 grid},{cayo,
 cayoPostal});
-    state.cayoBounds=cayoBounds;state.cayoOceanBounds=cayoOceanBounds;state.cayoOceanLayer=cayoOcean;state.cayoLayer=cayo;state.cayoPostalLayer=cayoPostal;state.atlasLayer=atlas;state.satLayer=sat;state.gridLayer=grid;
+    state.cayoBounds=cayoBounds;state.cayoOceanLayer=cayoOcean;state.cayoLayer=cayo;state.cayoPostalLayer=cayoPostal;state.atlasLayer=atlas;state.satLayer=sat;state.gridLayer=grid;
     let cayoOk=false;cayo.on('load',()=>{cayoOk=true;if(/cayo/i.test(active()?.name||'')||/cayo/i.test(active()?.event||''))mapNotice('Cayo Perico carregado','ok',false)});cayo.on('error',()=>{if(!cayoOk)mapNotice('Imagem de Cayo indisponível • coordenadas e ferramentas continuam funcionando','warn',true)});
     state.map.setView(ll(900,-600),3);
     state.tileBase=0;
@@ -2447,12 +2445,6 @@ block:'center'}),40);}
     state.safePlacementStage=null;
     const mapEl=state.map?.getContainer?.();if(mapEl)mapEl.style.cursor='';
   }
-  function switchEvent(eventId){
-    if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja descartá-las?'))return;
-    cleanupSafePresentation();if(state.editing)cancelEdit();
-    const zones=zonesOfEvent(eventId);if(!zones.length)return;
-    state.activeEventId=eventId;state.activeId=zones[0].id;state.libraryCategory=zones[0].category||state.libraryCategory;saveStore();render();updateEditUi();focusActiveMission(false);
-  }
   function switchMission(id){if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja descartá-las?'))return;cleanupSafePresentation();if(state.editing)cancelEdit();state.activeId=id;const m=state.missions.find(m=>m.id===id);state.activeEventId=m?.eventId||state.activeEventId;state.libraryCategory=(m?.category||state.libraryCategory||'dominacao');saveStore();setWorkspace(true);render();updateEditUi();focusActiveMission(true);}
   function deleteZone(){const m=active();if(!m)return;const zones=zonesOfEvent(m.eventId);if(zones.length<=1){alert('Este é o único mapa/zona do evento. Para removê-lo, exclua o evento inteiro.');return;}if(!confirm(`Apagar somente a zona "${m.name}" do evento "${m.event}"?`))return;cleanupSafePresentation();state.missions=state.missions.filter(x=>x.id!==m.id);const next=zones.find(x=>x.id!==m.id);state.activeId=next?.id||null;saveStore();render();focusActiveMission(false);}
   function deleteEvent(){
@@ -2521,10 +2513,6 @@ targetEventName;if(targetEventId==='__new__'){targetEventName=prompt('Nome do no
     const source=zonesOfEvent(m.eventId);const newEventId=eventUid();const newName=`${m.event} — Clone ${targetCategory==='gas'?'Gás':'Dominação'}`;
     const clones=source.map((z,idx)=>{const c=JSON.parse(JSON.stringify(z));c.id=uid();c.eventId=newEventId;c.event=newName;c.category=targetCategory;c.official=false;c.createdAt=nowIso();c.updatedAt=nowIso();c.requestText='';c.requestKind=idx===0?'create-event':'create-zone';c.center.label=targetCategory==='gas'?'Centro do Gás / Marco Zero':'Centro da Zona do Evento';if(c.center&&validCoord(c.center.x)&&validCoord(c.center.y)&&validCoord(c.center.z)&&Number.isFinite(Number(c.center.h))){c.center.status='validated';c.center.validatedAt=c.center.validatedAt||nowIso();delete c.center.validationReason;}return c;});
     state.missions.unshift(...clones);state.activeId=clones[0].id;state.activeEventId=newEventId;state.libraryCategory=targetCategory;saveStore();render();startEdit();setSaveState(`Evento clonado com ${clones.length} zona(s) • original preservado`);
-  }
-  function duplicateMission(){
-    const target=qs('#mpCloneTarget')?.value||state.libraryCategory||'dominacao';
-    cloneEventTo(target);
   }
   function clearPoints(){if(!requireEdit())return;const m=active();if(!m||!confirm('Limpar todos os pontos desta missão?'))return;m.points=[];m.selectedId=null;commit('Pontos removidos');}
   async function copyText(text){try{await navigator.clipboard.writeText(text);return true;}catch{}const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch{}ta.remove();return true;}
@@ -2771,7 +2759,6 @@ z=zones[0];if(!z)return false;
   function setPlannerTab(id){
     qsa('.mp-tab').forEach(b=>{const on=b.dataset.tab===id;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});
     qsa('.mp-tabpanel').forEach(p=>p.classList.toggle('active',p.dataset.tab===id));
-    state.plannerTab=id;
     const m=active(),gas=(m?.category||'dominacao')==='gas';
     qsa('.mp-tab').forEach(b=>{if(b.dataset.tab==='zona')b.title=gas?'Definir zona inicial e rota progressiva das SAFEs':'Definir geometria e limites da zona';});
     try{localStorage.setItem('highos_mp_tab',id);}catch(e){}
