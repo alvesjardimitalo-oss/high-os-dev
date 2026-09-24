@@ -1487,10 +1487,14 @@ iconAnchor:[12,
     const land=safeLandCheck(candidate);if(!land.ok)return {ok:false,reason:land.reason};
     let parents=[];
     if(idx===0)parents=[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}];
-    else if(idx===1)parents=safeStageValid(r.stages[0])?[r.stages[0]]:[];
     else{
-      const options=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>({...r.stages[1],x:p.x,y:p.y,z:0}));
-      parents=options.length?options:(safeStageValid(r.stages[1])?[r.stages[1]]:[]);
+      const prev=r.stages[idx-1];
+      parents=safeStageValid(prev)?[prev]:[];
+      // Compatibilidade: as SAFEs 2 e 3 ainda podem ter múltiplas opções aleatórias.
+      if(idx===2){
+        const options=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>({...r.stages[1],x:p.x,y:p.y,z:0}));
+        if(options.length)parents=options;
+      }
     }
     if(!parents.length)return {ok:false,reason:'Defina uma SAFE anterior válida primeiro.'};
     const fitting=parents.filter(parent=>safeCircleFits(parent,candidate));
@@ -1498,10 +1502,8 @@ iconAnchor:[12,
       const maxMove=Math.max(0,...parents.map(parent=>Number(parent.radius)-Number(candidate.radius)));
       return {ok:false,reason:`Fora da área possível. O centro desta SAFE precisa ficar a no máximo ~${Math.round(maxMove)} m do centro válido anterior.`};
     }
-    if(idx<2){
-      const next=r.stages[idx+1];
-      if(next&&safeStageValid(next)&&!safeCircleFits(candidate,next))return {ok:false,reason:`Este ponto cabe na SAFE anterior, mas deixaria a SAFE ${idx+2} atual fora da progressão.`};
-    }
+    const next=r.stages[idx+1];
+    if(next&&safeStageValid(next)&&!safeCircleFits(candidate,next))return {ok:false,reason:`Este ponto cabe na SAFE anterior, mas deixaria a SAFE ${idx+2} atual fora da progressão.`};
     return {ok:true,reason:'POSIÇÃO VÁLIDA • clique para marcar'};
   }
   function clearSafeHover(){
@@ -1521,7 +1523,7 @@ iconAnchor:[12,
   function beginSafePlacement(stageIndex){
     if(!requireEdit())return;
     const m=active();if(!m||((m.category||'dominacao')!=='gas'))return;
-    ensureSafeRoute(m);resetMapPlacementModes();state.safePlacementStage=stageIndex;
+    const r=ensureSafeRoute(m);if(!r?.stages?.[stageIndex])return;state.safeEditorStage=stageIndex;resetMapPlacementModes();state.safePlacementStage=stageIndex;
     const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${stageIndex+1}</b><br>Mova o mouse: verde permite marcar; vermelho bloqueia o clique.`;
     if(state.map?.getContainer())state.map.getContainer().style.cursor='crosshair';
   }
@@ -1531,8 +1533,9 @@ iconAnchor:[12,
     if(!check.ok){previewSafePlacement(latlng);if(qs('#mpClicked'))qs('#mpClicked').textContent='SAFE BLOQUEADA • '+check.reason;return false;}
     const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
     s.x=latlng.lng;s.y=latlng.lat;s.z=0;
-    if(idx>0){const key=idx===1?'stage2Options':'stage3Options';if(!Array.isArray(r[key]))r[key]=[];r[key].push({x:s.x,y:s.y,z:s.z});}
-    state.safePlacementStage=null;clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
+    // SAFE 2/3 preservam o sistema legado de candidatos aleatórios. SAFE 4+ é rota fixa e não contamina stage3Options.
+    if(idx===1||idx===2){const key=idx===1?'stage2Options':'stage3Options';if(!Array.isArray(r[key]))r[key]=[];const exists=r[key].some(p=>distXY(p,s)<1);if(!exists)r[key].push({x:s.x,y:s.y,z:s.z});}
+    state.safeEditorStage=idx;state.safePlacementStage=null;clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
     commit(`Safe ${idx+1} marcada no mapa`);
     state.map?.panTo(latlng);renderSafeRouteUi();return true;
   }
