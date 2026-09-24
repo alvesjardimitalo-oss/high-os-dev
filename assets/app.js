@@ -14864,6 +14864,25 @@ updatedBy:data.updatedBy||''};
  }catch(e){console.warn('Missoes: falha ao ler da nuvem',e);
 return null}
 }
+function missionCloudErrorInfo(e){
+ const code=String(e?.code||'').toLowerCase(),msg=String(e?.message||''),raw=(code+' '+msg).toLowerCase();
+ const quota=/resource-exhausted|quota|quota-exceeded|exceeded.*quota|too many requests/.test(raw);
+ let retryAt=null,estimated=false;
+ const retry=msg.match(/retry(?:\s+after|\s+in)?\s*[:=]?\s*(\d+)\s*(ms|s|sec|seconds?|m|min|minutes?)/i);
+ if(retry){let n=Number(retry[1]),u=retry[2].toLowerCase();if(u==='ms')n/=1000;else if(u.startsWith('m'))n*=60;retryAt=new Date(Date.now()+n*1000);}
+ if(quota&&!retryAt){
+   // Firestore informa que quotas diárias do plano gratuito são redefinidas por volta da meia-noite Pacific Time.
+   // Calcula a próxima meia-noite de America/Los_Angeles e exibe convertida no relógio local do navegador.
+   try{
+    const now=new Date(),parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(now).reduce((a,x)=>(a[x.type]=x.value,a),{});
+    const pacificAsUtc=Date.UTC(+parts.year,+parts.month-1,+parts.day,+parts.hour,+parts.minute,+parts.second),offset=pacificAsUtc-now.getTime();
+    retryAt=new Date(Date.UTC(+parts.year,+parts.month-1,+parts.day+1,0,0,0)-offset);estimated=true;
+   }catch(_){retryAt=new Date(Date.now()+24*60*60*1000);estimated=true;}
+ }
+ const when=retryAt?retryAt.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
+ return {quota,retryAt,estimated,when,code:code||'firebase-error',message:msg};
+}
+
 async function pushMissionsToCloud(missions=[]){
  if(!currentUser||!canEditModule('planejador')||!Array.isArray(missions)||!missions.length)return false;
 
@@ -14894,7 +14913,9 @@ missions:snapshot.length}}));
  }catch(e){console.warn('Missoes: falha ao salvar na nuvem',e);
   /* Mantém a última versão para nova tentativa em vez de perdê-la. */
   missionCloudPendingMissions=snapshot;
-  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:'local'}}));
+  const info=missionCloudErrorInfo(e);
+  window.HighOSMissionCloudLastError=info;
+  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:info.quota?'quota':'local',error:info}}));
  }finally{
   missionCloudBusy=false;
   const pending=missionCloudPendingMissions;
