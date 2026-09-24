@@ -446,3 +446,7 @@
 /* V10.89 — calibrador assistido de coordenadas */
 .mp-calibrator{margin-top:8px;padding:8px;border:1px solid rgba(56,189,248,.22);border-radius:9px;background:rgba(7,89,133,.07)}
 .mp-calibrator summary{cursor:pointer;font-size:9px;font-weight:900;letter-spacing:.08em;color:#7dd3fc}.mp-calibrator[open] summary{margin-bottom:4px}
+
+/* V10.91 — camada de relevo aprendido */
+.mp-elev-label{min-width:44px;padding:3px 5px;border:1px solid rgba(125,211,252,.32);border-radius:7px;background:rgba(8,47,73,.76);color:#e0f2fe;font-size:9px;font-weight:900;text-align:center;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+.mp-elev-label small{display:block;font-size:7px;color:#7dd3fc;margin-top:1px}
