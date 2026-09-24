@@ -202,3 +202,56 @@
 /* V10.91 — camada de relevo aprendido */
 .mp-elev-label{min-width:44px;padding:3px 5px;border:1px solid rgba(125,211,252,.32);border-radius:7px;background:rgba(8,47,73,.76);color:#e0f2fe;font-size:9px;font-weight:900;text-align:center;box-shadow:0 3px 10px rgba(0,0,0,.25)}
 .mp-elev-label small{display:block;font-size:7px;color:#7dd3fc;margin-top:1px}
+
+
+/* V10.95 — encaixe vertical do editor / mapa */
+#page-planejador:not(.mp-library-mode){
+  padding-top:0!important;
+}
+#page-planejador:not(.mp-library-mode) .mp-workspace-bar{
+  height:46px!important;
+  min-height:46px!important;
+  margin:0 0 6px!important;
+  padding:0 8px!important;
+  border-radius:10px!important;
+  gap:6px!important;
+}
+#page-planejador:not(.mp-library-mode) #mpBackLibrary,
+#page-planejador:not(.mp-library-mode) .mp-editor-actions button{
+  height:30px!important;
+  padding:0 9px!important;
+}
+#page-planejador:not(.mp-library-mode) .mp-editor-actions{
+  gap:4px!important;
+  min-width:0!important;
+  overflow-x:auto;
+  scrollbar-width:thin;
+}
+#page-planejador:not(.mp-library-mode) .mp-cloud-state{
+  flex:0 0 auto;
+  font-size:8px!important;
+}
+#page-planejador:not(.mp-library-mode) .mission-planner-shell{
+  gap:8px!important;
+  min-height:calc(100vh - 68px)!important;
+}
+#page-planejador:not(.mp-library-mode) .mission-planner-side{
+  top:52px!important;
+  max-height:calc(100vh - 62px)!important;
+}
+#page-planejador:not(.mp-library-mode) .mission-planner-mapwrap{
+  top:52px!important;
+  height:calc(100vh - 62px)!important;
+  min-height:calc(100vh - 62px)!important;
+}
+@media(max-width:1050px){
+  #page-planejador:not(.mp-library-mode) .mission-planner-mapwrap{
+    top:auto!important;
+    height:650px!important;
+    min-height:650px!important;
+  }
+  #page-planejador:not(.mp-library-mode) .mission-planner-side{
+    top:auto!important;
+    max-height:none!important;
+  }
+}
