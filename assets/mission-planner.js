@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
+safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -1344,10 +1344,13 @@ iconAnchor:[12,
   }
   function safeStageValid(s){return !!s&&validCoord(s.x)&&validCoord(s.y)&&Number(s.radius)>0;}
   function safeTimeline(m){
-    const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO',at:0,radius:effectiveEventRadius(m)}];
-    r.stages.forEach((st,i)=>{at+=Math.max(0,Number(st.closeSeconds)||0);out.push({label:'SAFE '+(i+1)+' FECHADA',at,radius:Number(st.radius)||0});if(i<2){at+=Math.max(0,Number(st.moveSeconds)||0);out.push({label:'MOVE → SAFE '+(i+2),at,radius:Number(st.radius)||0});}});
+    const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO DO EVENTO',at:0,radius:effectiveEventRadius(m),duration:0,type:'start'}];
+    r.stages.forEach((st,i)=>{const close=Math.max(0,Number(st.closeSeconds)||0);at+=close;out.push({label:'SAFE '+(i+1)+' FECHADA',at,radius:Number(st.radius)||0,duration:close,type:'close'});if(i<2){const move=Math.max(0,Number(st.moveSeconds)||0);at+=move;out.push({label:'MOVIMENTO → SAFE '+(i+2),at,radius:Number(st.radius)||0,duration:move,type:'move'});}});
     return out;
   }
+  function safeTotalSeconds(m){const tl=safeTimeline(m);return tl.length?tl[tl.length-1].at:0;}
+  function formatDuration(sec){sec=Math.max(0,Math.round(Number(sec)||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return (h?h+'h ':'')+(m?m+'min ':'')+(s||(!h&&!m)?s+'s':'');}
+  function setSafeConfigView(on){state.safeConfigView=!!on;if(on)state.layerVisibility.spawns=false;renderMap();}
   function safeCircleFits(parent,child){if(!safeStageValid(parent)||!safeStageValid(child))return true;return distXY(parent,child)+Number(child.radius)<=Number(parent.radius)+.01;}
   function safeRouteAudit(m){
     const r=ensureSafeRoute(m),issues=[];if(!r)return issues;
@@ -1455,7 +1458,8 @@ iconAnchor:[12,
         <button type="button" id="mpSafePlace2">ADICIONAR OPÇÃO SAFE 2</button>
         <button type="button" id="mpSafePlace3">ADICIONAR OPÇÃO SAFE 3</button>
         <button type="button" id="mpSafeAuto">⚡ GERAR POSSIBILIDADES</button>
-        <button type="button" id="mpSafePreview" class="primary">▶ PREVIEW DA ROTA</button><button type="button" id="mpSafePresent">⛶ APRESENTAR / GRAVAR</button>
+        <button type="button" id="mpSafeFocus">◎ CONFIGURAR SAFES SEM SPAWNS</button>
+        <button type="button" id="mpSafePreview" class="primary">▶ SIMULAR EVENTO</button><button type="button" id="mpSafePresent">⛶ APRESENTAR / GRAVAR</button>
         <button type="button" id="mpSafeStop">■ PARAR</button>
       </div>`;
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
@@ -1463,6 +1467,7 @@ iconAnchor:[12,
     qs('#mpSafePlace2')?.addEventListener('click',()=>beginSafePlacement(1));
     qs('#mpSafePlace3')?.addEventListener('click',()=>beginSafePlacement(2));
     qs('#mpSafeAuto')?.addEventListener('click',generateSafeCandidates);
+    qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));
     qs('#mpSafePreview')?.addEventListener('click',startSafePreview);
     qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);
     qs('#mpSafeStop')?.addEventListener('click',()=>{stopSafePreview();exitSafePresentation();});
@@ -1532,7 +1537,7 @@ iconAnchor:[12,
     if(coverage&&box.previousElementSibling!==coverage)coverage.insertAdjacentElement('afterend',box);
     const r=ensureSafeRoute(m),host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus');if(!r||!host)return;
     const initial=effectiveEventRadius(m),timeline=safeTimeline(m),audit=safeRouteAudit(m),tl=qs('#mpSafeTimeline');
-    if(tl)tl.innerHTML='<b>TIMELINE DA SAFE</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');
+    if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
     host.innerHTML=r.stages.map((s,i)=>`<div class="mp-readout" style="margin-top:8px"><b>SAFE ${i+1}${i===2?' • FINAL':''}</b>
       <div class="mp-grid" style="margin-top:6px">
         <label>X<input data-safe="${i}" data-k="x" inputmode="decimal" value="${s.x??''}"></label>
@@ -1548,7 +1553,7 @@ iconAnchor:[12,
     const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';const invalid2=o2.map((p,i)=>({p,i})).filter(x=>!validO2.includes(x.p)),invalid3=o3.map((p,i)=>({p,i})).filter(x=>!validO3.includes(x.p));opts.innerHTML=`Modo do preview: <b>${o2.length||o3.length?'ALEATÓRIO/MISTO':'ROTA FIXA'}</b> • Safe 2 válidas: <b>${validO2.length}/${o2.length}</b> • Safe 3 válidas: <b>${validO3.length}/${o3.length}</b> <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`+(invalid2.length||invalid3.length?`<div style="margin-top:7px;color:#ff8b8b"><b>Opções inválidas:</b> ${invalid2.map(x=>`<button type="button" data-safe-remove="2" data-index="${x.i}" title="Remover opção inválida da Safe 2">S2-${x.i+1} ×</button>`).join(' ')} ${invalid3.map(x=>`<button type="button" data-safe-remove="3" data-index="${x.i}" title="Remover opção inválida da Safe 3">S3-${x.i+1} ×</button>`).join(' ')}</div>`:'');host.appendChild(opts);
     qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),key=stage===2?'stage2Options':'stage3Options';if(!Array.isArray(r[key])||!r[key][idx])return;r[key].splice(idx,1);commit('Opção inválida da Safe '+stage+' removida');}));
     qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;r.stage2Options=[];r.stage3Options=[];r.stages[1].x=r.stages[1].y=null;r.stages[2].x=r.stages[2].y=null;commit('Opções aleatórias da Safe removidas');});
-    status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas configuradas: <b>${ok}/3</b><br><small>Adicione várias opções de Safe 2 e Safe 3 clicando no mapa. A execução poderá sortear uma rota.</small>`;
+    status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas configuradas: <b>${ok}/3</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>Adicione várias opções de Safe 2 e Safe 3 clicando no mapa. A execução poderá sortear uma rota.</small>`;
   }
   function drawSafeRoute(m){
     if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;
@@ -1626,6 +1631,7 @@ iconAnchor:[12,
     // Preview usa cópias: rota sorteada ou fixa nunca altera a configuração salva.
     const s1={...r.stages[0]},s2={...r.stages[1],x:p2.x,y:p2.y,z:0},s3={...r.stages[2],x:p3.x,y:p3.y,z:0},routeMode=(random2||random3)?((random2&&random3)?'ALEATÓRIA':'MISTA'):'FIXA';
     stopSafePreview();
+    state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
     const initial=effectiveEventRadius(m),phases=[
       {type:'close',label:'FECHANDO SAFE 1',a:s1,from:initial,to:s1.radius,seconds:Number(s1.closeSeconds)||180},
       {type:'move',label:'MOVENDO PARA SAFE 2',a:s1,b:s2,from:s1.radius,to:s1.radius,seconds:Number(s1.moveSeconds)||90},
@@ -1633,12 +1639,12 @@ iconAnchor:[12,
       {type:'move',label:'MOVENDO PARA SAFE 3',a:s2,b:s3,from:s2.radius,to:s2.radius,seconds:Number(s2.moveSeconds)||75},
       {type:'close',label:'FECHANDO SAFE FINAL',a:s3,from:s2.radius,to:s3.radius,seconds:Number(s3.closeSeconds)||120}
     ];
-    let pi=0,t=0;const steps=90,hud=ensurePreviewHud();
+    let pi=0,t=0,elapsed=0;const steps=90,hud=ensurePreviewHud();
     const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
     state.safePreviewLayer=L.circle(ll(s1.x,s1.y),gasStyle).addTo(state.map);
     state.safePreviewRouteLayer=state.safePresentation?null:L.polyline([ll(s1.x,s1.y),ll(s2.x,s2.y),ll(s3.x,s3.y)],{color:'#c084fc',weight:3,opacity:.72,dashArray:'8 8',interactive:false}).addTo(state.map);
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>PREVIEW EM EXECUÇÃO</b> • rota ${routeMode.toLowerCase()}: SAFE 1 → SAFE 2 → SAFE 3<br><small>O círculo roxo representa a área do gás durante fechamento e deslocamento.</small>`;
-    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];if(!p){stopSafePreview();if(!state.safePresentation)renderMap();return;}t++;const u=Math.min(1,t/steps),smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);if(hud){const remain=Math.max(0,Math.ceil(p.seconds*(1-u)));hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • '+remain+' s</div>';}if(u>=1){pi++;t=0;if(pi>=phases.length){if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>SAFE FINAL CONCLUÍDA</div><div style="font-size:13px;font-weight:500">Raio final '+Math.round(Number(s3.radius))+' m</div>';clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;if(!state.safePresentation)setTimeout(()=>{stopSafePreview();renderMap();},900);}}},45);
+    const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0),status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>SIMULAÇÃO DO EVENTO</b> • rota ${routeMode.toLowerCase()} • duração ${formatDuration(totalSeconds)}<br><small>O círculo roxo representa a área do gás durante fechamento e deslocamento.</small>`;
+    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];if(!p){stopSafePreview();if(!state.safePresentation)renderMap();return;}t++;const u=Math.min(1,t/steps);elapsed=phases.slice(0,pi).reduce((a,x)=>a+x.seconds,0)+p.seconds*u,smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);if(hud){const remain=Math.max(0,Math.ceil(p.seconds*(1-u)));hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(totalSeconds)+'</div>';}if(u>=1){pi++;t=0;if(pi>=phases.length){if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>SAFE FINAL CONCLUÍDA</div><div style="font-size:13px;font-weight:500">Raio final '+Math.round(Number(s3.radius))+' m</div>';clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;if(!state.safePresentation)setTimeout(()=>{stopSafePreview();renderMap();},900);}}},45);
   }
 
   function renderMapLegend(m){
@@ -1662,7 +1668,7 @@ iconAnchor:[12,
       poly.forEach(p=>{const rawIndex=(m.zonePolygon||[]).indexOf(p),vertexNo=rawIndex>=0?rawIndex+1:0,ic=L.divIcon({className:'',html:'<div style="min-width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:#171923;color:#fff;font:10px/18px system-ui;text-align:center">'+vertexNo+'</div>',iconSize:[22,22],iconAnchor:[11,11]});const mk=L.marker(ll(p.x,p.y),{icon:ic,interactive:true,draggable:state.editing}).addTo(state.map).bindPopup('<b>Vértice da Zona '+String(vertexNo).padStart(2,'0')+'</b><br>'+f(p.x)+', '+f(p.y)+', '+f(Number(p.z)||0)+(state.editing?'<br><small>Arraste para ajustar • será necessário validar novamente</small>':''));mk.on('dragend',ev=>{if(rawIndex<0)return;const n=ev.target.getLatLng(),v=m.zonePolygon[rawIndex];v.x=n.lng;v.y=n.lat;v.z=0;v.status='planned';v.validatedAt=null;v.validationReason='coordinate-change';commit('Vértice '+String(rawIndex+1).padStart(2,'0')+' movido — validação removida');});mk._mpKind='zone';state.drawn.push(mk);});
     }else if(hasCenter&&!polyMode){const eventRadius=effectiveEventRadius(m);if(eventRadius>0){const zone=L.circle(ll(m.center.x,m.center.y),{radius:eventRadius,weight:2,fillOpacity:.035,dashArray:(m.category||'dominacao')==='gas'?'8 6':null,interactive:false}).addTo(state.map);zone._mpKind='zone';state.drawn.push(zone);}}
     drawSafeRoute(m);drawCompareOverlay();drawDominationAccess(m);drawZoneProposal();
-    m.points.forEach((p,i)=>{
+    if(!state.safeConfigView&&!state.safePresentation)m.points.forEach((p,i)=>{
       p.id=i+1;const valid=isValidated(p),
 outside=((m.category||'dominacao')==='gas')&&!pointInsideZone(m,p),
 pos=ll(p.x,p.y);
