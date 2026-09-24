@@ -436,3 +436,9 @@
 
 /* V10.81 — contexto visual da SAFE selecionada no mapa */
 #page-planejador .mp-center-pin.mp-safe-current{transform:scale(1.08);box-shadow:0 0 0 4px rgba(216,180,254,.2),0 0 24px rgba(168,85,247,.65)!important;border-color:#e9d5ff!important}
+
+/* V10.84 — auditoria de possibilidades por SAFE */
+.mp-safe-option-audit{margin-top:8px;padding:7px 8px;border-radius:8px;font-size:8px;font-weight:800;letter-spacing:.035em}
+.mp-safe-option-audit.all-valid{border:1px solid rgba(74,222,128,.22);background:rgba(22,101,52,.12);color:#86efac}
+.mp-safe-option-audit.has-invalid{border:1px solid rgba(248,113,113,.3);background:rgba(153,27,27,.13);color:#fca5a5}
+.mp-safe-option-audit>div{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}.mp-safe-option-audit button{min-height:25px!important;padding:3px 7px!important;font-size:8px!important;border-color:rgba(248,113,113,.35)!important}
