@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-safePlacementStage:null};
+safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,zoneProposal:null,safeHoverMarker:null};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -555,8 +555,13 @@ panel:m.panel||'/ilegal'});
     return [...seen.values()];
   };
   function slugify(s){return String(s||'evento').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'evento';}
+  function normalizeZoneGeometry(m){
+    if(!m)return false;let changed=false;const cat=m.category||((String(m.event||'').toLowerCase().includes('domina'))?'dominacao':'gas');
+    if(cat==='dominacao'){if(!Array.isArray(m.zonePolygon)){m.zonePolygon=[];changed=true;}if(m.zoneMode!=='radius'&&m.zoneMode!=='polygon'){m.zoneMode=m.zonePolygon.filter(p=>validCoord(p?.x)&&validCoord(p?.y)).length>=3?'polygon':'radius';changed=true;}}
+    return changed;
+  }
   function inferLegacyStructure(m){
-    if(m.eventId) return;
+    normalizeZoneGeometry(m);if(m.eventId)return;
     const cat=m.category||((String(m.event||'').toLowerCase().includes('domina'))?'dominacao':'gas');
     const name=String(m.name||'').trim(),
  evt=String(m.event||'').trim();
@@ -577,7 +582,47 @@ panel:m.panel||'/ilegal'});
     m.event=eventName;
     m.name=zoneName;
     m.eventId=`legacy_${cat}_${slugify(eventName)}`;
-    m.requestKind=m.requestKind||(m.official?'alter-zone':'create-zone');
+    m.requestKind=m.requestKind||(m.official?'alter-zone':'create-zone');normalizeZoneGeometry(m);
+  }
+
+  function dominationPolygon(m){return (m?.category||'dominacao')==='dominacao'&&Array.isArray(m?.zonePolygon)?m.zonePolygon.filter(p=>validCoord(p?.x)&&validCoord(p?.y)):[];}
+  function dominationZoneMode(m){if((m?.category||'dominacao')!=='dominacao')return 'radius';const p=dominationPolygon(m);return m?.zoneMode||(p.length>=3?'polygon':'radius');}
+  function activeDominationPolygon(m){return dominationZoneMode(m)==='polygon'?dominationPolygon(m):[];}
+  function polygonArea(points){if(!points||points.length<3)return 0;let a=0;for(let i=0,j=points.length-1;i<points.length;j=i++)a+=Number(points[j].x)*Number(points[i].y)-Number(points[i].x)*Number(points[j].y);return Math.abs(a)/2;}
+  function polygonPerimeter(points){if(!points||points.length<2)return 0;let d=0;for(let i=0;i<points.length;i++)d+=distXY(points[i],points[(i+1)%points.length]);return d;}
+  function polygonCentroid(points){if(!points?.length)return null;if(points.length<3){const x=points.reduce((a,p)=>a+Number(p.x),0)/points.length,y=points.reduce((a,p)=>a+Number(p.y),0)/points.length;return {x,y};}let a=0,cx=0,cy=0;for(let i=0;i<points.length;i++){const p=points[i],q=points[(i+1)%points.length],cross=Number(p.x)*Number(q.y)-Number(q.x)*Number(p.y);a+=cross;cx+=(Number(p.x)+Number(q.x))*cross;cy+=(Number(p.y)+Number(q.y))*cross;}a*=.5;if(Math.abs(a)<1e-7)return {x:points.reduce((v,p)=>v+Number(p.x),0)/points.length,y:points.reduce((v,p)=>v+Number(p.y),0)/points.length};return {x:cx/(6*a),y:cy/(6*a)};}
+  function dominationAnalysisCenter(m){const p=activeDominationPolygon(m),c=p.length>=3?polygonCentroid(p):null;return c||(validCoord(m?.center?.x)&&validCoord(m?.center?.y)?{x:Number(m.center.x),y:Number(m.center.y)}:null);}
+
+  function dominationZoneGeometry(m){const p=dominationPolygon(m),raw=Array.isArray(m?.zonePolygon)?m.zonePolygon:[],mode=m?.zoneMode||(p.length>=3?'polygon':'radius');if(mode==='polygon'&&raw.some(v=>!validCoord(v?.x)||!validCoord(v?.y)))return {mode:'polygon-invalid',vertices:p.length,area:null,perimeter:null};if(mode==='polygon'&&p.length<3)return {mode:'polygon-incomplete',vertices:p.length,area:null,perimeter:null};if(mode!=='polygon')return {mode:'radius',vertices:0,area:Math.PI*Math.pow(effectiveEventRadius(m),2),perimeter:2*Math.PI*effectiveEventRadius(m)};return {mode:'polygon',vertices:p.length,area:polygonArea(p),perimeter:polygonPerimeter(p)};}
+  function orient2d(a,b,c){return (Number(b.y)-Number(a.y))*(Number(c.x)-Number(b.x))-(Number(b.x)-Number(a.x))*(Number(c.y)-Number(b.y));}
+  function segmentCross(a,b,c,d){const eps=1e-7,o1=orient2d(a,b,c),o2=orient2d(a,b,d),o3=orient2d(c,d,a),o4=orient2d(c,d,b),on=(p,q,r)=>Math.abs(orient2d(p,q,r))<=eps&&Number(r.x)>=Math.min(Number(p.x),Number(q.x))-eps&&Number(r.x)<=Math.max(Number(p.x),Number(q.x))+eps&&Number(r.y)>=Math.min(Number(p.y),Number(q.y))-eps&&Number(r.y)<=Math.max(Number(p.y),Number(q.y))+eps;if(((o1>eps&&o2<-eps)||(o1<-eps&&o2>eps))&&((o3>eps&&o4<-eps)||(o3<-eps&&o4>eps)))return true;return (Math.abs(o1)<=eps&&on(a,b,c))||(Math.abs(o2)<=eps&&on(a,b,d))||(Math.abs(o3)<=eps&&on(c,d,a))||(Math.abs(o4)<=eps&&on(c,d,b));}
+  function polygonSelfIntersections(points){const hits=[];if(!points||points.length<4)return hits;for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length];for(let j=i+1;j<points.length;j++){if(j===i||j===(i+1)%points.length||(i===0&&j===points.length-1))continue;const c=points[j],d=points[(j+1)%points.length];if(segmentCross(a,b,c,d))hits.push([i+1,j+1]);}}return hits;}
+  function dominationPolygonAudit(m){
+    const raw=Array.isArray(m?.zonePolygon)?m.zonePolygon:[],indexed=raw.map((v,i)=>({v,i})).filter(x=>validCoord(x.v?.x)&&validCoord(x.v?.y)),p=indexed.map(x=>x.v),findings=[];
+    const add=(level,message,action)=>findings.push({level,message,action});
+    const pack=metrics=>({issues:findings.filter(x=>x.level==='BLOQUEIO').map(x=>x.message),warns:findings.filter(x=>x.level!=='BLOQUEIO'&&x.level!=='OK').map(x=>x.message),findings,metrics});
+    if(!raw.length)return pack(null);
+    const invalid=raw.map((v,i)=>({v,i})).filter(x=>!validCoord(x.v?.x)||!validCoord(x.v?.y)),pendingZ=raw.map((v,i)=>({v,i})).filter(x=>validCoord(x.v?.x)&&validCoord(x.v?.y)&&(!validCoord(x.v?.z)||x.v?.status!=='validated'));
+    if(invalid.length)add('BLOQUEIO','CDS inválida(s) no polígono: '+invalid.map(x=>String(x.i+1).padStart(2,'0')).join(', ')+'.','Corrija X/Y dessas CDS. O sistema não deve unir os vértices vizinhos atravessando um ponto inválido.');
+    if(pendingZ.length)add('ATENÇÃO','Vértice(s) pendente(s) de validação real no FiveM: '+pendingZ.map(x=>String(x.i+1).padStart(2,'0')).join(', ')+'.','Cole a CDS real X/Y/Z coletada no jogo e valide cada vértice antes da implementação.');
+    if(p.length<3){add('BLOQUEIO','Polígono incompleto: são necessárias pelo menos 3 CDS válidas para fechar a Zona de Pontuação.','Adicione vértices seguindo a ordem real do contorno.');return pack(null);}
+    if(invalid.length){add('ATENÇÃO','Auditoria geométrica suspensa até corrigir todas as CDS com X/Y inválidos.','Mantenha a numeração original e corrija somente as CDS inválidas.');return pack({area:null,perimeter:null,minSide:null,maxSide:null,compactness:null,crossings:null,invalidVertices:invalid.length,pendingZ:pendingZ.length,nearDuplicates:null,geometryDeferred:true});}
+    const near=[];for(let i=0;i<p.length;i++)for(let j=i+1;j<p.length;j++){const d=distXY(p[i],p[j]);if(d<2)near.push([indexed[i].i+1,indexed[j].i+1,d]);}
+    if(near.length)add('BLOQUEIO','Vértices duplicados/quase iguais: '+near.map(x=>String(x[0]).padStart(2,'0')+'↔'+String(x[1]).padStart(2,'0')+' ('+x[2].toFixed(1)+'m)').join(', ')+'.','Confirme no mapa qual CDS representa o contorno correto; não remova ou mova automaticamente.');
+    const sides=p.map((v,i)=>distXY(v,p[(i+1)%p.length])),area=polygonArea(p),perimeter=polygonPerimeter(p),minSide=Math.min(...sides),maxSide=Math.max(...sides),meanSide=sides.reduce((x,y)=>x+y,0)/sides.length,sideStd=Math.sqrt(sides.reduce((x,y)=>x+Math.pow(y-meanSide,2),0)/sides.length),sideCv=meanSide?sideStd/meanSide:0,cross=polygonSelfIntersections(p),compactness=perimeter>0?(4*Math.PI*area)/(perimeter*perimeter):0;
+    const xs=p.map(v=>Number(v.x)),ys=p.map(v=>Number(v.y)),width=Math.max(...xs)-Math.min(...xs),height=Math.max(...ys)-Math.min(...ys),shortAxis=Math.max(1,Math.min(width,height)),longAxis=Math.max(width,height),aspectRatio=longAxis/shortAxis;
+    const hullArea=(()=>{const pts=p.map(v=>({x:Number(v.x),y:Number(v.y)})).sort((x,y)=>x.x-y.x||x.y-y.y);if(pts.length<3)return area;const cr=(o,x,y)=>(x.x-o.x)*(y.y-o.y)-(x.y-o.y)*(y.x-o.x),lo=[],up=[];pts.forEach(q=>{while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],q)<=0)lo.pop();lo.push(q);});for(let i=pts.length-1;i>=0;i--){const q=pts[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],q)<=0)up.pop();up.push(q);}return polygonArea(lo.slice(0,-1).concat(up.slice(0,-1)));})();
+    const concavity=hullArea>0?1-area/hullArea:0;
+    if(cross.length){const edgeLabel=k=>{const x=indexed[k-1]?.i+1,y=indexed[k%p.length]?.i+1;return String(x).padStart(2,'0')+'→'+String(y).padStart(2,'0');},detail=cross.slice(0,6).map(x=>edgeLabel(x[0])+' × '+edgeLabel(x[1])).join(', ');add('BLOQUEIO','O contorno possui arestas que se cruzam, encostam ou se sobrepõem indevidamente'+(detail?': '+detail:'')+(cross.length>6?' (+'+(cross.length-6)+' conflito(s))':'')+'.','Revise a ordem das CDS ou a posição do vértice indicado; não publique enquanto houver cruzamento.');}
+    if(area<10000)add('ALERTA','Área pequena (~'+Math.round(area).toLocaleString('pt-BR')+' m²).','Confira no jogo se há espaço suficiente para movimentação, cobertura e flancos.');
+    if(minSide<25)add('ALERTA','Há lado muito curto no contorno (~'+Math.round(minSide)+' m).','Confira se existe CDS redundante, duplicada ou posicionada perto demais da vizinha.');
+    if(maxSide>0&&minSide>0&&maxSide/minSide>8)add('ALERTA','Lados muito desproporcionais ('+Math.round(minSide)+'–'+Math.round(maxSide)+' m).','Confira se a ordem das CDS cria um salto grande ou um gargalo não intencional.');
+    if(aspectRatio>4)add('ALERTA','Zona muito alongada: proporção aproximada '+aspectRatio.toFixed(1)+':1 ('+Math.round(width)+' × '+Math.round(height)+' m).','Revise se o formato cobre de fato vários quarteirões ou se virou um corredor estreito.');
+    if(compactness<.18)add('ALERTA','Formato com baixa compactação ('+(compactness*100).toFixed(0)+'%).','Confira corredores, gargalos e pontas excessivas antes de implementar.');
+    if(concavity>.35)add('ALERTA','Contorno muito côncavo: cerca de '+Math.round(concavity*100)+'% da envoltória externa fica recortada.','Verifique se as reentrâncias são intencionais e se não criam bolsões difíceis de entender dentro da cidade.');
+    if(sideCv>.85)add('ATENÇÃO','Variação alta entre comprimentos dos lados (CV '+sideCv.toFixed(2)+').','Revise visualmente os trechos muito curtos e muito longos; isso pode indicar CDS fora de ordem.');
+    if(!findings.some(x=>x.level==='BLOQUEIO')&&area>=10000&&aspectRatio<=4&&compactness>=.18&&concavity<=.35)add('OK','Geometria estrutural consistente para validação operacional.','Ainda confirme terreno, cobertura, acessos e CDS reais no FiveM antes de publicar.');
+    return pack({area,perimeter,minSide,maxSide,meanSide,sideCv,compactness,crossings:cross.length,invalidVertices:invalid.length,pendingZ:pendingZ.length,nearDuplicates:near.length,width,height,aspectRatio,concavity,hullArea,geometryDeferred:false});
   }
 
   function coverageStats(m){
@@ -602,11 +647,7 @@ base=Number(m?.circleRadius),
 s=coverageStats(m);return Number.isFinite(saved)&&saved>0?saved:(Number.isFinite(base)&&base>0?base:(s?.recommended||1000));}
   function pointDistanceFromCenter(m,p){return Math.hypot(Number(p.x)-Number(m.center.x),Number(p.y)-Number(m.center.y));}
   function pointInsideZone(m,p){if(!m||!p||!validCoord(m.center?.x)||!validCoord(m.center?.y)||!validCoord(p.x)||!validCoord(p.y))return true;return pointDistanceFromCenter(m,p)<=effectiveEventRadius(m);}
-  function zoneCoverageCounts(m){const pts=(m?.points||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));const radius=effectiveEventRadius(m);let inside=0,
-outside=0;pts.forEach(p=>{if(pointDistanceFromCenter(m,p)<=radius)inside++;else outside++;});return {inside,
-outside,
-total:pts.length,
-radius};}
+  function zoneCoverageCounts(m){const pts=(m?.points||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),radius=effectiveEventRadius(m),category=m?.category||'dominacao',geom=category==='dominacao'?dominationZoneGeometry(m):null;let inside=0,outside=0,unknown=0;pts.forEach(p=>{if(category==='dominacao'&&geom?.mode==='polygon'){if(pointInPolygon(p,activeDominationPolygon(m)))inside++;else outside++;}else if(category==='dominacao'&&['polygon-incomplete','polygon-invalid'].includes(geom?.mode))unknown++;else if(validCoord(m?.center?.x)&&validCoord(m?.center?.y)&&pointDistanceFromCenter(m,p)<=radius)inside++;else outside++;});return {inside,outside,unknown,total:pts.length,radius,mode:geom?.mode||'radius'};}
 
   function validCoord(v){return Number.isFinite(Number(v)) && Number(v)!==0;}
 
@@ -629,8 +670,10 @@ motivo:'Cole a CDS copiada do jogo.'};
     t=t.replace(/[{}\[\]()]/g,' ');
     t=t.replace(/\b[xyzh]\s*[:=]\s*/gi,' ');
     t=t.replace(/heading|head|rot/gi,' ');
-    const nums=t.match(/-?\d+(?:[.,]\d+)?/g)||[];
-    const vals=nums.map(v=>Number(String(v).replace(',','.'))).filter(v=>Number.isFinite(v));
+    let nums=t.match(/-?\d+(?:[.,]\d+)?/g)||[];
+    let vals=nums.map(v=>Number(String(v).replace(',','.'))).filter(v=>Number.isFinite(v));
+    // CDS copiada com vírgula decimal e separador por espaço: "123,45 -456,78 30,10 90"
+    if(vals.length<2){nums=t.replace(/(\d),(\d)/g,'$1.$2').match(/-?\d+(?:\.\d+)?/g)||[];vals=nums.map(Number).filter(Number.isFinite);}
     if(vals.length<2)return {ok:false,
 motivo:'Nao encontrei X e Y na CDS colada.'};
     const [x,
@@ -737,7 +780,7 @@ updatedAt:nowIso(),
 points:[],
 requestText:'',
 requestKind:eventId?'create-zone':'create-event',
-official:false};
+official:false,zoneMode:cat==='dominacao'?'radius':null,zonePolygon:[]};
   }
 
   function normalizeText(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
@@ -1040,8 +1083,13 @@ b].map(v=>v.toString(16).padStart(2,'0')).join('');
      esta acontecendo, tenta o servidor alternativo sozinho e oferece
      um botao de recarregar sem precisar atualizar a pagina inteira.
   --------------------------------------------------------------- */
+  function updateMapDiagnostics(extra=''){
+    const el=qs('#mpMapDiagnostics');if(!el)return;
+    const base=qs('#mpLayerControl [data-base].active')?.dataset.base||'atlas',ok=state.tileCounters?.ok||0,err=state.tileCounters?.err||0,server=(Number(state.tileBase)||0)+1,cayo=!!(state.cayoLayer&&state.map?.hasLayer(state.cayoLayer)),postal=!!(state.cayoPostalLayer&&state.map?.hasLayer(state.cayoPostalLayer)),box=qs('#missionPlannerMap');
+    el.textContent='Servidor '+server+'/'+remoteBases.length+' • '+base.toUpperCase()+' • tiles '+ok+' OK / '+err+' falha(s) • Cayo '+(cayo?'SAT':postal?'POSTAL':'OFF')+(box?' • '+box.clientWidth+'×'+box.clientHeight:'')+(extra?' • '+extra:'');
+  }
   function mapNotice(texto,tipo='warn',comBotao=false){
-    setStatus(texto,tipo);
+    setStatus(texto,tipo);updateMapDiagnostics(texto);
     const barra=qs('.mp-map-status');if(!barra)return;
     let acao=qs('#mpMapRetry');
     if(!comBotao){acao?.remove();return;}
@@ -1053,28 +1101,23 @@ b].map(v=>v.toString(16).padStart(2,'0')).join('');
       barra.appendChild(acao);
     }
   }
+  function attachMapLayerHealth(layers){
+    let ok=0,err=0;Object.values(layers).forEach(l=>{l.on('tileload',()=>{ok++;mapNotice('Mapa GTA V carregado','ok',false)});l.on('tileerror',()=>{err++;updateMapDiagnostics('falha de tile')});watchOcean(l);});
+    startMapWatchdog(()=>ok,()=>err);return {get ok(){return ok},get err(){return err}};
+  }
+  function replaceMapBases(baseIndex=0){
+    if(!state.map)return;const current=qs('#mpLayerControl [data-base].active')?.dataset.base||'atlas';
+    Object.values(state.mapLayers||{}).forEach(l=>{try{state.map.removeLayer(l)}catch(e){}});
+    const layers={atlas:layer('styleAtlas','jpg',5,baseIndex),sat:layer('styleSatelite','jpg',5,baseIndex),grid:layer('styleGrid','png',5,baseIndex)};
+    state.mapLayers=layers;state.atlasLayer=layers.atlas;state.satLayer=layers.sat;state.gridLayer=layers.grid;state.tileCounters=attachMapLayerHealth(layers);
+    (layers[current]||layers.atlas).addTo(state.map);state.map.invalidateSize();
+    return layers;
+  }
   function reloadMapTiles(){
     if(!state.map)return;
     state.tileBase=((state.tileBase||0)+1)%remoteBases.length;
     mapNotice('Tentando outro servidor do mapa...','warn',false);
-    try{
-      Object.values(state.mapLayers||{}).forEach(l=>{try{state.map.removeLayer(l)}catch(e){}});
-    }catch(e){}
-    const atlas=layer('styleAtlas','jpg',5,state.tileBase);
-    const sat=layer('styleSatelite','jpg',5,state.tileBase);
-    const grid=layer('styleGrid','png',5,state.tileBase);
-    state.mapLayers={atlas,
-sat,
-grid};
-    let ok=0,
-err=0;
-    atlas.on('tileload',()=>{ok++;mapNotice('Mapa GTA V carregado','ok',false)});
-    [atlas,
-sat,
-grid].forEach(l=>{l.on('tileerror',()=>err++);watchOcean(l)});
-    atlas.addTo(state.map);
-    state.map.invalidateSize();
-    startMapWatchdog(()=>ok,()=>err);
+    replaceMapBases(state.tileBase);
   }
   function startMapWatchdog(getOk,getErr){
     clearTimeout(state.mapWatchdog);
@@ -1131,27 +1174,25 @@ grid].forEach(l=>{l.on('tileerror',()=>err++);watchOcean(l)});
           <label class="mp-switch"><input type="checkbox" data-over="cayo" checked><i></i><span>Satélite</span></label>
           <label class="mp-switch"><input type="checkbox" data-over="cayoPostal" checked><i></i><span>Postal</span></label>
         </div>
+        <div class="mp-layer-group"><span class="mp-layer-title">DIAGNÓSTICO</span><small id="mpMapDiagnostics" style="display:block;max-width:230px;line-height:1.45;opacity:.72">Aguardando mapa…</small><button type="button" id="mpMapDiagRefresh" style="margin-top:6px">ATUALIZAR</button></div>
       </div>`;
     host.appendChild(box);
+    qs('#mpMapDiagRefresh',box)?.addEventListener('click',()=>{state.map?.invalidateSize();updateMapDiagnostics('diagnóstico atualizado');});
     if(window.L?.DomEvent){L.DomEvent.disableClickPropagation(box);L.DomEvent.disableScrollPropagation(box);}
 
     const trocarBase=chave=>{
-      Object.entries(bases).forEach(([k,
-l])=>{
-        try{if(k===chave){if(!state.map.hasLayer(l))l.addTo(state.map);}else if(state.map.hasLayer(l))state.map.removeLayer(l);}catch(e){}
-      });
+      const live=state.mapLayers||bases;
+      Object.entries(live).forEach(([k,l])=>{try{if(k===chave){if(!state.map.hasLayer(l))l.addTo(state.map);}else if(state.map.hasLayer(l))state.map.removeLayer(l);}catch(e){}});
       qsa('[data-base]',box).forEach(b=>b.classList.toggle('active',b.dataset.base===chave));
-      state.oceanLocked=false;state.oceanTries=0;
-      watchOcean(bases[chave]);
+      state.oceanLocked=false;state.oceanTries=0;watchOcean(live[chave]);updateMapDiagnostics('base alterada');
     };
     qsa('[data-base]',box).forEach(b=>b.addEventListener('click',()=>trocarBase(b.dataset.base)));
 
-    // overlays de Cayo comecam visiveis, como antes
-    Object.values(overlays).forEach(l=>{try{l.addTo(state.map)}catch(e){}});
-    qsa('[data-over]',box).forEach(inp=>inp.addEventListener('change',()=>{
+    // Overlays de Cayo são ativados apenas quando a missão está em Cayo.
+    qsa('[data-over]',box).forEach(inp=>{inp.checked=false;inp.addEventListener('change',()=>{
       const l=overlays[inp.dataset.over];if(!l)return;
       try{inp.checked?l.addTo(state.map):state.map.removeLayer(l)}catch(e){}
-    }));
+    });});
 
     const alternar=()=>{
       const aberto=box.classList.toggle('collapsed');
@@ -1190,7 +1231,7 @@ stroke:false,
 fill:true,
 fillColor:OCEAN_FALLBACK,
 fillOpacity:1,
-interactive:false}).addTo(state.map);
+interactive:false});
     const cayo=L.imageOverlay(cayoUrl,cayoBounds,{pane:'cayoMapPane',
 opacity:1,
 interactive:false,
@@ -1204,35 +1245,32 @@ sat,
 grid},{cayo,
 cayoPostal});
     state.cayoBounds=cayoBounds;state.cayoOceanBounds=cayoOceanBounds;state.cayoOceanLayer=cayoOcean;state.cayoLayer=cayo;state.cayoPostalLayer=cayoPostal;state.atlasLayer=atlas;state.satLayer=sat;state.gridLayer=grid;
+    let cayoOk=false;cayo.on('load',()=>{cayoOk=true;if(/cayo/i.test(active()?.name||'')||/cayo/i.test(active()?.event||''))mapNotice('Cayo Perico carregado','ok',false)});cayo.on('error',()=>{if(!cayoOk)mapNotice('Imagem de Cayo indisponível • coordenadas e ferramentas continuam funcionando','warn',true)});
     state.map.setView(ll(900,-600),3);
-    let okCount=0,
-errCount=0,
-fallbackUsed=false;
-    const ok=()=>{okCount++;setStatus('Mapa GTA V carregado','ok');};
-    const err=()=>{errCount++;if(okCount===0&&errCount>4&&!fallbackUsed){fallbackUsed=true;setStatus('Alternando servidor do mapa…','warn');try{state.map.removeLayer(atlas);}catch{}atlas=layer('styleAtlas','jpg',5,1);atlas.on('tileload',ok);atlas.addTo(state.map);}};
-    [atlas,
-sat,
-grid].forEach(x=>{x.on('tileload',ok);x.on('tileerror',err);watchOcean(x);});
-    state.mapLayers={atlas,
-sat,
-grid};
-    state.tileCounters={get ok(){return okCount},
-get err(){return errCount}};
-    startMapWatchdog(()=>okCount,()=>errCount);
+    state.tileBase=0;
+    state.mapLayers={atlas,sat,grid};state.atlasLayer=atlas;state.satLayer=sat;state.gridLayer=grid;
+    state.tileCounters=attachMapLayerHealth(state.mapLayers);
+    let initialFallback=false;
+    const initialErr=()=>{if(initialFallback||state.tileCounters.ok>0||state.tileCounters.err<=4)return;initialFallback=true;state.tileBase=1;mapNotice('Servidor principal falhou • alternando automaticamente…','warn',false);replaceMapBases(1);};
+    [atlas,sat,grid].forEach(x=>x.on('tileerror',()=>setTimeout(initialErr,0)));
     applyOceanColor(OCEAN_FALLBACK);
     state.map.on('baselayerchange',ev=>{state.oceanLocked=false;watchOcean(ev.layer);setTimeout(()=>{if(!state.oceanLocked)applyOceanColor(OCEAN_FALLBACK);},1200);});
-    state.map.on('mousemove',e=>{if(qs('#mpCursor'))qs('#mpCursor').textContent=`X ${f(e.latlng.lng)} | Y ${f(e.latlng.lat)}`;});
+    state.map.on('mousemove',e=>{
+      if(qs('#mpCursor'))qs('#mpCursor').textContent=`X ${f(e.latlng.lng)} | Y ${f(e.latlng.lat)}`;
+      if(state.safePlacementStage!==null)previewSafePlacement(e.latlng);
+    });
     state.map.on('click',e=>{
       const m=active();if(!m)return;
       if(!state.editing){if(qs('#mpClicked'))qs('#mpClicked').textContent='Modo visualização: clique em EDITAR EVENTO para alterar posições.';return;}
       if(qs('#mpClicked'))qs('#mpClicked').textContent=`${f(e.latlng.lng)},${f(e.latlng.lat)}`;
       if(state.safePlacementStage!==null){placeSafeOnMap(e.latlng);return;}
+      if(state.polygonPlacement){if((m.category||'dominacao')!=='dominacao')return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:e.latlng.lng,y:e.latlng.lat,z:0,status:'planned',validatedAt:null,validationReason:'map-placement'});m.zoneMode='polygon';commit('Vértice '+String(m.zonePolygon.length).padStart(2,'0')+' marcado no mapa');return;}
       if(state.placing){m.points.push(normalizePoint({x:e.latlng.lng,
 y:e.latlng.lat,
 z:0,
 h:0,
 status:'planned'},m.points.length));commit('Ponto marcado no mapa');}
-      else {m.center.x=e.latlng.lng;m.center.y=e.latlng.lat;m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';syncForm();commit('Centro ajustado no mapa — validação removida');}
+      else {if((m.category||'dominacao')==='dominacao'&&dominationZoneMode(m)==='polygon'){if(qs('#mpClicked'))qs('#mpClicked').textContent=`${f(e.latlng.lng)},${f(e.latlng.lat)} • Polígono ativo: use MARCAR VÉRTICE NO MAPA`;return;}m.center.x=e.latlng.lng;m.center.y=e.latlng.lat;m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';syncForm();commit('Centro ajustado no mapa — validação removida');}
     });
   }
 
@@ -1248,14 +1286,28 @@ iconSize:[24,
 24],
 iconAnchor:[12,
 12]});}
-  function clearLayers(){state.drawn.forEach(o=>{try{state.map.removeLayer(o)}catch{}});state.drawn=[];}
+  function clearLayers(){const compareLegend=qs('#mpCompareLegend');if(compareLegend)compareLegend.remove();state.drawn.forEach(o=>{try{state.map.removeLayer(o)}catch{}});state.drawn=[];}
+  function drawCompareOverlay(){
+    if(!state.compareOverlay||!state.editing||!state.map)return;const m=active(),old=state.editBackup?.zones?.find(z=>z.id===m?.id);if(!old)return;
+    const oldPoly=dominationPolygon(old);
+    if((old.category||'dominacao')==='dominacao'&&dominationZoneMode(old)==='polygon'&&oldPoly.length>=3){
+      const z=L.polygon(oldPoly.map(p=>ll(p.x,p.y)),{weight:3,opacity:.78,fillOpacity:.012,dashArray:'4 8',color:'#9ca3af',interactive:false}).addTo(state.map);z._mpKind='compare';state.drawn.push(z);
+      oldPoly.forEach((p,i)=>{const ic=L.divIcon({className:'',html:'<div style="min-width:20px;height:20px;border:1px dashed #d1d5db;border-radius:50%;background:rgba(17,24,39,.7);color:#e5e7eb;font:9px/18px system-ui;text-align:center">V'+(i+1)+'</div>',iconSize:[20,20],iconAnchor:[10,10]});const mk=L.marker(ll(p.x,p.y),{icon:ic,interactive:false}).addTo(state.map);mk._mpKind='compare';state.drawn.push(mk);});
+    }else if(validCoord(old.center?.x)&&validCoord(old.center?.y)){
+      const z=L.circle(ll(old.center.x,old.center.y),{radius:effectiveEventRadius(old),weight:2,opacity:.72,fillOpacity:.015,dashArray:'3 8',color:'#9ca3af',interactive:false}).addTo(state.map);z._mpKind='compare';state.drawn.push(z);
+    }
+    if(validCoord(old.center?.x)&&validCoord(old.center?.y)){const ci=L.divIcon({className:'',html:'<div style="width:18px;height:18px;border:2px dashed #d1d5db;border-radius:50%;background:rgba(17,24,39,.55)"></div>',iconSize:[18,18],iconAnchor:[9,9]});const cm=L.marker(ll(old.center.x,old.center.y),{icon:ci,interactive:false}).addTo(state.map);cm._mpKind='compare';state.drawn.push(cm);}
+    if((m?.category||'dominacao')==='dominacao'){const before=dominationZoneGeometry(old),after=dominationZoneGeometry(m),ba=Number(before?.area),aa=Number(after?.area);if(Number.isFinite(ba)&&ba>0&&Number.isFinite(aa)&&aa>0){const pct=((aa-ba)/ba)*100,center=dominationAnalysisCenter(m)||dominationAnalysisCenter(old);if(center){const label=L.marker(ll(center.x,center.y),{interactive:false,icon:L.divIcon({className:'',html:'<div style="white-space:nowrap;transform:translate(-50%,-32px);background:rgba(17,24,39,.88);border:1px dashed #d1d5db;border-radius:8px;padding:4px 7px;color:#f3f4f6;font:10px system-ui">ANTES '+Math.round(ba).toLocaleString('pt-BR')+' m² → DEPOIS '+Math.round(aa).toLocaleString('pt-BR')+' m² ('+(pct>=0?'+':'')+pct.toFixed(1)+'%)</div>'})}).addTo(state.map);label._mpKind='compare';state.drawn.push(label);}}}
+    (old.points||[]).forEach((p,i)=>{if(!validCoord(p.x)||!validCoord(p.y))return;const ic=L.divIcon({className:'',html:'<div style="min-width:20px;height:20px;padding:0 3px;border:1px dashed #d1d5db;border-radius:10px;background:rgba(17,24,39,.68);color:#e5e7eb;font:10px/18px system-ui;text-align:center">S'+(i+1)+'</div>',iconSize:[22,20],iconAnchor:[11,10]});const mk=L.marker(ll(p.x,p.y),{icon:ic,interactive:false}).addTo(state.map);mk._mpKind='compare';state.drawn.push(mk);});
+    const host=qs('.mission-planner-mapwrap')||qs('#missionPlannerMap')?.parentElement;if(host){let legend=qs('#mpCompareLegend');if(!legend){legend=document.createElement('div');legend.id='mpCompareLegend';Object.assign(legend.style,{position:'absolute',right:'12px',bottom:'12px',zIndex:'901',background:'rgba(17,24,39,.9)',border:'1px dashed #d1d5db',borderRadius:'9px',padding:'7px 9px',fontSize:'10px',lineHeight:'1.55',color:'#f3f4f6',pointerEvents:'none'});host.appendChild(legend);}legend.innerHTML='<b>ANTES × DEPOIS</b><br>Tracejado = configuração anterior<br>V = vértice antigo • S = spawn antigo<br>Zona sólida = configuração atual';}
+  }
   // V12.6 — rota progressiva da Safe: FECHA -> MOVE -> FECHA -> MOVE -> FECHA FINAL
   function ensureSafeRoute(m){
     if(!m||((m.category||'dominacao')!=='gas'))return null;
     const initial=effectiveEventRadius(m);
     if(!m.safeRoute||!Array.isArray(m.safeRoute.stages)){
       m.safeRoute={version:1,stages:[
-        {x:num(m.center?.x),y:num(m.center?.y),z:num(m.center?.z),radius:Math.max(50,Math.round(initial*.65)),damage:5,closeSeconds:180,moveSeconds:90},
+        {x:num(m.center?.x),y:num(m.center?.y),z:0,radius:Math.max(50,Math.round(initial*.65)),damage:5,closeSeconds:180,moveSeconds:90},
         {x:null,y:null,z:null,radius:Math.max(50,Math.round(initial*.35)),damage:10,closeSeconds:150,moveSeconds:75},
         {x:null,y:null,z:null,radius:Math.max(30,Math.round(initial*.12)),damage:20,closeSeconds:120,moveSeconds:0}
       ]};
@@ -1263,12 +1315,71 @@ iconAnchor:[12,
     const s=m.safeRoute.stages;
     while(s.length<3)s.push({x:null,y:null,z:null,radius:100,damage:5,closeSeconds:120,moveSeconds:60});
     s.length=3;
-    if(!validCoord(s[0].x)&&validCoord(m.center?.x)){s[0].x=num(m.center.x);s[0].y=num(m.center.y);s[0].z=num(m.center.z);}
+    if(!validCoord(s[0].x)&&validCoord(m.center?.x)){s[0].x=num(m.center.x);s[0].y=num(m.center.y);s[0].z=0;}
     if(!Array.isArray(m.safeRoute.stage2Options))m.safeRoute.stage2Options=safeStageValid?.(s[1])?[{x:s[1].x,y:s[1].y,z:s[1].z}]:[];
     if(!Array.isArray(m.safeRoute.stage3Options))m.safeRoute.stage3Options=safeStageValid?.(s[2])?[{x:s[2].x,y:s[2].y,z:s[2].z}]:[];
     return m.safeRoute;
   }
   function safeStageValid(s){return !!s&&validCoord(s.x)&&validCoord(s.y)&&Number(s.radius)>0;}
+  function safeTimeline(m){
+    const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO',at:0,radius:effectiveEventRadius(m)}];
+    r.stages.forEach((st,i)=>{at+=Math.max(0,Number(st.closeSeconds)||0);out.push({label:'SAFE '+(i+1)+' FECHADA',at,radius:Number(st.radius)||0});if(i<2){at+=Math.max(0,Number(st.moveSeconds)||0);out.push({label:'MOVE → SAFE '+(i+2),at,radius:Number(st.radius)||0});}});
+    return out;
+  }
+  function safeCircleFits(parent,child){if(!safeStageValid(parent)||!safeStageValid(child))return true;return distXY(parent,child)+Number(child.radius)<=Number(parent.radius)+.01;}
+  function safeRouteAudit(m){
+    const r=ensureSafeRoute(m),issues=[];if(!r)return issues;
+    const initial=effectiveEventRadius(m);let prev=initial;
+    r.stages.forEach((st,i)=>{if(!safeStageValid(st))issues.push('SAFE '+(i+1)+' sem centro/raio válido.');if(Number(st.z)!==0)issues.push('SAFE '+(i+1)+' deve usar Z = 0 na referência visual.');if(Number(st.radius)>=prev)issues.push('Raio da SAFE '+(i+1)+' precisa ser menor que a etapa anterior.');if(Number(st.closeSeconds)<=0)issues.push('Tempo de fechamento da SAFE '+(i+1)+' inválido.');if(i<2&&Number(st.moveSeconds)<=0)issues.push('Tempo de movimento após SAFE '+(i+1)+' inválido.');prev=Number(st.radius)||prev;});
+    const initialStage={x:m.center?.x,y:m.center?.y,radius:initial};
+    if(safeStageValid(r.stages[0])&&!safeCircleFits(initialStage,r.stages[0]))issues.push('SAFE 1 não cabe completamente dentro da Safe inicial.');
+    for(let i=1;i<3;i++)if(safeStageValid(r.stages[i-1])&&safeStageValid(r.stages[i])&&!safeCircleFits(r.stages[i-1],r.stages[i]))issues.push('SAFE '+(i+1)+' ultrapassa os limites da SAFE '+i+'.');
+    const o2=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),o3=(r.stage3Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));
+    const valid2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0}));
+    o2.forEach((p,j)=>{if(!valid2.includes(p))issues.push('Opção '+(j+1)+' da SAFE 2 ultrapassa os limites da SAFE 1.');});
+    if(o3.length){
+      const parents=valid2.length?valid2:(safeStageValid(r.stages[1])?[r.stages[1]]:[]);
+      o3.forEach((p,j)=>{const candidate={...r.stages[2],x:p.x,y:p.y,z:0},fits=parents.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},candidate));if(!fits)issues.push('Opção '+(j+1)+' da SAFE 3 não cabe em nenhuma SAFE 2 válida.');});
+      if(valid2.length&&!o3.some(p=>valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0}))))issues.push('Não existe combinação válida entre as opções da SAFE 2 e SAFE 3.');
+    }else if(valid2.length&&safeStageValid(r.stages[2])&&!valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},r.stages[2])))issues.push('Nenhuma opção da SAFE 2 é compatível com a SAFE 3 fixa.');
+    return [...new Set(issues)];
+  }
+  function generateSafeCandidates(){
+    if(!requireEdit())return;
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;
+    if(!safeStageValid(r.stages[0])){alert('Defina primeiro a SAFE 1.');return;}
+    const s1=r.stages[0],s2=r.stages[1],s3=r.stages[2];
+    const radial=(parent,child,count=8)=>{
+      const limit=Math.max(0,Number(parent.radius)-Number(child.radius)),rings=[0,.42,.72,.92],out=[];
+      rings.forEach(fr=>{const d=limit*fr;for(let i=0;i<count;i++){const a=(Math.PI*2*i/count)+(fr>.5?Math.PI/count:0);out.push({x:Number(parent.x)+Math.cos(a)*d,y:Number(parent.y)+Math.sin(a)*d,z:0});}});
+      return out;
+    };
+    const dedupe=(arr,min=20)=>arr.filter((p,i,a)=>a.findIndex(q=>distXY(p,q)<min)===i);
+    let c2=dedupe(radial(s1,s2,8),Math.max(15,Number(s2.radius)*.08)).filter(p=>safeCircleFits(s1,{...s2,...p}));
+    // Só oferece S2 que ainda permita ao menos uma S3 geometricamente válida.
+    c2=c2.filter(p=>radial({...s2,...p},s3,6).some(q=>safeCircleFits({...s2,...p},{...s3,...q})));
+    // Distribui opções ao redor do espaço válido em vez de concentrar tudo no centro.
+    const pick=(arr,n)=>{if(arr.length<=n)return arr;const out=[];for(let i=0;i<n;i++)out.push(arr[Math.floor(i*(arr.length-1)/(n-1))]);return dedupe(out);};
+    c2=pick(c2,8);
+    const c3all=[];c2.forEach(parent=>radial({...s2,...parent},s3,8).forEach(p=>{if(safeCircleFits({...s2,...parent},{...s3,...p}))c3all.push(p);}));
+    const c3=pick(dedupe(c3all,Math.max(12,Number(s3.radius)*.1)),10);
+    if(!c2.length||!c3.length){alert('Não encontrei uma cadeia automática válida com os raios atuais. Revise os raios da SAFE 1, 2 e 3.');return;}
+    r.stage2Options=c2;r.stage3Options=c3;
+    commit(`Geradas automaticamente ${c2.length} opções de SAFE 2 e ${c3.length} de SAFE 3`);
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MODO AUTOMÁTICO</b><br>${c2.length} possibilidades para SAFE 2 e ${c3.length} para SAFE 3. Clique em uma opção no mapa para selecioná-la.`;
+  }
+  function selectSafeCandidate(stageIndex,p){
+    if(!requireEdit())return;
+    const m=active(),r=ensureSafeRoute(m),s=r?.stages?.[stageIndex];if(!s)return;
+    const old={x:s.x,y:s.y,z:s.z};s.x=Number(p.x);s.y=Number(p.y);s.z=0;
+    if(stageIndex===1){
+      const valid3=(r.stage3Options||[]).filter(q=>safeCircleFits(s,{...r.stages[2],x:q.x,y:q.y,z:0}));
+      if(valid3.length)r.stage3Options=valid3;
+      else {s.x=old.x;s.y=old.y;s.z=old.z;alert('Essa opção não mantém nenhuma possibilidade válida para a SAFE 3.');return;}
+    }
+    commit(`SAFE ${stageIndex+1} selecionada entre as possibilidades automáticas`);
+  }
+
   function ensureSafeRouteUi(){
     const existing=qs('#mpSafeRouteBox');
     if(existing){
@@ -1281,40 +1392,78 @@ iconAnchor:[12,
     const box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card';box.dataset.forceTab='zona';box.style.marginTop='10px';
     box.innerHTML=`<h3>ROTA PROGRESSIVA DA SAFE</h3>
       <p class="mp-note">Fluxo: <b>FECHA 1 → MOVE → FECHA 2 → MOVE → FECHA FINAL</b>. Os respawns da missão não são alterados.</p>
-      <div id="mpSafeRouteStatus" class="mp-readout"></div>
+      <div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
       <div id="mpSafeStages"></div>
       <div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap">
         <button type="button" id="mpSafeUseCenter">SAFE 1 = CENTRO ATUAL</button>
         <button type="button" id="mpSafePlace2">ADICIONAR OPÇÃO SAFE 2</button>
         <button type="button" id="mpSafePlace3">ADICIONAR OPÇÃO SAFE 3</button>
-        <button type="button" id="mpSafePreview" class="primary">▶ PREVIEW ALEATÓRIO</button>
-        <button type="button" id="mpSafePreviewAll">▶ DEMONSTRAR TODAS AS ROTAS</button>
-        <button type="button" id="mpSafeRecord">● GRAVAR DEMONSTRAÇÃO</button>
+        <button type="button" id="mpSafeAuto">⚡ GERAR POSSIBILIDADES</button>
+        <button type="button" id="mpSafePreview" class="primary">▶ PREVIEW DA ROTA</button><button type="button" id="mpSafePresent">⛶ APRESENTAR / GRAVAR</button>
         <button type="button" id="mpSafeStop">■ PARAR</button>
       </div>`;
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
-    qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=num(m.center.z);commit('Safe 1 vinculada ao centro da missão');});
+    qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=0;commit('Safe 1 vinculada ao centro da missão');});
     qs('#mpSafePlace2')?.addEventListener('click',()=>beginSafePlacement(1));
     qs('#mpSafePlace3')?.addEventListener('click',()=>beginSafePlacement(2));
+    qs('#mpSafeAuto')?.addEventListener('click',generateSafeCandidates);
     qs('#mpSafePreview')?.addEventListener('click',startSafePreview);
-    qs('#mpSafePreviewAll')?.addEventListener('click',()=>startSafePreview(true));
-    qs('#mpSafeRecord')?.addEventListener('click',recordSafeDemonstration);
-    qs('#mpSafeStop')?.addEventListener('click',stopSafePreview);
+    qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);
+    qs('#mpSafeStop')?.addEventListener('click',()=>{stopSafePreview();exitSafePresentation();});
+  }
+  function safePlacementCheck(latlng){
+    const m=active(),idx=state.safePlacementStage;if(!m||idx===null||!latlng)return {ok:false,reason:'Marcação inativa.'};
+    const r=ensureSafeRoute(m),child=r?.stages?.[idx];if(!child||!Number(child.radius)>0)return {ok:false,reason:'Defina primeiro o raio desta SAFE.'};
+    const candidate={...child,x:latlng.lng,y:latlng.lat,z:0};
+    let parents=[];
+    if(idx===0)parents=[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}];
+    else if(idx===1)parents=safeStageValid(r.stages[0])?[r.stages[0]]:[];
+    else{
+      const options=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>({...r.stages[1],x:p.x,y:p.y,z:0}));
+      parents=options.length?options:(safeStageValid(r.stages[1])?[r.stages[1]]:[]);
+    }
+    if(!parents.length)return {ok:false,reason:'Defina uma SAFE anterior válida primeiro.'};
+    const fitting=parents.filter(parent=>safeCircleFits(parent,candidate));
+    if(!fitting.length){
+      const maxMove=Math.max(0,...parents.map(parent=>Number(parent.radius)-Number(candidate.radius)));
+      return {ok:false,reason:`Fora da área possível. O centro desta SAFE precisa ficar a no máximo ~${Math.round(maxMove)} m do centro válido anterior.`};
+    }
+    if(idx<2){
+      const next=r.stages[idx+1];
+      if(next&&safeStageValid(next)&&!safeCircleFits(candidate,next))return {ok:false,reason:`Este ponto cabe na SAFE anterior, mas deixaria a SAFE ${idx+2} atual fora da progressão.`};
+    }
+    return {ok:true,reason:'POSIÇÃO VÁLIDA • clique para marcar'};
+  }
+  function clearSafeHover(){
+    if(state.safeHoverMarker&&state.map){try{state.map.removeLayer(state.safeHoverMarker)}catch(e){}}
+    state.safeHoverMarker=null;
+  }
+  function previewSafePlacement(latlng){
+    const chk=safePlacementCheck(latlng),m=active(),idx=state.safePlacementStage,r=ensureSafeRoute(m),stage=r?.stages?.[idx];
+    if(!stage)return;
+    const radius=Math.max(1,Number(stage.radius)||1);
+    if(!state.safeHoverMarker)state.safeHoverMarker=L.circle(latlng,{radius,weight:3,fillOpacity:.08,interactive:false}).addTo(state.map);
+    else{state.safeHoverMarker.setLatLng(latlng);state.safeHoverMarker.setRadius(radius);}
+    state.safeHoverMarker.setStyle(chk.ok?{color:'#52ff9a',fillColor:'#52ff9a'}:{color:'#ff5252',fillColor:'#ff5252'});
+    const mapEl=state.map?.getContainer();if(mapEl)mapEl.style.cursor=chk.ok?'crosshair':'not-allowed';
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${idx+1}</b><br><span style="color:${chk.ok?'#52ff9a':'#ff7474'}"><b>${esc(chk.reason)}</b></span>`;
   }
   function beginSafePlacement(stageIndex){
     if(!requireEdit())return;
     const m=active();if(!m||((m.category||'dominacao')!=='gas'))return;
-    ensureSafeRoute(m);state.safePlacementStage=stageIndex;state.placing=false;
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${stageIndex+1}</b><br>Clique no mapa no local onde o centro da Safe deverá chegar.`;
+    ensureSafeRoute(m);resetMapPlacementModes();state.safePlacementStage=stageIndex;
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${stageIndex+1}</b><br>Mova o mouse: verde permite marcar; vermelho bloqueia o clique.`;
     if(state.map?.getContainer())state.map.getContainer().style.cursor='crosshair';
   }
   function placeSafeOnMap(latlng){
     const m=active(),idx=state.safePlacementStage;if(!m||idx===null||idx===undefined)return false;
+    const check=safePlacementCheck(latlng);
+    if(!check.ok){previewSafePlacement(latlng);if(qs('#mpClicked'))qs('#mpClicked').textContent='SAFE BLOQUEADA • '+check.reason;return false;}
     const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
-    s.x=latlng.lng;s.y=latlng.lat;s.z=num(m.center?.z)||0;
+    s.x=latlng.lng;s.y=latlng.lat;s.z=0;
     const key=idx===1?'stage2Options':'stage3Options';if(!Array.isArray(r[key]))r[key]=[];
     r[key].push({x:s.x,y:s.y,z:s.z});
-    state.safePlacementStage=null;if(state.map?.getContainer())state.map.getContainer().style.cursor='';
+    state.safePlacementStage=null;clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
     commit(`Safe ${idx+1} marcada no mapa`);
     state.map?.panTo(latlng);renderSafeRouteUi();return true;
   }
@@ -1325,7 +1474,8 @@ iconAnchor:[12,
     const coverage=qs('#mpCoverageBox');
     if(coverage&&box.previousElementSibling!==coverage)coverage.insertAdjacentElement('afterend',box);
     const r=ensureSafeRoute(m),host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus');if(!r||!host)return;
-    const initial=effectiveEventRadius(m);
+    const initial=effectiveEventRadius(m),timeline=safeTimeline(m),audit=safeRouteAudit(m),tl=qs('#mpSafeTimeline');
+    if(tl)tl.innerHTML='<b>TIMELINE DA SAFE</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');
     host.innerHTML=r.stages.map((s,i)=>`<div class="mp-readout" style="margin-top:8px"><b>SAFE ${i+1}${i===2?' • FINAL':''}</b>
       <div class="mp-grid" style="margin-top:6px">
         <label>X<input data-safe="${i}" data-k="x" inputmode="decimal" value="${s.x??''}"></label>
@@ -1335,13 +1485,11 @@ iconAnchor:[12,
         <label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="1" value="${s.closeSeconds??''}"></label>
         ${i<2?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${s.moveSeconds??''}"></label>`:''}
       </div></div>`).join('');
-    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}rr.stages[i][k]=v;if(k==='radius')rr.stages[i][k]=Math.max(30,v);state.dirty=true;setSaveState('Rota da Safe alterada • NÃO SALVO');renderMap();renderSafeRouteUi();}));
+    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}rr.stages[i][k]=v;if(k==='radius')rr.stages[i][k]=Math.max(30,v);commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
-    const o2=r.stage2Options||[],o3=r.stage3Options||[];
-    const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';
-    const s1=r.stages[0],dist2=o2.map((p,i)=>{const d=safeDistance(s1,p);return `S2${String.fromCharCode(65+i)}: <b>${Math.round(d)}m</b> [${safeTransitionStatus(d,SAFE_MOVE_LIMIT_12)}]`;}).join(' • ');
-    const dist3=o2.flatMap((p,i)=>o3.map((q,j)=>{const d=safeDistance(p,q);return `S2${String.fromCharCode(65+i)}→S3${String.fromCharCode(65+j)}: <b>${Math.round(d)}m</b> [${safeTransitionStatus(d,SAFE_MOVE_LIMIT_23)}]`;})).join(' • ');
-    opts.innerHTML=`Opções: <b>Safe 2: ${o2.length}</b> • <b>Safe 3: ${o3.length}</b><br><small>Limites a pé: S1→S2 ≤ <b>500m</b> • S2→S3 ≤ <b>250m</b></small>${dist2?'<br>'+dist2:''}${dist3?'<br>'+dist3:''} <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`;host.appendChild(opts);
+    const o2=r.stage2Options||[],o3=r.stage3Options||[],validO2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0})),parents2=validO2.length?validO2:[r.stages[1]],validO3=o3.filter(p=>parents2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0})));
+    const opts=document.createElement('div');opts.className='mp-note';opts.style.marginTop='8px';const invalid2=o2.map((p,i)=>({p,i})).filter(x=>!validO2.includes(x.p)),invalid3=o3.map((p,i)=>({p,i})).filter(x=>!validO3.includes(x.p));opts.innerHTML=`Modo do preview: <b>${o2.length||o3.length?'ALEATÓRIO/MISTO':'ROTA FIXA'}</b> • Safe 2 válidas: <b>${validO2.length}/${o2.length}</b> • Safe 3 válidas: <b>${validO3.length}/${o3.length}</b> <button type="button" id="mpSafeClearOptions" style="margin-left:8px">LIMPAR OPÇÕES</button>`+(invalid2.length||invalid3.length?`<div style="margin-top:7px;color:#ff8b8b"><b>Opções inválidas:</b> ${invalid2.map(x=>`<button type="button" data-safe-remove="2" data-index="${x.i}" title="Remover opção inválida da Safe 2">S2-${x.i+1} ×</button>`).join(' ')} ${invalid3.map(x=>`<button type="button" data-safe-remove="3" data-index="${x.i}" title="Remover opção inválida da Safe 3">S3-${x.i+1} ×</button>`).join(' ')}</div>`:'');host.appendChild(opts);
+    qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),key=stage===2?'stage2Options':'stage3Options';if(!Array.isArray(r[key])||!r[key][idx])return;r[key].splice(idx,1);commit('Opção inválida da Safe '+stage+' removida');}));
     qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;r.stage2Options=[];r.stage3Options=[];r.stages[1].x=r.stages[1].y=null;r.stages[2].x=r.stages[2].y=null;commit('Opções aleatórias da Safe removidas');});
     status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas configuradas: <b>${ok}/3</b><br><small>Adicione várias opções de Safe 2 e Safe 3 clicando no mapa. A execução poderá sortear uma rota.</small>`;
   }
@@ -1349,10 +1497,10 @@ iconAnchor:[12,
     if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;
     const r=ensureSafeRoute(m);if(!r)return;
     const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
-    const s1=r.stages[0],valid=r.stages.filter(safeStageValid);
-    if(safeStageValid(s1)){o2.forEach((p,i)=>{const line=L.polyline([ll(s1.x,s1.y),ll(p.x,p.y)],{weight:2,dashArray:'7 7',opacity:.55,interactive:false}).addTo(state.map);const icon=L.divIcon({className:'',html:`<div class="mp-center-pin planned" style="font-size:10px;font-weight:900">S2-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});state.drawn.push(line,L.marker(ll(p.x,p.y),{icon}).addTo(state.map));});}
+    const s1=r.stages[0],valid=r.stages.filter(safeStageValid),valid2=o2.filter(p=>safeCircleFits(s1,{...r.stages[1],x:p.x,y:p.y,z:0}));
+    if(safeStageValid(s1)){o2.forEach((p,i)=>{const ok=valid2.includes(p),line=L.polyline([ll(s1.x,s1.y),ll(p.x,p.y)],{weight:2,dashArray:'7 7',opacity:ok?.62:.85,color:ok?'#22c55e':'#ef4444',interactive:false}).addTo(state.map);const icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:10px;font-weight:900;background:${ok?'#166534':'#991b1b'};border-color:${ok?'#4ade80':'#f87171'}">S2-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE 2 • OPÇÃO ${i+1}</b><br>${ok?'✓ Válida • clique no marcador para selecionar':'⚠ Inválida: ultrapassa a Safe 1'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok)pin.on('click',()=>{if(state.editing)selectSafeCandidate(1,p);});state.drawn.push(line,pin);});}
     o2.forEach(a=>o3.forEach((b,i)=>{const line=L.polyline([ll(a.x,a.y),ll(b.x,b.y)],{weight:1.5,dashArray:'4 8',opacity:.28,interactive:false}).addTo(state.map);state.drawn.push(line);}));
-    o3.forEach((p,i)=>{const icon=L.divIcon({className:'',html:`<div class="mp-center-pin planned" style="font-size:10px;font-weight:900">S3-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});state.drawn.push(L.marker(ll(p.x,p.y),{icon}).addTo(state.map));});
+    o3.forEach((p,i)=>{const ok=valid2.some(parent=>safeCircleFits({...r.stages[1],x:parent.x,y:parent.y,z:0},{...r.stages[2],x:p.x,y:p.y,z:0}))||(!o2.length&&safeStageValid(r.stages[1])&&safeCircleFits(r.stages[1],{...r.stages[2],x:p.x,y:p.y,z:0}));const icon=L.divIcon({className:'',html:`<div class="mp-center-pin" style="font-size:10px;font-weight:900;background:${ok?'#166534':'#991b1b'};border-color:${ok?'#4ade80':'#f87171'}">S3-${i+1}</div>`,iconSize:[36,30],iconAnchor:[18,15]});const pin=L.marker(ll(p.x,p.y),{icon}).addTo(state.map).bindPopup(`<b>SAFE 3 • OPÇÃO ${i+1}</b><br>${ok?'✓ Válida • clique no marcador para selecionar':'⚠ Inválida: não cabe em nenhuma Safe 2 válida'}<br>CDS: ${f(p.x)}, ${f(p.y)}, 0.00`);if(ok)pin.on('click',()=>{if(state.editing)selectSafeCandidate(2,p);});state.drawn.push(pin);});
     if(valid.length>1){
       const line=L.polyline(valid.map(s=>ll(s.x,s.y)),{weight:4,dashArray:'10 8',opacity:.85,interactive:false}).addTo(state.map);state.drawn.push(line);
     }
@@ -1366,125 +1514,97 @@ iconAnchor:[12,
   function stopSafePreview(){
     if(state.safePreviewTimer){clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;}
     if(state.safePreviewLayer&&state.map){try{state.map.removeLayer(state.safePreviewLayer)}catch{}state.safePreviewLayer=null;}
+    if(state.safePreviewRouteLayer&&state.map){try{state.map.removeLayer(state.safePreviewRouteLayer)}catch{}state.safePreviewRouteLayer=null;}
+    const hud=qs('#mpSafePreviewHud');if(hud)hud.remove();
   }
-  function safeDistance(a,b){if(!a||!b||!validCoord(a.x)||!validCoord(a.y)||!validCoord(b.x)||!validCoord(b.y))return Infinity;return Math.hypot(Number(b.x)-Number(a.x),Number(b.y)-Number(a.y));}
-  function safeTransitionStatus(d,max){return d<=max?'OK':(d<=max*1.15?'APERTADO':'INVIÁVEL');}
-  const SAFE_MOVE_LIMIT_12=500,SAFE_MOVE_LIMIT_23=250;
-  function safeRouteCombinations(r){
-    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
-    const o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
-    return o2.flatMap((p2,i)=>{
-      if(safeDistance(r.stages[0],p2)>SAFE_MOVE_LIMIT_12)return [];
-      return o3.filter((p3,j)=>{
-        const links=Array.isArray(p2.stage3Indexes)?p2.stage3Indexes:null;
-        return (!links||!links.length||links.includes(j))&&safeDistance(p2,p3)<=SAFE_MOVE_LIMIT_23;
-      }).map(p3=>({p2,p3,i2:i,i3:o3.indexOf(p3)}));
-    });
+  function ensurePreviewHud(){
+    let hud=qs('#mpSafePreviewHud');if(hud)return hud;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;
+    if(getComputedStyle(wrap).position==='static')wrap.style.position='relative';
+    hud=document.createElement('div');hud.id='mpSafePreviewHud';Object.assign(hud.style,{position:'absolute',top:'16px',left:'50%',transform:'translateX(-50%)',zIndex:'10050',background:'rgba(8,10,18,.88)',border:'1px solid rgba(192,132,252,.7)',borderRadius:'12px',padding:'10px 16px',color:'#fff',fontWeight:'700',fontFamily:'system-ui',textAlign:'center',pointerEvents:'none',boxShadow:'0 10px 30px rgba(0,0,0,.35)'});wrap.appendChild(hud);return hud;
   }
-  function playSafeCombination(m,r,combo,onDone){
-    r.stages[1].x=combo.p2.x;r.stages[1].y=combo.p2.y;r.stages[2].x=combo.p3.x;r.stages[2].y=combo.p3.y;
-    const initial=effectiveEventRadius(m),phases=[
-      {type:'close',a:r.stages[0],from:initial,to:r.stages[0].radius},
-      {type:'move',a:r.stages[0],b:r.stages[1],from:r.stages[0].radius,to:r.stages[0].radius},
-      {type:'close',a:r.stages[1],from:r.stages[0].radius,to:r.stages[1].radius},
-      {type:'move',a:r.stages[1],b:r.stages[2],from:r.stages[1].radius,to:r.stages[1].radius},
-      {type:'close',a:r.stages[2],from:r.stages[1].radius,to:r.stages[2].radius}
-    ];
-    let pi=0,t=0;const steps=45;
-    const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
-    state.safePreviewLayer=L.circle(ll(r.stages[0].x,r.stages[0].y),gasStyle).addTo(state.map);
-    const routeLine=L.polyline([ll(r.stages[0].x,r.stages[0].y),ll(r.stages[1].x,r.stages[1].y),ll(r.stages[2].x,r.stages[2].y)],{color:'#c084fc',weight:4,opacity:.9,dashArray:'8 8',interactive:false}).addTo(state.map);state.drawn.push(routeLine);
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>DEMONSTRAÇÃO</b> • SAFE 1 → SAFE 2${String.fromCharCode(65+combo.i2)} → SAFE 3${String.fromCharCode(65+combo.i3)}<br><small>O círculo roxo fecha e se desloca continuamente.</small>`;
-    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];t++;const u=Math.min(1,t/steps),smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);if(u>=1){pi++;t=0;if(pi>=phases.length){stopSafePreview();if(onDone)setTimeout(onDone,250);else renderMap();}}},45);
+  function fitSafeRouteForPresentation(){
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!state.map)return;const pts=[];
+    [...(r.stages||[]),...(r.stage2Options||[]),...(r.stage3Options||[])].forEach(p=>{if(validCoord(p?.x)&&validCoord(p?.y))pts.push(ll(p.x,p.y));});
+    if(validCoord(m.center?.x)&&validCoord(m.center?.y))pts.push(ll(m.center.x,m.center.y));
+    if(pts.length>1)state.map.fitBounds(L.latLngBounds(pts).pad(.18),{maxZoom:5});else if(pts.length)state.map.setView(pts[0],4);
   }
-  function startSafePreview(all=false){
+  function startSafePresentation(){
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a rota da Safe antes de apresentar.');return;}
+    const el=qs('#missionPlannerMap')?.closest('.mp-map-card')||qs('#missionPlannerMap');if(!el)return;
+    state.safePresentationPrev={fullscreen:el.classList.contains('mp-pro-fullscreen'),layerVisibility:{...state.layerVisibility}};
+    state.safePresentation=true;el.dataset.safePresentation='1';Object.assign(el.style,{position:'fixed',inset:'0',zIndex:'100000',background:'#05070d',padding:'0'});
+    const map=qs('#missionPlannerMap');if(map)map.style.height='100vh';
+    qsa('.mp-map-toolbar,.mp-map-status,.leaflet-control-container',el).forEach(x=>{x.dataset.mpPresentationDisplay=x.style.display||'';x.style.display='none';});
+    const legend=qs('#mpMapLegend');if(legend)legend.style.display='none';
+    // Modo gravação: mantém somente o mapa base e a Safe animada.
+    (state.drawn||[]).forEach(l=>{try{if(state.map?.hasLayer(l))state.map.removeLayer(l);}catch(e){}});
+    let title=qs('#mpPresentationTitle');if(!title){title=document.createElement('div');title.id='mpPresentationTitle';Object.assign(title.style,{position:'absolute',top:'16px',left:'16px',zIndex:'10040',background:'rgba(5,7,13,.82)',border:'1px solid rgba(255,255,255,.14)',borderRadius:'10px',padding:'9px 12px',color:'#fff',font:'700 13px system-ui',pointerEvents:'none'});el.appendChild(title);}title.innerHTML='SOBREVIVÊNCIA • '+esc(m.name||'ZONA')+'<br><small style="opacity:.65;font-weight:500">Preview visual • ESC para sair</small>';
+    setTimeout(()=>{state.map?.invalidateSize();fitSafeRouteForPresentation();setTimeout(startSafePreview,180);},100);
+  }
+  function exitSafePresentation(){
+    if(!state.safePresentation)return;state.safePresentation=false;const prev=state.safePresentationPrev||{},el=qs('[data-safe-presentation="1"]');if(el){delete el.dataset.safePresentation;const wasFullscreen=!!prev.fullscreen;Object.assign(el.style,wasFullscreen?{position:'fixed',inset:'0',zIndex:'99999',background:'#0b1018',padding:'12px'}:{position:'',inset:'',zIndex:'',background:'',padding:''});const map=qs('#missionPlannerMap');if(map)map.style.height=wasFullscreen?'calc(100vh - 24px)':'';qsa('.mp-map-toolbar,.mp-map-status,.leaflet-control-container',el).forEach(x=>{x.style.display=x.dataset.mpPresentationDisplay||'';delete x.dataset.mpPresentationDisplay;});}
+    qs('#mpPresentationTitle')?.remove();state.safePresentationPrev=null;renderMap();const legend=qs('#mpMapLegend');if(legend)legend.style.display=qs('#mpLegendToggle')?.checked===false?'none':'';setTimeout(()=>state.map?.invalidateSize(),80);
+  }
+  function startSafePreview(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
-    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
-    if(!o2.length){alert('Nenhuma opção de Safe 2 foi registrada. Clique em ADICIONAR OPÇÃO SAFE 2 e marque o centro no mapa.');return;}
-    if(!o3.length){alert('Safe 2 registrada. Agora adicione pelo menos uma opção de Safe 3 para completar e visualizar a rota.');return;}
-    const combos=safeRouteCombinations(r);if(!combos.length){alert('As Safes foram registradas, mas nenhuma combinação respeita os limites: Safe 1→2 até 500m e Safe 2→3 até 250m. Ajuste uma das posições.');return;}
-    stopSafePreview();
-    if(!all){const combo=combos[Math.floor(Math.random()*combos.length)];playSafeCombination(m,r,combo);return;}
-    let n=0;const next=()=>{if(n>=combos.length){renderMap();const s=qs('#mpSafeRouteStatus');if(s)s.innerHTML=`<b>DEMONSTRAÇÃO CONCLUÍDA</b> • ${combos.length} rota(s) exibida(s).`;return;}playSafeCombination(m,r,combos[n++],next);};next();
-  }
-  async function recordSafeDemonstration(){
-    const mapEl=state.map?.getContainer(),m=active(),r=ensureSafeRoute(m);if(!mapEl||!m||!r)return;
-    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y));
-    if(!o2.length){alert('Nenhuma Safe 2 registrada.');return;}if(!o3.length){alert('Safe 2 registrada. Adicione uma Safe 3 antes de gravar.');return;}
-    const combos=safeRouteCombinations(r);if(!combos.length){alert('Não há rota válida dentro dos limites de 500m / 250m.');return;}
-    if(typeof MediaRecorder==='undefined'||typeof HTMLCanvasElement.prototype.captureStream!=='function'){alert('Seu navegador não suporta gravação direta da área do mapa.');return;}
-    const rect=mapEl.getBoundingClientRect(),scale=Math.min(1.5,1280/Math.max(1,rect.width)),canvas=document.createElement('canvas');
-    canvas.width=Math.max(640,Math.round(rect.width*scale));canvas.height=Math.max(360,Math.round(rect.height*scale));
-    const ctx=canvas.getContext('2d'),stream=canvas.captureStream(30),chunks=[];
-    const rec=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm'});
-    let recording=true,raf=0;
-    function drawMapFrame(){
-      if(!recording)return;
-      ctx.fillStyle='#10131a';ctx.fillRect(0,0,canvas.width,canvas.height);
-      const sx=canvas.width/Math.max(1,rect.width),sy=canvas.height/Math.max(1,rect.height);
-      const tiles=[...mapEl.querySelectorAll('.leaflet-tile-loaded')];
-      let tileBlocked=false;
-      for(const img of tiles){try{const ir=img.getBoundingClientRect();ctx.drawImage(img,(ir.left-rect.left)*sx,(ir.top-rect.top)*sy,ir.width*sx,ir.height*sy);}catch(e){tileBlocked=true;}}
-      const svg=mapEl.querySelector('.leaflet-overlay-pane svg');
-      if(svg){try{const xml=new XMLSerializer().serializeToString(svg),blob=new Blob([xml],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),im=new Image();im.onload=()=>{try{ctx.drawImage(im,0,0,canvas.width,canvas.height)}finally{URL.revokeObjectURL(url)}};im.src=url;}catch{}}
-      const project=p=>{const lp=state.map.latLngToContainerPoint(ll(p.x,p.y));return {x:lp.x*sx,y:lp.y*sy};};
-      const s1=r.stages[0],s2=r.stages[1],s3=r.stages[2],all2=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),all3=(r.stage3Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));
-      ctx.save();ctx.lineWidth=2;ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-      if(safeStageValid(s1)){
-        const a=project(s1);
-        all2.forEach((p,i)=>{const b=project(p),d=safeDistance(s1,p);ctx.beginPath();ctx.setLineDash([8,6]);ctx.strokeStyle=d<=SAFE_MOVE_LIMIT_12?'rgba(192,132,252,.8)':'rgba(255,90,90,.35)';ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();});
-      }
-      all2.forEach((p,i)=>all3.forEach((q,j)=>{const d=safeDistance(p,q);if(d>SAFE_MOVE_LIMIT_23)return;const a=project(p),b=project(q);ctx.beginPath();ctx.setLineDash([5,6]);ctx.strokeStyle='rgba(216,180,254,.55)';ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}));
-      const drawOption=(p,label,rad,fill)=>{const pt=project(p),edge=state.map.latLngToContainerPoint(ll(Number(p.x)+Number(rad),p.y)),rr=Math.max(8,Math.abs(edge.x-state.map.latLngToContainerPoint(ll(p.x,p.y)).x)*sx);ctx.beginPath();ctx.setLineDash([6,5]);ctx.strokeStyle=fill;ctx.fillStyle=fill.replace('1)','0.08)');ctx.arc(pt.x,pt.y,rr,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='rgba(10,10,16,.9)';ctx.fillRect(pt.x-23,pt.y-12,46,24);ctx.fillStyle='#fff';ctx.fillText(label,pt.x,pt.y);};
-      all2.forEach((p,i)=>drawOption(p,'S2'+String.fromCharCode(65+i),Number(s2.radius)||0,'rgba(168,85,247,1)'));
-      all3.forEach((p,i)=>drawOption(p,'S3'+String.fromCharCode(65+i),Number(s3.radius)||0,'rgba(216,180,254,1)'));
-      if(safeStageValid(s1))drawOption(s1,'S1',Number(s1.radius)||0,'rgba(126,34,206,1)');
-      /* A animação Leaflet não faz parte do canvas gravado. Replica o estado vivo
-         da safe diretamente no vídeo a cada frame. */
-      if(state.safePreviewLayer){
-        try{
-          const live=state.safePreviewLayer.getLatLng(),liveRadius=Number(state.safePreviewLayer.getRadius())||0;
-          const lp=state.map.latLngToContainerPoint(live),edge=state.map.latLngToContainerPoint(L.latLng(live.lat,live.lng+(liveRadius/111320)/Math.max(.15,Math.cos(live.lat*Math.PI/180))));
-          const rr=Math.max(2,Math.abs(edge.x-lp.x)*sx),x=lp.x*sx,y=lp.y*sy;
-          ctx.beginPath();ctx.setLineDash([]);ctx.lineWidth=5;ctx.strokeStyle='rgba(168,85,247,1)';ctx.fillStyle='rgba(126,34,206,.28)';ctx.arc(x,y,rr,0,Math.PI*2);ctx.fill();ctx.stroke();
-          ctx.fillStyle='rgba(8,8,14,.94)';ctx.fillRect(x-70,y-16,140,32);ctx.fillStyle='#fff';ctx.font='bold 13px sans-serif';ctx.fillText('SAFE EM MOVIMENTO',x,y);
-        }catch(e){}
-      }
-      ctx.restore();
-      ctx.fillStyle='rgba(10,12,18,.86)';ctx.fillRect(12,12,390,72);ctx.fillStyle='#fff';ctx.font='bold 18px sans-serif';ctx.textAlign='left';ctx.fillText('HIGH OS • DEMONSTRAÇÃO DA SAFE',24,35);ctx.font='13px sans-serif';ctx.fillText('S2/S3 = possibilidades • linhas = combinações válidas',24,56);ctx.fillText('Limites: S1→S2 500m • S2→S3 250m',24,75);
-      if(tileBlocked){ctx.fillStyle='rgba(180,40,40,.9)';ctx.fillRect(12,canvas.height-38,390,26);ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.fillText('Tiles bloqueados pelo provedor; overlays continuam gravados.',20,canvas.height-20);}
-      raf=requestAnimationFrame(drawMapFrame);
+    const o2=(r.stage2Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),o3=(r.stage3Options||[]).filter(s=>validCoord(s.x)&&validCoord(s.y)),fixed2=safeStageValid(r.stages[1]),fixed3=safeStageValid(r.stages[2]);
+    if(!o2.length&&!fixed2){alert('Configure a Safe 2 ou adicione pelo menos uma opção de Safe 2 no mapa.');return;}
+    if(!o3.length&&!fixed3){alert('Configure a Safe 3 ou adicione pelo menos uma opção de Safe 3 no mapa.');return;}
+    const valid2=o2.filter(p=>safeCircleFits(r.stages[0],{...r.stages[1],x:p.x,y:p.y,z:0}));
+    if(o2.length&&!valid2.length){alert('Nenhuma opção da Safe 2 cabe dentro da Safe 1. Corrija as opções antes do preview.');return;}
+    const fixedP2=r.stages[1],fixedP3=r.stages[2];let p2=fixedP2,p3=fixedP3,random2=false,random3=false;
+    if(valid2.length&&o3.length){
+      const pairs=[];valid2.forEach(a=>{const parent={...r.stages[1],x:a.x,y:a.y,z:0};o3.forEach(b=>{if(safeCircleFits(parent,{...r.stages[2],x:b.x,y:b.y,z:0}))pairs.push([a,b]);});});
+      if(!pairs.length){alert('Não existe nenhuma combinação válida entre as opções de Safe 2 e Safe 3. Corrija a rota antes do preview.');return;}
+      [p2,p3]=pairs[Math.floor(Math.random()*pairs.length)];random2=random3=true;
+    }else if(valid2.length){
+      const compatible2=valid2.filter(a=>safeCircleFits({...r.stages[1],x:a.x,y:a.y,z:0},fixedP3));
+      if(!compatible2.length){alert('Nenhuma opção da Safe 2 é compatível com a Safe 3 fixa. Corrija a rota antes do preview.');return;}
+      p2=compatible2[Math.floor(Math.random()*compatible2.length)];random2=true;
+    }else if(o3.length){
+      const valid3=o3.filter(b=>safeCircleFits(fixedP2,{...r.stages[2],x:b.x,y:b.y,z:0}));
+      if(!valid3.length){alert('Nenhuma opção da Safe 3 é compatível com a Safe 2 fixa. Corrija a rota antes do preview.');return;}
+      p3=valid3[Math.floor(Math.random()*valid3.length)];random3=true;
     }
-    rec.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
-    rec.onstop=()=>{recording=false;cancelAnimationFrame(raf);stream.getTracks().forEach(t=>t.stop());const blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`high-os-safe-${slugify(m.event||'evento')}-mapa-${Date.now()}.webm`;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);};
-    drawMapFrame();rec.start(500);
-    let n=0;const next=()=>{if(n>=combos.length){setTimeout(()=>{if(rec.state!=='inactive')rec.stop();renderMap();},900);return;}playSafeCombination(m,r,combos[n++],next);};next();
+    // Preview usa cópias: rota sorteada ou fixa nunca altera a configuração salva.
+    const s1={...r.stages[0]},s2={...r.stages[1],x:p2.x,y:p2.y,z:0},s3={...r.stages[2],x:p3.x,y:p3.y,z:0},routeMode=(random2||random3)?((random2&&random3)?'ALEATÓRIA':'MISTA'):'FIXA';
+    stopSafePreview();
+    const initial=effectiveEventRadius(m),phases=[
+      {type:'close',label:'FECHANDO SAFE 1',a:s1,from:initial,to:s1.radius,seconds:Number(s1.closeSeconds)||180},
+      {type:'move',label:'MOVENDO PARA SAFE 2',a:s1,b:s2,from:s1.radius,to:s1.radius,seconds:Number(s1.moveSeconds)||90},
+      {type:'close',label:'FECHANDO SAFE 2',a:s2,from:s1.radius,to:s2.radius,seconds:Number(s2.closeSeconds)||150},
+      {type:'move',label:'MOVENDO PARA SAFE 3',a:s2,b:s3,from:s2.radius,to:s2.radius,seconds:Number(s2.moveSeconds)||75},
+      {type:'close',label:'FECHANDO SAFE FINAL',a:s3,from:s2.radius,to:s3.radius,seconds:Number(s3.closeSeconds)||120}
+    ];
+    let pi=0,t=0;const steps=90,hud=ensurePreviewHud();
+    const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
+    state.safePreviewLayer=L.circle(ll(s1.x,s1.y),gasStyle).addTo(state.map);
+    state.safePreviewRouteLayer=state.safePresentation?null:L.polyline([ll(s1.x,s1.y),ll(s2.x,s2.y),ll(s3.x,s3.y)],{color:'#c084fc',weight:3,opacity:.72,dashArray:'8 8',interactive:false}).addTo(state.map);
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>PREVIEW EM EXECUÇÃO</b> • rota ${routeMode.toLowerCase()}: SAFE 1 → SAFE 2 → SAFE 3<br><small>O círculo roxo representa a área do gás durante fechamento e deslocamento.</small>`;
+    state.safePreviewTimer=setInterval(()=>{const p=phases[pi];if(!p){stopSafePreview();if(!state.safePresentation)renderMap();return;}t++;const u=Math.min(1,t/steps),smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);if(hud){const remain=Math.max(0,Math.ceil(p.seconds*(1-u)));hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • '+remain+' s</div>';}if(u>=1){pi++;t=0;if(pi>=phases.length){if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>SAFE FINAL CONCLUÍDA</div><div style="font-size:13px;font-weight:500">Raio final '+Math.round(Number(s3.radius))+' m</div>';clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;if(!state.safePresentation)setTimeout(()=>{stopSafePreview();renderMap();},900);}}},45);
   }
 
+  function renderMapLegend(m){
+    const host=qs('.mission-planner-mapwrap')||qs('#missionPlannerMap')?.parentElement;if(!host)return;let el=qs('#mpMapLegend');
+    if(!el){el=document.createElement('div');el.id='mpMapLegend';Object.assign(el.style,{position:'absolute',left:'12px',bottom:'12px',zIndex:'900',background:'rgba(8,10,18,.86)',border:'1px solid rgba(255,255,255,.16)',borderRadius:'10px',padding:'8px 10px',fontSize:'11px',lineHeight:'1.55',color:'#fff',pointerEvents:'none',boxShadow:'0 8px 24px rgba(0,0,0,.3)'});host.appendChild(el);}
+    const counts=zoneCoverageCounts(m),valid=(m.points||[]).filter(isValidated).length,total=m.points?.length||0,category=m.category||'dominacao',poly=category==='dominacao'?dominationPolygon(m):[],mode=category==='dominacao'?dominationZoneMode(m):'radius',geom=category==='dominacao'?dominationZoneGeometry(m):null,rawPoly=category==='dominacao'&&Array.isArray(m.zonePolygon)?m.zonePolygon:[];
+    const zoneLabel=category==='dominacao'&&mode==='polygon'?(geom?.mode==='polygon'?('⬡ Zona por CDS • '+poly.length+' vértices'):(geom?.mode==='polygon-invalid'?('⚠ Polígono com CDS inválida • '+rawPoly.length+' armazenadas'):('⬡ Polígono em construção • '+poly.length+'/3+ vértices válidos'))):'◯ Zona '+Math.round(effectiveEventRadius(m))+'m';
+    const centerLabel=category==='dominacao'&&mode==='polygon'?'':('◎ Centro • ');
+    el.innerHTML='<b>'+esc(m.event||'EVENTO')+' • '+esc(m.name||'ZONA')+'</b><br>'+centerLabel+zoneLabel+'<br>Spawns '+valid+'/'+total+' validados'+(category==='gas'?'<br>Safe inicial: '+counts.inside+'/'+counts.total+' dentro'+(counts.outside?' • '+counts.outside+' fora ⚠':' ✓'):'');
+  }
   function renderMap(){
-    if(!state.map)return;clearLayers();const m=active();if(!m)return;renderSafeRouteUi();
-    if(validCoord(m.center.x)&&validCoord(m.center.y)){
-      const cicon=L.divIcon({className:'',
-html:`<div class="mp-center-pin ${isCenterValidated(m)?'validated':'planned'}">◎</div>`,
-iconSize:[32,
-32],
-iconAnchor:[16,
-16]});
-      const center=L.marker(ll(m.center.x,m.center.y),{icon:cicon,
-draggable:state.editing}).addTo(state.map).bindPopup(`<b>${esc(m.center.label||'Centro')}</b><br>Status: <b>${isCenterValidated(m)?'VALIDADO':'PENDENTE'}</b><br>${f(m.center.x)},${f(m.center.y)}${isCenterValidated(m)?','+f(m.center.z)+','+f(m.center.h):',0.00,0.00'}<br><small>${state.editing?'Arraste para ajustar o centro':'Visualização • ponto travado'}</small>`);
-      center.on('dragend',ev=>{const n=ev.target.getLatLng();m.center.x=n.lng;m.center.y=n.lat;m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';commit('Centro movido no mapa — validação removida');});
-      state.drawn.push(center);
-      const eventRadius=effectiveEventRadius(m);
-      if(eventRadius>0){
-        const zone=L.circle(ll(m.center.x,m.center.y),{radius:eventRadius,
-weight:2,
-fillOpacity:.035,
-dashArray:(m.category||'dominacao')==='gas'?'8 6':null,
-interactive:false}).addTo(state.map);
-        state.drawn.push(zone);
-      }
+    if(!state.map)return;clearLayers();const m=active();if(!m)return;renderSafeRouteUi();renderMapLegend(m);
+    const poly=dominationPolygon(m),hasCenter=validCoord(m.center?.x)&&validCoord(m.center?.y),polyMode=(m.category||'dominacao')==='dominacao'&&dominationZoneMode(m)==='polygon';
+    if(hasCenter&&!polyMode){
+      const cicon=L.divIcon({className:'',html:`<div class="mp-center-pin ${isCenterValidated(m)?'validated':'planned'}">◎</div>`,iconSize:[32,32],iconAnchor:[16,16]});
+      const center=L.marker(ll(m.center.x,m.center.y),{icon:cicon,draggable:state.editing}).addTo(state.map).bindPopup(`<b>${esc(m.center.label||'Centro')}</b><br>Status: <b>${isCenterValidated(m)?'VALIDADO':'PENDENTE'}</b><br>${f(m.center.x)},${f(m.center.y)}${isCenterValidated(m)?','+f(m.center.z)+','+f(m.center.h):',0.00,0.00'}<br><small>${state.editing?'Arraste para ajustar o centro':'Visualização • ponto travado'}</small>`);
+      center.on('dragend',ev=>{const n=ev.target.getLatLng();m.center.x=n.lng;m.center.y=n.lat;m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';commit('Centro movido no mapa — validação removida');});center._mpKind='center';state.drawn.push(center);
     }
-    drawSafeRoute(m);
+    if((m.category||'dominacao')==='dominacao'&&(m.zoneMode||(poly.length>=3?'polygon':'radius'))==='polygon'&&poly.length){
+      const geom=dominationZoneGeometry(m),canClose=geom.mode==='polygon';if(canClose){const zone=L.polygon(poly.map(p=>ll(p.x,p.y)),{weight:2,fillOpacity:.055,interactive:false}).addTo(state.map);zone._mpKind='zone';state.drawn.push(zone);}else{const raw=Array.isArray(m.zonePolygon)?m.zonePolygon:[];let run=[];const flush=()=>{if(run.length>=2){const line=L.polyline(run.map(p=>ll(p.x,p.y)),{weight:2,dashArray:'6 7',opacity:.85,interactive:false}).addTo(state.map);line._mpKind='zone';state.drawn.push(line);}run=[];};raw.forEach(v=>{if(validCoord(v?.x)&&validCoord(v?.y))run.push(v);else flush();});flush();}
+      poly.forEach(p=>{const rawIndex=(m.zonePolygon||[]).indexOf(p),vertexNo=rawIndex>=0?rawIndex+1:0,ic=L.divIcon({className:'',html:'<div style="min-width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:#171923;color:#fff;font:10px/18px system-ui;text-align:center">'+vertexNo+'</div>',iconSize:[22,22],iconAnchor:[11,11]});const mk=L.marker(ll(p.x,p.y),{icon:ic,interactive:true,draggable:state.editing}).addTo(state.map).bindPopup('<b>Vértice da Zona '+String(vertexNo).padStart(2,'0')+'</b><br>'+f(p.x)+', '+f(p.y)+', '+f(Number(p.z)||0)+(state.editing?'<br><small>Arraste para ajustar • será necessário validar novamente</small>':''));mk.on('dragend',ev=>{if(rawIndex<0)return;const n=ev.target.getLatLng(),v=m.zonePolygon[rawIndex];v.x=n.lng;v.y=n.lat;v.z=0;v.status='planned';v.validatedAt=null;v.validationReason='coordinate-change';commit('Vértice '+String(rawIndex+1).padStart(2,'0')+' movido — validação removida');});mk._mpKind='zone';state.drawn.push(mk);});
+    }else if(hasCenter&&!polyMode){const eventRadius=effectiveEventRadius(m);if(eventRadius>0){const zone=L.circle(ll(m.center.x,m.center.y),{radius:eventRadius,weight:2,fillOpacity:.035,dashArray:(m.category||'dominacao')==='gas'?'8 6':null,interactive:false}).addTo(state.map);zone._mpKind='zone';state.drawn.push(zone);}}
+    drawSafeRoute(m);drawCompareOverlay();drawDominationAccess(m);drawZoneProposal();
     m.points.forEach((p,i)=>{
       p.id=i+1;const valid=isValidated(p),
 outside=((m.category||'dominacao')==='gas')&&!pointInsideZone(m,p),
@@ -1497,25 +1617,38 @@ color:outside?'#ff5252':undefined,
 fillColor:outside?'#ff5252':undefined}).addTo(state.map);
       const marker=L.marker(pos,{icon:pinIcon(p,outside),
 draggable:state.editing}).addTo(state.map);
-      marker.bindPopup(`<b>Ponto ${String(p.id).padStart(2,'0')}</b><br>Status: <b>${valid?'VALIDADO':'PENDENTE'}</b>${outside?'<br><b style="color:#ff7474">FORA DA ZONA ⚠</b>':''}<br>${f(p.x)},${f(p.y)}${valid?','+f(p.z)+','+f(p.h):''}`);
+      marker.bindPopup(`<b>Ponto ${String(p.id).padStart(2,'0')}</b><br>Status: <b>${valid?'VALIDADO':'PENDENTE'}</b>${outside?'<br><b style="color:#ff7474">FORA DA ZONA ⚠</b>':''}<br>Distância do centro: <b>${validCoord(m.center?.x)&&validCoord(m.center?.y)?pointDistanceFromCenter(m,p).toFixed(0)+' m':'—'}</b><br>${f(p.x)},${f(p.y)}${valid?','+f(p.z)+','+f(p.h):''}`);
       marker.on('click',()=>selectPoint(p.id));
       marker.on('dragend',ev=>{const n=ev.target.getLatLng();p.x=n.lng;p.y=n.lat;p.z=0;p.status='planned';p.validatedAt=null;commit(`Ponto ${p.id} movido — validação removida`);selectPoint(p.id);});
-      state.drawn.push(circle,marker);
+      circle._mpKind='spawns';marker._mpKind='spawns';state.drawn.push(circle,marker);
       if(Number.isFinite(p.h)){const a=p.h*Math.PI/180,
-d=35;state.drawn.push(L.marker(ll(p.x+Math.sin(a)*d,p.y+Math.cos(a)*d),{icon:headingIcon(p.h),
-interactive:false}).addTo(state.map));}
+d=35;const hd=L.marker(ll(p.x+Math.sin(a)*d,p.y+Math.cos(a)*d),{icon:headingIcon(p.h),interactive:false}).addTo(state.map);hd._mpKind='spawns';state.drawn.push(hd);}
     });
+    applyLayerVisibility();
   }
 
   function renderMissionList(){
     renderCentralV954();
   }
 
+  function spawnProblems(m){
+    const near=new Set(),duplicates=[];if(!m)return {near,duplicates};
+    for(let i=0;i<m.points.length;i++)for(let j=i+1;j<m.points.length;j++){const d=distXY(m.points[i],m.points[j]);if(d<2){near.add(i);near.add(j);duplicates.push([i,j,d]);}else if(d<(Number(m.spawnRadius)||100)*2){near.add(i);near.add(j);}}
+    return {near,duplicates};
+  }
+  function renumberSpawns(){
+    if(!requireEdit())return;const m=active();if(!m)return;m.points.forEach((p,i)=>p.id=i+1);commit('Spawns renumerados sem alterar CDS');
+  }
+  function focusSpawnProblems(){
+    const m=active();if(!m)return;const pr=spawnProblems(m);if(!pr.near.size){alert('Nenhum spawn duplicado ou próximo demais foi detectado.');return;}const pts=[...pr.near].map(i=>m.points[i]).filter(Boolean);if(pts.length===1)state.map?.setView(ll(pts[0].x,pts[0].y),5);else state.map?.fitBounds(L.latLngBounds(pts.map(p=>ll(p.x,p.y))).pad(.2),{maxZoom:5});qsa('.mp-point-row').forEach((el,i)=>el.style.outline=pr.near.has(i)?'2px solid #ff7474':'');setSaveState(pr.near.size+' spawn(s) problemático(s) destacados');
+  }
   function renderPointList(){
     const m=active(),
 box=qs('#mpPointList');if(!box||!m)return;
     if(!m.points.length){box.innerHTML='<div class="mp-note">Nenhum ponto registrado.</div>';return;}
-    box.innerHTML=m.points.map((p,i)=>{const valid=isValidated(p);return `<div class="mp-point-row ${valid?'validated':'planned'}" data-pidx="${i}"><div class="mp-point-num">${String(i+1).padStart(2,'0')}</div><div><b>Ponto ${i+1} <span class="mp-state ${valid?'ok':'warn'}">${valid?'VALIDADO':'PENDENTE'}</span></b><small>${valid?rawCds(p):tpCds(p)+' • Z provisório para TP/NC'}</small></div><div class="mp-row-actions"><button type="button" data-copy="${i}" title="${valid?'Copiar CDS validada':'Copiar CDS provisória para TPCDS'}">⧉</button><button type="button" data-del="${i}" title="Remover">×</button></div></div>`;}).join('');
+    const problems=spawnProblems(m);
+    box.innerHTML='<div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button type="button" id="mpFocusProblems">VER PROBLEMÁTICOS</button><button type="button" id="mpRenumberSpawns">RENUMERAR 01…'+String(m.points.length).padStart(2,'0')+'</button><span class="mp-note">'+(problems.duplicates.length?problems.duplicates.length+' duplicidade(s) crítica(s) < 2m':'Sem duplicidades exatas')+'</span></div>'+m.points.map((p,i)=>{const valid=isValidated(p);return `<div class="mp-point-row ${valid?'validated':'planned'}" data-pidx="${i}"><div class="mp-point-num">${String(i+1).padStart(2,'0')}</div><div><b>Ponto ${i+1} <span class="mp-state ${valid?'ok':'warn'}">${valid?'VALIDADO':'PENDENTE'}</span></b><small>${valid?rawCds(p):tpCds(p)+' • Z provisório para TP/NC'}</small></div><div class="mp-row-actions"><button type="button" data-copy="${i}" title="${valid?'Copiar CDS validada':'Copiar CDS provisória para TPCDS'}">⧉</button><button type="button" data-del="${i}" title="Remover">×</button></div></div>`;}).join('');
+    qs('#mpFocusProblems')?.addEventListener('click',focusSpawnProblems);qs('#mpRenumberSpawns')?.addEventListener('click',renumberSpawns);if(qs('#mpRenumberSpawns'))qs('#mpRenumberSpawns').disabled=!state.editing;
     qsa('.mp-point-row',box).forEach(r=>r.onclick=e=>{if(e.target.dataset.copy!==undefined||e.target.dataset.del!==undefined)return;const i=Number(r.dataset.pidx);selectPoint(i+1);state.map?.setView(ll(m.points[i].x,m.points[i].y),5);});
     qsa('[data-copy]',box).forEach(b=>b.onclick=async e=>{e.stopPropagation();const p=m.points[Number(b.dataset.copy)];await copyText(isValidated(p)?rawCds(p):tpCds(p));b.textContent='✓';setTimeout(()=>b.textContent='⧉',800);});
     qsa('[data-del]',box).forEach(b=>b.onclick=e=>{e.stopPropagation();if(!requireEdit())return;m.points.splice(Number(b.dataset.del),1);commit('Ponto removido');});
@@ -1554,10 +1687,15 @@ h=r.h===null?0:r.h;
   function ensureCoverageUi(){
     const anchor=qs('#mpCenterValidation');if(!anchor||qs('#mpCoverageBox'))return;
     const box=document.createElement('div');box.id='mpCoverageBox';box.style.marginTop='10px';
-    box.innerHTML=`<div class="mp-readout"><b id="mpCoverageTitle">COBERTURA DA ZONA</b><div id="mpCoverageStatus" style="margin-top:6px">—</div></div><label style="margin-top:8px">Raio visual da zona (m)<input id="mpEventRadius" type="number" min="50" step="50" placeholder="1000"></label><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpRadiusMinus50">-50</button><button type="button" id="mpRadiusPlus50">+50</button><button type="button" id="mpRadiusMinus100">-100</button><button type="button" id="mpRadiusPlus100">+100</button></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpUseRecommendedRadius">COBRIR TODOS</button><button type="button" id="mpFitZone">ENQUADRAR ZONA</button><button type="button" id="mpGenerateInsideZone">GERAR SPAWNS DENTRO DA ZONA</button></div><div class="mp-note" style="margin-top:6px">Defina primeiro o tamanho ideal da área. Spawns fora dela serão destacados; não aumente a zona só para caber em pontos ruins.</div>`;
+    box.innerHTML=`<label id="mpZoneModeWrap" style="margin-bottom:8px">FORMA DA ZONA<select id="mpZoneMode"><option value="radius">CENTRO + RAIO</option><option value="polygon">POLÍGONO POR CDS</option></select></label><div class="mp-readout"><b id="mpCoverageTitle">COBERTURA DA ZONA</b><div id="mpCoverageStatus" style="margin-top:6px">—</div></div><label style="margin-top:8px">Raio visual da zona (m)<input id="mpEventRadius" type="number" min="50" step="50" placeholder="1000"></label><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpRadiusMinus50">-50</button><button type="button" id="mpRadiusPlus50">+50</button><button type="button" id="mpRadiusMinus100">-100</button><button type="button" id="mpRadiusPlus100">+100</button></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpUseRecommendedRadius">COBRIR TODOS</button><button type="button" id="mpFitZone">ENQUADRAR ZONA</button><button type="button" id="mpGenerateInsideZone">GERAR SPAWNS DENTRO DA ZONA</button></div><div class="mp-note" style="margin-top:6px">Defina primeiro o tamanho ideal da área. Spawns fora dela serão destacados; não aumente a zona só para caber em pontos ruins.</div>`;
     anchor.insertAdjacentElement('afterend',box);
-    const applyRadius=v=>{if(!requireEdit())return;const m=active();if(!m)return;v=Math.max(50,Math.round(Number(v)/50)*50);m.eventRadius=v;state.dirty=true;setSaveState('Raio da zona alterado • NÃO SALVO');renderMap();renderCoverage();};
-    qs('#mpEventRadius')?.addEventListener('input',e=>{if(!state.editing)return;const v=Number(e.target.value);if(Number.isFinite(v)&&v>0)applyRadius(v);});
+    qs('#mpZoneMode')?.addEventListener('change',e=>{if(!requireEdit())return;const m=active();if(!m||m.category!=='dominacao')return;m.zoneMode=e.target.value==='polygon'?'polygon':'radius';commit('Forma da Zona alterada para '+(m.zoneMode==='polygon'?'Polígono por CDS':'Centro + Raio'));});
+
+    const applyRadius=(v,commitNow=true)=>{if(!requireEdit())return;const m=active();if(!m)return;v=Math.max(50,Math.round(Number(v)/50)*50);if(Number(m.eventRadius)===v)return;m.eventRadius=v;if(commitNow)commit('Raio da zona alterado');else{state.dirty=true;setSaveState('Raio da zona alterado • NÃO SALVO');renderMap();renderCoverage();}};
+    let radiusInputStart=null;const radiusInput=qs('#mpEventRadius');
+    radiusInput?.addEventListener('focus',()=>{radiusInputStart=state.editing?editSnapshot():null;});
+    radiusInput?.addEventListener('input',e=>{if(!state.editing)return;const v=Number(e.target.value);if(Number.isFinite(v)&&v>0)applyRadius(v,false);});
+    radiusInput?.addEventListener('change',()=>{if(!state.editing)return;if(radiusInputStart&&radiusInputStart!==editSnapshot()){const current=editSnapshot();state.lastEditSnapshot=radiusInputStart;pushUndo();state.lastEditSnapshot=current;state.dirty=true;render();setSaveState('Raio da zona alterado • NÃO SALVO');}radiusInputStart=null;});
     qs('#mpRadiusMinus50')?.addEventListener('click',()=>applyRadius(effectiveEventRadius(active())-50));
     qs('#mpRadiusPlus50')?.addEventListener('click',()=>applyRadius(effectiveEventRadius(active())+50));
     qs('#mpRadiusMinus100')?.addEventListener('click',()=>applyRadius(effectiveEventRadius(active())-100));
@@ -1567,8 +1705,44 @@ s=coverageStats(m);if(!m||!s)return;applyRadius(s.recommended);});
     qs('#mpFitZone')?.addEventListener('click',fitZone);
     qs('#mpGenerateInsideZone')?.addEventListener('click',generateInsideZone);
   }
+  function zoneProposalPoints(m,shape,scale=1,rotation=0){
+    if(!m||!validCoord(m.center?.x)||!validCoord(m.center?.y))return [];const cx=Number(m.center.x),cy=Number(m.center.y),r=Math.max(100,effectiveEventRadius(m))*Math.max(.2,Number(scale)||1),z=Number(m.center.z)||0,rot=Number(rotation)||0;
+    const rotate=(x,y)=>{const a=rot*Math.PI/180,c=Math.cos(a),sn=Math.sin(a);return {x:cx+x*c-y*sn,y:cy+x*sn+y*c,z};};
+    if(shape==='triangle')return [0,120,240].map(a=>{const q=a*Math.PI/180;return rotate(Math.sin(q)*r,Math.cos(q)*r);});
+    if(shape==='hexagon')return [0,60,120,180,240,300].map(a=>{const q=a*Math.PI/180;return rotate(Math.sin(q)*r,Math.cos(q)*r);});
+    if(shape==='rectangle'){const w=r,h=r*.62;return [rotate(-w,-h),rotate(w,-h),rotate(w,h),rotate(-w,h)];}
+    const d=r/Math.sqrt(2);return [rotate(-d,-d),rotate(d,-d),rotate(d,d),rotate(-d,d)];
+  }
+  function drawZoneProposal(){const p=state.zoneProposal;if(!p?.points?.length||!state.map)return;const line=L.polygon(p.points.map(v=>ll(v.x,v.y)),{weight:3,fillOpacity:.025,dashArray:'8 7',interactive:false}).addTo(state.map);line._mpKind='proposal';state.drawn.push(line);p.points.forEach((v,i)=>{const mk=L.marker(ll(v.x,v.y),{interactive:false,icon:L.divIcon({className:'',html:'<div style="width:24px;height:24px;border:2px dashed #fff;border-radius:50%;background:rgba(8,10,18,.75);color:#fff;font:10px/20px system-ui;text-align:center">P'+(i+1)+'</div>',iconSize:[24,24],iconAnchor:[12,12]})}).addTo(state.map);mk._mpKind='proposal';state.drawn.push(mk);});}
+  function setZoneProposal(shape){const m=active();if(!m||m.category!=='dominacao')return;if(!validCoord(m.center?.x)||!validCoord(m.center?.y)){alert('Defina o centro da zona antes de gerar uma proposta.');return;}const scale=Math.max(.2,Number(qs('#mpDomProposalScale')?.value)||1),rotation=Number(qs('#mpDomProposalRotation')?.value)||0;state.zoneProposal={shape,scale,rotation,points:zoneProposalPoints(m,shape,scale,rotation)};renderMap();renderDominationPolygonUi();}
+  function applyZoneProposal(){if(!requireEdit())return;const m=active(),p=state.zoneProposal;if(!m||!p?.points?.length)return;m.zonePolygon=p.points.map(v=>({x:v.x,y:v.y,z:0,status:'planned',validatedAt:null,validationReason:'assisted-proposal'}));m.zoneMode='polygon';state.zoneProposal=null;commit('Proposta assistida aplicada à Zona de Dominação');}
+
+  function ensureDominationPolygonUi(){
+    const anchor=qs('#mpCoverageBox'),m=active();if(!anchor||qs('#mpDomPolygonBox'))return;
+    const box=document.createElement('div');box.id='mpDomPolygonBox';box.className='mp-card';box.dataset.forceTab='zona';box.style.marginTop='10px';
+    box.innerHTML=`<h3>CDS DA ZONA — POLÍGONO</h3><p class="mp-note">Opcional. Cole 3 ou mais CDS na ordem do contorno. O mapa une os pontos e fecha a Zona de Pontuação automaticamente. Estas CDS não são spawns.</p><div id="mpDomPolygonStatus" class="mp-readout">Nenhum vértice cadastrado.</div><div id="mpDomPolygonList" style="margin-top:8px"></div><label style="margin-top:8px">CDS do vértice<input id="mpDomPolygonCds" type="text" placeholder="x, y, z ou vec3(x, y, z)"></label><label style="margin-top:8px">COLAR VÁRIAS CDS<textarea id="mpDomPolygonBulk" rows="5" placeholder="01 - x, y, z&#10;02 - x, y, z&#10;03 - vec3(x, y, z)"></textarea></label><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpDomPolygonAdd">ADICIONAR VÉRTICE</button><button type="button" id="mpDomPolygonPlace">MARCAR VÉRTICE NO MAPA</button><button type="button" id="mpDomPolygonBulkAdd">IMPORTAR / ACRESCENTAR</button><button type="button" id="mpDomPolygonBulkReplace">SUBSTITUIR POLÍGONO</button><button type="button" id="mpDomPolygonValidateAll">VALIDAR TODAS</button><button type="button" id="mpDomPolygonUndo">REMOVER ÚLTIMO</button><button type="button" id="mpDomPolygonClear">LIMPAR POLÍGONO</button></div><div class="mp-note" style="margin-top:10px"><b>PLANEJADOR ASSISTIDO</b> • gera apenas uma proposta visual; nada é alterado até clicar APLICAR. Ao aplicar, as CDS ficam PENDENTES até validação real no FiveM.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0"><label>ESCALA<input id="mpDomProposalScale" type="number" min="0.2" max="3" step="0.1" value="1"></label><label>ROTAÇÃO °<input id="mpDomProposalRotation" type="number" min="-180" max="180" step="5" value="0"></label></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-zoneproposal="square">QUADRADO</button><button type="button" data-zoneproposal="rectangle">RETÂNGULO</button><button type="button" data-zoneproposal="triangle">TRIÂNGULO</button><button type="button" data-zoneproposal="hexagon">HEXÁGONO</button><button type="button" id="mpDomProposalApply">APLICAR PROPOSTA</button><button type="button" id="mpDomProposalCancel">CANCELAR</button></div>`;
+    anchor.insertAdjacentElement('afterend',box);
+    qs('#mpDomPolygonPlace')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();if(!m||m.category!=='dominacao')return;const enable=!state.polygonPlacement;resetMapPlacementModes();state.polygonPlacement=enable;const b=qs('#mpDomPolygonPlace');if(b)b.textContent=state.polygonPlacement?'PARAR MARCAÇÃO':'MARCAR VÉRTICE NO MAPA';if(state.map?.getContainer())state.map.getContainer().style.cursor=state.polygonPlacement?'crosshair':'';const el=qs('#mpDomPolygonStatus');if(el&&state.polygonPlacement)el.innerHTML='<b>MARCAÇÃO DE VÉRTICES ATIVA</b><br>Clique no mapa seguindo a ordem do contorno. Os pontos entram como PENDENTES até validação real no FiveM.';});
+    qs('#mpDomPolygonAdd')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();if(!m||m.category!=='dominacao')return;const r=parseCds(qs('#mpDomPolygonCds')?.value);if(!r.ok||!validCoord(r.x)||!validCoord(r.y)){alert('CDS do vértice não reconhecida.');return;}if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:r.x,y:r.y,z:Number.isFinite(r.z)?r.z:0,status:'planned',validatedAt:null,validationReason:'pending-explicit-validation'});if(qs('#mpDomPolygonCds'))qs('#mpDomPolygonCds').value='';commit('Vértice da Zona de Dominação adicionado');});
+    function readPolygonBulk(){const input=qs('#mpDomPolygonBulk'),lines=String(input?.value||'').split(/\n+/).map(x=>x.trim()).filter(Boolean),parsed=[],bad=[];lines.forEach((line,i)=>{const clean=line.replace(/^\s*\d+\s*[-–—:.)]\s*/,'').trim(),r=parseCds(clean);if(!r.ok||!validCoord(r.x)||!validCoord(r.y)){bad.push(i+1);return;}parsed.push({x:r.x,y:r.y,z:Number.isFinite(r.z)?r.z:0,status:'planned',validatedAt:null,validationReason:'pending-explicit-validation'});});return {input,parsed,bad};}
+    function confirmPolygonBulk(result,action){if(!result.parsed.length){alert('Nenhuma CDS válida encontrada.');return false;}if(result.bad.length&&!confirm(result.parsed.length+' CDS reconhecida(s). Linha(s) não reconhecida(s): '+result.bad.join(', ')+'.\n\n'+action+' somente as CDS válidas?'))return false;return true;}
+    qs('#mpDomPolygonBulkAdd')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=readPolygonBulk();if(!m||m.category!=='dominacao'||!r.input||!confirmPolygonBulk(r,'Importar'))return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push(...r.parsed);m.zoneMode='polygon';r.input.value='';commit(r.parsed.length+' CDS acrescentadas à Zona de Dominação na ordem informada');fitZone();});
+    qs('#mpDomPolygonBulkReplace')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=readPolygonBulk();if(!m||m.category!=='dominacao'||!r.input||!confirmPolygonBulk(r,'Substituir'))return;const oldCount=Array.isArray(m.zonePolygon)?m.zonePolygon.length:0;if(oldCount&&!confirm('Substituir os '+oldCount+' vértice(s) atuais por '+r.parsed.length+' CDS da lista colada?\n\nOs vértices anteriores serão removidos desta edição.'))return;m.zonePolygon=r.parsed;m.zoneMode='polygon';r.input.value='';commit('Polígono substituído por '+r.parsed.length+' CDS na ordem informada');fitZone();});
+
+    qs('#mpDomPolygonValidateAll')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),raw=Array.isArray(m?.zonePolygon)?m.zonePolygon:[];if(!raw.length)return;const ready=raw.filter(v=>validCoord(v.x)&&validCoord(v.y)&&validCoord(v.z)&&v.status!=='validated');if(!ready.length){alert('Não há CDS pendentes com X, Y e Z completos para validar.');return;}if(!confirm('Confirmar '+ready.length+' CDS como coordenadas REAIS coletadas no FiveM?\n\nUse esta opção somente depois de conferir as CDS no jogo.'))return;const at=nowIso();ready.forEach(v=>{v.status='validated';v.validatedAt=at;v.validationReason=null;});commit(ready.length+' vértice(s) validados com CDS reais do FiveM');});
+    qs('#mpDomPolygonUndo')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();if(!m?.zonePolygon?.length)return;m.zonePolygon.pop();if(!m.zonePolygon.length)m.zoneMode='radius';commit(m.zonePolygon.length?'Último vértice da Zona de Dominação removido — polígono permanece em construção':'Último vértice removido — zona voltou para Centro + Raio');});
+    qs('#mpDomPolygonClear')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();if(!m)return;const count=Array.isArray(m.zonePolygon)?m.zonePolygon.length:0;if(!count&&dominationZoneMode(m)!=='polygon')return;if(!confirm('Remover todas as CDS do polígono e voltar a visualizar a zona por Centro + Raio?'))return;m.zonePolygon=[];m.zoneMode='radius';state.zoneProposal=null;resetMapPlacementModes();commit('Polígono removido — Zona de Pontuação voltou para Centro + Raio');});
+    qsa('[data-zoneproposal]',box).forEach(b=>b.addEventListener('click',()=>setZoneProposal(b.dataset.zoneproposal)));['mpDomProposalScale','mpDomProposalRotation'].forEach(id=>qs('#'+id)?.addEventListener('input',()=>{const p=state.zoneProposal,m=active();if(!p||!m)return;p.scale=Math.max(.2,Number(qs('#mpDomProposalScale')?.value)||1);p.rotation=Number(qs('#mpDomProposalRotation')?.value)||0;p.points=zoneProposalPoints(m,p.shape,p.scale,p.rotation);renderMap();renderDominationPolygonUi();}));
+    qs('#mpDomProposalApply')?.addEventListener('click',applyZoneProposal);qs('#mpDomProposalCancel')?.addEventListener('click',()=>{state.zoneProposal=null;renderMap();renderDominationPolygonUi();});
+    box.addEventListener('click',e=>{const b=e.target.closest('[data-polyaction]');if(!b)return;const m=active(),i=Number(b.dataset.index);if(!m||!Array.isArray(m.zonePolygon)||!Number.isInteger(i)||!m.zonePolygon[i])return;const action=b.dataset.polyaction;if(action==='go'){const p=m.zonePolygon[i];if(!validCoord(p?.x)||!validCoord(p?.y)){alert('Este vértice possui X/Y inválidos. Use CORRIGIR CDS antes de tentar localizá-lo no mapa.');return;}state.map?.setView(ll(p.x,p.y),Math.max(state.map?.getZoom?.()||4,5));return;}if(!requireEdit())return;if(action==='validate'){const old=m.zonePolygon[i];if(!validCoord(old?.x)||!validCoord(old?.y)){alert('Corrija X/Y deste vértice antes de validá-lo com a CDS real do FiveM.');return;}const value=prompt('Cole a CDS REAL coletada no FiveM para validar o vértice '+String(i+1).padStart(2,'0')+':',validCoord(old.z)?f(old.x)+', '+f(old.y)+', '+f(old.z):'');if(value===null)return;const r=parseCds(value);if(!r.ok||!validCoord(r.x)||!validCoord(r.y)||!validCoord(r.z)){alert('Para validar é necessário informar X, Y e Z reais da CDS coletada no FiveM.');return;}m.zonePolygon[i]={...old,x:r.x,y:r.y,z:r.z,status:'validated',validatedAt:nowIso(),validationReason:null};commit('Vértice '+String(i+1).padStart(2,'0')+' validado com CDS real');return;}if(action==='edit'){const old=m.zonePolygon[i],value=prompt('Editar CDS do vértice '+String(i+1).padStart(2,'0')+':',f(old.x)+', '+f(old.y)+', '+f(old.z));if(value===null)return;const r=parseCds(value);if(!r.ok||!validCoord(r.x)||!validCoord(r.y)){alert('CDS não reconhecida.');return;}m.zonePolygon[i]={...old,x:r.x,y:r.y,z:Number.isFinite(r.z)?r.z:0,status:'planned',validatedAt:null,validationReason:'coordinate-change'};commit('CDS do vértice '+String(i+1).padStart(2,'0')+' atualizada');return;}if(action==='remove'){m.zonePolygon.splice(i,1);commit('Vértice '+String(i+1).padStart(2,'0')+' removido da Zona de Dominação');return;}const j=action==='up'?i-1:action==='down'?i+1:i;if(j<0||j>=m.zonePolygon.length||j===i)return;[m.zonePolygon[i],m.zonePolygon[j]]=[m.zonePolygon[j],m.zonePolygon[i]];commit('Ordem das CDS da Zona de Dominação alterada');});
+  }
+  function renderDominationPolygonUi(){
+    ensureDominationPolygonUi();const m=active(),box=qs('#mpDomPolygonBox'),el=qs('#mpDomPolygonStatus');if(!box||!m)return;const show=(m.category||'dominacao')==='dominacao';box.style.display=show?'block':'none';if(!show||!el)return;const p=dominationPolygon(m),polyMode=dominationZoneMode(m)==='polygon',raw=Array.isArray(m.zonePolygon)?m.zonePolygon:[],validated=raw.filter(v=>validCoord(v.x)&&validCoord(v.y)&&validCoord(v.z)&&v.status==='validated').length,geom=dominationZoneGeometry(m),pa=dominationPolygonAudit(m),crit=(pa.findings||[]).filter(x=>x.level!=='OK'),list=qs('#mpDomPolygonList');if(list)list.innerHTML=raw.length?raw.map((v,i)=>{const xyOk=validCoord(v.x)&&validCoord(v.y),validatedOk=xyOk&&validCoord(v.z)&&v.status==='validated',status=!xyOk?'CDS INVÁLIDA':(validatedOk?'VALIDADO':'PENDENTE'),statusColor=!xyOk?'#ff9b9b':(validatedOk?'#a7f3d0':'#ffd27a');return '<div class="mp-readout" style="margin:4px 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap'+(!xyOk?';border-color:rgba(255,116,116,.55)':'')+'"><b>'+String(i+1).padStart(2,'0')+'</b><span style="font-size:10px;padding:2px 6px;border-radius:8px;border:1px solid rgba(255,255,255,.18);color:'+statusColor+'">'+status+'</span><span style="flex:1;min-width:180px">'+f(v.x)+', '+f(v.y)+', '+f(v.z)+'</span><button type="button" data-polyaction="go" data-index="'+i+'" '+(!xyOk?'disabled':'')+'>IR</button><button type="button" data-polyaction="edit" data-index="'+i+'" '+(!state.editing?'disabled':'')+'>'+(!xyOk?'CORRIGIR CDS':'EDITAR CDS')+'</button><button type="button" data-polyaction="validate" data-index="'+i+'" '+(!state.editing||!xyOk?'disabled':'')+'>VALIDAR CDS</button><button type="button" data-polyaction="up" data-index="'+i+'" '+(!state.editing||i===0?'disabled':'')+'>↑</button><button type="button" data-polyaction="down" data-index="'+i+'" '+(!state.editing||i===raw.length-1?'disabled':'')+'>↓</button><button type="button" data-polyaction="remove" data-index="'+i+'" '+(!state.editing?'disabled':'')+'>REMOVER</button></div>';}).join(''):'<div class="mp-note">Adicione as CDS na ordem do contorno da zona.</div>';const geometryReady=polyMode&&p.length>=3&&!pa.metrics?.geometryDeferred&&Number.isFinite(geom?.area)&&Number.isFinite(geom?.perimeter);el.innerHTML=raw.length?`Vértices armazenados: <b>${raw.length}</b> • validados: <b>${validated}/${raw.length}</b>${polyMode?(p.length>=3?(geometryReady?`<br>Polígono ativo e fechado ✓ • área ~<b>${Math.round(geom.area).toLocaleString('pt-BR')} m²</b> • perímetro ~<b>${Math.round(geom.perimeter)} m</b>`:'<br>Polígono selecionado • <b>geometria aguardando correção das CDS</b>.'):'<br>Modo POLÍGONO ativo • adicione pelo menos 3 CDS para fechar a zona.'):'<br>Modo CENTRO + RAIO ativo • polígono armazenado sem interferir na zona.'}`:(polyMode?'Nenhum vértice cadastrado • modo POLÍGONO aguardando CDS.':'Nenhum vértice cadastrado • usando Centro + Raio.');if(polyMode&&raw.length>=3&&crit.length){const rank={BLOQUEIO:0,ALERTA:1,'ATENÇÃO':2};crit.sort((a,b)=>(rank[a.level]??9)-(rank[b.level]??9));el.innerHTML+='<br><br><b>DIAGNÓSTICO DA ZONA</b><br>'+crit.map(x=>'<span><b>['+esc(x.level)+']</b> '+esc(x.message)+(x.action?'<br><small>↳ '+esc(x.action)+'</small>':'')+'</span>').join('<br><br>');if(pa.metrics&&!pa.metrics.geometryDeferred)el.innerHTML+='<br><br><b>MÉTRICAS</b><br>Dimensões ~<b>'+Math.round(pa.metrics.width)+' × '+Math.round(pa.metrics.height)+' m</b> • proporção <b>'+pa.metrics.aspectRatio.toFixed(1)+':1</b><br>Compactação <b>'+(pa.metrics.compactness*100).toFixed(0)+'%</b> • concavidade <b>'+Math.round(pa.metrics.concavity*100)+'%</b> • lados <b>'+Math.round(pa.metrics.minSide)+'–'+Math.round(pa.metrics.maxSide)+' m</b>';}else if(polyMode&&raw.length>=3)el.innerHTML+='<br><br><b>Geometria:</b> sem problemas estruturais detectados ✓';
+    ['mpDomPolygonAdd','mpDomPolygonPlace','mpDomPolygonBulkAdd','mpDomPolygonValidateAll','mpDomPolygonUndo','mpDomPolygonClear','mpDomProposalApply'].forEach(id=>{const b=qs('#'+id);if(b)b.disabled=!state.editing;});const placeBtn=qs('#mpDomPolygonPlace');if(placeBtn){placeBtn.textContent=state.polygonPlacement?'PARAR MARCAÇÃO':'MARCAR VÉRTICE NO MAPA';placeBtn.setAttribute('aria-pressed',state.polygonPlacement?'true':'false');}if(state.map?.getContainer()&&state.polygonPlacement){state.map.getContainer().style.cursor='crosshair';qs('#missionPlannerMap')?.classList.add('mp-crosshair');}const prop=state.zoneProposal;if(prop){const names={square:'QUADRADO',rectangle:'RETÂNGULO',triangle:'TRIÂNGULO',hexagon:'HEXÁGONO'};el.innerHTML+='<br><br><b>Proposta visual:</b> '+esc(names[prop.shape]||String(prop.shape||'FORMA').toUpperCase())+' • '+prop.points.length+' vértices • ainda não aplicada.';}
+  }
+
   function renderCoverage(){
-    ensureCoverageUi();ensureSafeRouteUi();const m=active(),
+    ensureCoverageUi();ensureSafeRouteUi();ensureDominationPolygonUi();const m=active(),
 el=qs('#mpCoverageStatus'),
 title=qs('#mpCoverageTitle'),
 inp=qs('#mpEventRadius'),
@@ -1577,12 +1751,14 @@ btn=qs('#mpUseRecommendedRadius');if(!m||!el)return;
 used=effectiveEventRadius(m),
 s=coverageStats(m),
 counts=zoneCoverageCounts(m);
-    if(title)title.textContent=category==='gas'?'COBERTURA INICIAL DA SAFE / GÁS':'ÁREA DA DOMINAÇÃO';
+    if(title)title.textContent=category==='gas'?'COBERTURA INICIAL DA SAFE / GÁS':'ZONA DE PONTUAÇÃO — DOMINAÇÃO';const modeWrap=qs('#mpZoneModeWrap'),modeEl=qs('#mpZoneMode');if(modeWrap)modeWrap.style.display=category==='dominacao'?'block':'none';if(modeEl&&document.activeElement!==modeEl)modeEl.value=m.zoneMode||(dominationPolygon(m).length>=3?'polygon':'radius');
     if(inp&&document.activeElement!==inp)inp.value=used;
-    const note=qs('#mpCoverageBox .mp-note');
+    const note=qs('#mpCoverageBox .mp-note');renderDominationPolygonUi();
     if(category==='dominacao'){
-      el.innerHTML=`Raio da área de Dominação: <b>${used} m</b><br>${s?`Spawn mais distante do centro: <b>${s.farthestIndex>=0?String(s.farthestIndex+1).padStart(2,'0'):'—'}</b> • ${s.max.toFixed(0)} m<br>`:''}<span style="color:#9ed7ff">Os spawns podem ficar dentro ou fora desta área. Isso não é erro.</span>`;
-      if(note)note.textContent='Ajuste somente o tamanho da área que será disputada. A posição dos spawns é independente da área de Dominação.';
+      const geom=dominationZoneGeometry(m),outsideAccess=(m.points||[]).filter(isValidated).map(p=>dominationAccessDistance(m,p)).filter(Number.isFinite),minAccess=outsideAccess.length?Math.min(...outsideAccess):null,maxAccess=outsideAccess.length?Math.max(...outsideAccess):null,aa=dominationAccessAnalysis(m);
+      const fair=dominationFairnessAnalysis(m),fairWarn=dominationFairnessWarnings(m),usedEdges=aa?new Set(aa.access.map(x=>x.edge).filter(Boolean)).size:0,accessSummary=aa?`${geom.mode==='polygon'?`Bordas com aproximação: <b>${usedEdges}/${geom.vertices}</b> • `:''}Cobertura angular: <b>${aa.sectors}/4 quadrantes</b> • maior trecho sem entrada: <b>${aa.largestGap.toFixed(0)}°</b><br>${fair?`Mediana de aproximação: <b>${fair.median.toFixed(0)} m</b> • amplitude: <b>${fair.spread.toFixed(0)} m</b><br>`:''}${fairWarn.length?`<span style="color:#ffd27a"><b>Crítica de equidade:</b><br>${fairWarn.map(x=>'• '+esc(x)).join('<br>')}</span><br>`:''}`:'';
+      el.innerHTML=`${geom.mode==='polygon'?`Zona por polígono: <b>${geom.vertices} vértices</b> • área ~<b>${Math.round(geom.area).toLocaleString('pt-BR')} m²</b><br>`:(geom.mode==='polygon-incomplete'?`Zona por polígono: <b>EM CONSTRUÇÃO</b> • ${geom.vertices}/3+ vértices válidos<br>`:(geom.mode==='polygon-invalid'?`Zona por polígono: <b>AGUARDANDO CORREÇÃO</b> • existem CDS com X/Y inválidos<br>`:`Zona por raio: <b>${used} m</b><br>`))}Spawns/entradas cadastrados: <b>${counts.total}</b><br>${minAccess!==null?`Distância até a borda da zona: <b>${minAccess.toFixed(0)}–${maxAccess.toFixed(0)} m</b><br>`:''}${geom.mode==='polygon-incomplete'?'<span style="color:#ffd27a"><b>Análise de acesso pausada:</b> conclua o contorno com pelo menos 3 CDS válidas. Distâncias, quadrantes e equidade serão recalculados automaticamente quando a zona fechar.</span><br>':(geom.mode==='polygon-invalid'?'<span style="color:#ff9b9b"><b>Análise de acesso pausada:</b> corrija as CDS com X/Y inválidos. O sistema não conectará vértices ignorando pontos inválidos.</span><br>':'')}${accessSummary}<span style="color:#9ed7ff">A pontuação acontece dentro da zona. Os spawns podem e normalmente devem ficar externos, funcionando como pontos de entrada para a disputa.</span>`;
+      if(note)note.textContent='Projete uma área ampla de disputa, com espaço para movimentação, cobertura e flancos. Evite zonas pequenas que permitam marcar facilmente os jogadores ou controlar todas as entradas.';
       if(btn){btn.style.display='none';btn.disabled=true;}
       const gen=qs('#mpGenerateInsideZone');if(gen){gen.style.display='none';gen.disabled=true;}
     }else{
@@ -1599,10 +1775,10 @@ counts=zoneCoverageCounts(m);
   }
 
   function fitZone(){
-    const m=active();if(!state.map||!m||!validCoord(m.center?.x)||!validCoord(m.center?.y))return;
-    const r=effectiveEventRadius(m);if(r<=0)return;
-    const temp=L.circle(ll(m.center.x,m.center.y),{radius:r});state.map.fitBounds(temp.getBounds(),{padding:[35,
-35]});
+    const m=active();if(!state.map||!m)return;const poly=dominationPolygon(m),polyMode=(m.category||'dominacao')==='dominacao'&&dominationZoneMode(m)==='polygon';
+    if(polyMode&&poly.length){const arr=poly.map(p=>ll(p.x,p.y));if(arr.length===1){state.map.setView(arr[0],Math.max(state.map.getZoom()||0,5));}else state.map.fitBounds(L.latLngBounds(arr).pad(.12),{padding:[35,35],maxZoom:6});return;}
+    if(polyMode)return;
+    if(!validCoord(m.center?.x)||!validCoord(m.center?.y))return;const r=effectiveEventRadius(m);if(r<=0)return;const temp=L.circle(ll(m.center.x,m.center.y),{radius:r});state.map.fitBounds(temp.getBounds(),{padding:[35,35],maxZoom:6});
   }
   function generateInsideZone(){
     if(!requireEdit())return;const m=active();if(!m||!validCoord(m.center?.x)||!validCoord(m.center?.y)){alert('Defina primeiro o centro da zona.');return;}
@@ -1626,14 +1802,165 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     if(qs('#mpCount'))qs('#mpCount').textContent=m.points.length;
     if(qs('#mpValidCount'))qs('#mpValidCount').textContent=m.points.filter(isValidated).length;
     if(qs('#mpPendingCount'))qs('#mpPendingCount').textContent=m.points.filter(p=>!isValidated(p)).length;
-    if(qs('#mpOverlap'))qs('#mpOverlap').textContent=over;
+    if(qs('#mpOverlap'))qs('#mpOverlap').textContent=over+(spawnProblems(m).duplicates.length?' • '+spawnProblems(m).duplicates.length+' duplicado(s)':'');
     if(qs('#mpNearest'))qs('#mpNearest').textContent=pair?`${pair[0]} ↔ ${pair[1]} • ${min.toFixed(1)} m`:'—';
   }
   function rawCds(p){return `${f(p.x)},${f(p.y)},${f(p.z)},${f(p.h)}`;}
   function tpCds(p){const z=Number.isFinite(Number(p?.z))?Number(p.z):0;const h=Number.isFinite(Number(p?.h))?Number(p.h):0;return `${f(p.x)},${f(p.y)},${f(z)},${f(h)}`;}
+  /* V9.6 DEV — pacote de produtividade/validação do Planejador */
+  function median(nums){const a=nums.filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;const i=Math.floor(a.length/2);return a.length%2?a[i]:(a[i-1]+a[i])/2;}
+  function pointSegmentDistance(p,a,b){const px=Number(p.x),py=Number(p.y),ax=Number(a.x),ay=Number(a.y),bx=Number(b.x),by=Number(b.y),dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;if(!l2)return Math.hypot(px-ax,py-ay);const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/l2));return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));}
+  function polygonEdgeAccess(m,p){const poly=activeDominationPolygon(m);if(poly.length<3)return null;let best={distance:Infinity,edge:0};for(let i=0;i<poly.length;i++){const d=pointSegmentDistance(p,poly[i],poly[(i+1)%poly.length]);if(d<best.distance)best={distance:d,edge:i+1};}return best;}
+  function pointOnSegment(p,a,b,epsilon=.15){const px=Number(p.x),py=Number(p.y),ax=Number(a.x),ay=Number(a.y),bx=Number(b.x),by=Number(b.y),dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy;if(!Number.isFinite(px)||!Number.isFinite(py)||!l2)return Math.hypot(px-ax,py-ay)<=epsilon;const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/l2)),x=ax+t*dx,y=ay+t*dy;return Math.hypot(px-x,py-y)<=epsilon;}
+  function pointInPolygon(p,poly){if(!p||!poly||poly.length<3)return false;for(let i=0;i<poly.length;i++)if(pointOnSegment(p,poly[i],poly[(i+1)%poly.length]))return true;const x=Number(p.x),y=Number(p.y);let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const xi=Number(poly[i].x),yi=Number(poly[i].y),xj=Number(poly[j].x),yj=Number(poly[j].y);if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;}return inside;}
+  function spawnInsideDomination(m,p){const poly=activeDominationPolygon(m);if(poly.length>=3)return pointInPolygon(p,poly);if(!validCoord(m?.center?.x)||!validCoord(m?.center?.y))return false;return pointDistanceFromCenter(m,p)<=effectiveEventRadius(m);}
+  function dominationAccessDistance(m,p){if(['polygon-incomplete','polygon-invalid'].includes(dominationZoneGeometry(m).mode))return null;if(spawnInsideDomination(m,p))return 0;const edge=polygonEdgeAccess(m,p);return edge?edge.distance:Math.max(0,pointDistanceFromCenter(m,p)-effectiveEventRadius(m));}
+  function nearestPolygonEdgePoint(m,p){const poly=activeDominationPolygon(m);if(poly.length<3)return null;let best={distance:Infinity,x:null,y:null,edge:null};for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],px=Number(p.x),py=Number(p.y),ax=Number(a.x),ay=Number(a.y),dx=Number(b.x)-ax,dy=Number(b.y)-ay,l2=dx*dx+dy*dy,t=l2?Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/l2)):0,x=ax+t*dx,y=ay+t*dy,d=Math.hypot(px-x,py-y);if(d<best.distance)best={distance:d,x,y,edge:i+1};}return best;}
+  function dominationAccessTarget(m,p){if(['polygon-incomplete','polygon-invalid'].includes(dominationZoneGeometry(m).mode))return null;if(spawnInsideDomination(m,p))return {x:Number(p.x),y:Number(p.y),distance:0,edge:null,inside:true};const edge=nearestPolygonEdgePoint(m,p);if(edge)return {...edge,inside:false};if(!validCoord(m?.center?.x)||!validCoord(m?.center?.y))return null;const dx=Number(p.x)-Number(m.center.x),dy=Number(p.y)-Number(m.center.y),d=Math.hypot(dx,dy),r=effectiveEventRadius(m);if(!d)return {x:Number(m.center.x),y:Number(m.center.y),distance:0,edge:null};return {x:Number(m.center.x)+dx/d*r,y:Number(m.center.y)+dy/d*r,distance:Math.max(0,d-r),edge:null};}
+  function drawDominationAccess(m){if((m?.category||'dominacao')!=='dominacao'||state.layerVisibility?.access===false)return;(m.points||[]).filter(isValidated).forEach(p=>{const t=dominationAccessTarget(m,p);if(!t)return;if(!t.inside){const line=L.polyline([ll(p.x,p.y),ll(t.x,t.y)],{weight:2,opacity:.72,dashArray:'6 7',interactive:false}).addTo(state.map);line._mpKind='access';state.drawn.push(line);}const label=L.marker(ll(t.x,t.y),{interactive:false,icon:L.divIcon({className:'',html:'<div style="white-space:nowrap;background:rgba(8,10,18,.82);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:2px 5px;color:#fff;font:10px system-ui">'+(t.inside?'DENTRO DA ZONA':Math.round(t.distance)+'m'+(t.edge?' • L'+t.edge:''))+'</div>',iconAnchor:[18,-4]})}).addTo(state.map);label._mpKind='access';state.drawn.push(label);});}
+
+  function dominationAccessAnalysis(m){
+    if(['polygon-incomplete','polygon-invalid'].includes(dominationZoneGeometry(m).mode))return null;
+    const pts=(m?.points||[]).filter(isValidated),center=dominationAnalysisCenter(m);if(!m||pts.length<2||!center)return null;
+    const poly=activeDominationPolygon(m),access=pts.map(p=>{let deg=Math.atan2(Number(p.y)-Number(center.y),Number(p.x)-Number(center.x))*180/Math.PI;if(deg<0)deg+=360;const inside=spawnInsideDomination(m,p),edge=!inside&&poly.length>=3?polygonEdgeAccess(m,p):null;return {id:p.id,deg,distanceToEdge:inside?0:(edge?edge.distance:Math.max(0,pointDistanceFromCenter(m,p)-effectiveEventRadius(m))),edge:edge?.edge||null,inside};}).sort((a,b)=>a.deg-b.deg);
+    let largestGap=0;for(let i=0;i<access.length;i++){const a=access[i].deg,b=i===access.length-1?access[0].deg+360:access[i+1].deg;largestGap=Math.max(largestGap,b-a);}
+    const sectors=new Set(access.map(x=>Math.floor(x.deg/90)%4));
+    return {access,largestGap,sectors:sectors.size};
+  }
+  function dominationFairnessAnalysis(m){
+    const aa=dominationAccessAnalysis(m);if(!aa?.access?.length)return null;const inside=aa.access.filter(x=>x.inside),external=aa.access.filter(x=>!x.inside),ds=external.map(x=>x.distanceToEdge).filter(Number.isFinite),med=median(ds);if(med===null)return {median:null,q1:null,q3:null,spread:0,short:[],long:[],maxEdge:null,total:aa.access.length,externalTotal:external.length,inside,external,access:aa.access};
+    const sorted=[...ds].sort((a,b)=>a-b),q1=sorted[Math.floor((sorted.length-1)*.25)]||0,q3=sorted[Math.floor((sorted.length-1)*.75)]||0,spread=(Math.max(...ds)-Math.min(...ds));
+    const short=external.filter(x=>x.distanceToEdge<Math.max(30,med*.55)),long=external.filter(x=>x.distanceToEdge>Math.max(med*1.65,med+180));
+    const edgeCounts={};external.forEach(x=>{if(x.edge)edgeCounts[x.edge]=(edgeCounts[x.edge]||0)+1;});const maxEdge=Object.entries(edgeCounts).sort((a,b)=>b[1]-a[1])[0]||null;
+    return {median:med,q1,q3,spread,short,long,maxEdge,total:aa.access.length,externalTotal:external.length,inside,external,access:aa.access};
+  }
+  function dominationFairnessWarnings(m){
+    const f=dominationFairnessAnalysis(m),w=[];if(!f)return w;if(f.inside?.length)w.push('Spawn(s) já dentro da Zona de Pontuação: '+f.inside.map(x=>String(x.id).padStart(2,'0')).join(', ')+'. Confira se isso é intencional.');if(f.externalTotal<3)return w;
+    if(f.short.length)w.push('Aproximação muito curta em relação ao conjunto: spawn(s) '+f.short.map(x=>String(x.id).padStart(2,'0')).join(', ')+'. Confira possível vantagem de chegada.');
+    if(f.long.length)w.push('Aproximação muito longa em relação ao conjunto: spawn(s) '+f.long.map(x=>String(x.id).padStart(2,'0')).join(', ')+'. Confira possível desvantagem de chegada.');
+    if(f.maxEdge&&Number(f.maxEdge[1])>=Math.ceil(f.externalTotal*.6))w.push('Concentração de acessos externos: '+f.maxEdge[1]+'/'+f.externalTotal+' spawns se aproximam pela borda L'+f.maxEdge[0]+'. Confira gargalo/camping de entrada.');
+    return w;
+  }
+
+  function plannerAudit(m){
+    const issues=[],warns=[]; if(!m)return {issues:['Nenhuma zona ativa.'],warns:[]};
+    const category=m.category||'dominacao',poly=category==='dominacao'?dominationPolygon(m):[],zoneMode=category==='dominacao'?(m.zoneMode||(poly.length>=3?'polygon':'radius')):null,usesPolygon=category==='dominacao'&&zoneMode==='polygon';if(usesPolygon&&poly.length<3)issues.push('Forma da zona definida como Polígono por CDS, mas ainda faltam vértices válidos para fechar o contorno.');if(!usesPolygon&&(!validCoord(m.center?.x)||!validCoord(m.center?.y)))issues.push(category==='dominacao'?'Centro da Zona de Pontuação não definido para o modo Centro + Raio.':'Centro da zona não definido.');
+    const pending=(m.points||[]).filter(p=>!isValidated(p)); if(pending.length)issues.push(pending.length+' spawn(s) ainda pendente(s) de validação.');
+    if(category==='gas'){const c=zoneCoverageCounts(m);if(c.outside)issues.push(c.outside+' spawn(s) fora da safe inicial.');const r=ensureSafeRoute(m);const configured=r?.stages?.filter(safeStageValid).length||0;if(configured<3)warns.push('Rota progressiva da Safe está com '+configured+'/3 etapas configuradas.');safeRouteAudit(m).forEach(x=>issues.push(x));}
+    else{const radius=effectiveEventRadius(m);if(usesPolygon){const pa=dominationPolygonAudit(m);issues.push(...pa.issues);warns.push(...pa.warns);}else{if(!Number.isFinite(radius)||radius<=0)issues.push('Raio da Zona de Pontuação inválido.');if(radius<150)warns.push('Zona de Pontuação pequena ('+Math.round(radius)+' m de raio). Confira se há espaço suficiente para movimentação, cobertura e flancos.');}const ds=(m.points||[]).filter(isValidated).map(p=>dominationAccessDistance(m,p));if(ds.length>=4){const min=Math.min(...ds),max=Math.max(...ds);if(max-min>300)warns.push('Acessos com diferença relevante: há cerca de '+Math.round(max-min)+' m entre a entrada mais próxima e a mais distante da borda da zona.');dominationFairnessWarnings(m).forEach(x=>warns.push(x));const aa=dominationAccessAnalysis(m);if(aa&&aa.sectors<3)warns.push('Acessos concentrados em apenas '+aa.sectors+' setor(es) ao redor da zona; confira se existem rotas de aproximação por lados diferentes.');if(aa&&aa.largestGap>180)warns.push('Há mais de 180° da Zona de Pontuação sem entrada cadastrada; confira risco de concentração da disputa em um único lado.');}}
+    const allProblems=spawnProblems(m);if(allProblems.duplicates.length)issues.push(allProblems.duplicates.length+' par(es) de spawns praticamente duplicados (< 2 m).');
+    const pts=(m.points||[]).filter(p=>isValidated(p));
+    let nearest=Infinity,pair=null;for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const d=distXY(pts[i],pts[j]);if(d<nearest){nearest=d;pair=[pts[i].id,pts[j].id];}}
+    const minRecommended=(Number(m.spawnRadius)||100)*2;if(pair&&nearest<minRecommended)warns.push('Spawns '+pair[0]+' e '+pair[1]+' estão muito próximos ('+nearest.toFixed(0)+' m).');
+    const zs=pts.map(p=>Number(p.z)).filter(Number.isFinite),med=median(zs);if(med!==null){const odd=pts.filter(p=>Math.abs(Number(p.z)-med)>80);if(odd.length)warns.push('Altitude atípica em '+odd.length+' spawn(s): '+odd.map(p=>p.id).join(', ')+'.');}
+    return {issues,warns};
+  }
+  function zoneOperation(m){if(!m)return 'alter-zone';if(m.requestKind==='create-event')return 'create-event';if(m.requestKind==='create-zone'||m.official===false)return 'create-zone';return 'alter-zone';}
+  function requestComparable(m){if(!m)return null;const x=JSON.parse(JSON.stringify(m));delete x.updatedAt;delete x._lastSavedRequestBase;delete x.requestText;return x;}
+  function requestChangeScope(m){
+    const base=m?._lastSavedRequestBase;if(!base)return {safeOnly:false,hasBase:false};
+    const now=requestComparable(m),before=requestComparable(base),nowSafe=JSON.stringify(now?.safeRoute||null),beforeSafe=JSON.stringify(before?.safeRoute||null);
+    if(now)delete now.safeRoute;if(before)delete before.safeRoute;
+    const n=JSON.parse(JSON.stringify(now||{})),b=JSON.parse(JSON.stringify(before||{}));
+    const nPoints=JSON.stringify(n.points||[]),bPoints=JSON.stringify(b.points||[]),nCenter=JSON.stringify(n.center||{}),bCenter=JSON.stringify(b.center||{}),nRadius=JSON.stringify({eventRadius:n.eventRadius,circleRadius:n.circleRadius}),bRadius=JSON.stringify({eventRadius:b.eventRadius,circleRadius:b.circleRadius}),nPoly=JSON.stringify(n.zonePolygon||[]),bPoly=JSON.stringify(b.zonePolygon||[]);
+    const safeOnly=nowSafe!==beforeSafe&&JSON.stringify(now)===JSON.stringify(before);
+    ['points','center','eventRadius','circleRadius','zonePolygon','zoneMode'].forEach(k=>{delete n[k];delete b[k];});
+    const commonSame=JSON.stringify(n)===JSON.stringify(b),zoneChanged=nCenter!==bCenter||nRadius!==bRadius||nPoly!==bPoly||(before?.zoneMode||null)!==(now?.zoneMode||null),spawnsOnly=nPoints!==bPoints&&!zoneChanged&&commonSame,zoneOnly=nPoints===bPoints&&zoneChanged&&commonSame;
+    const beforePoly=(before?.zonePolygon||[]).filter(p=>validCoord(p?.x)&&validCoord(p?.y)),nowPoly=(now?.zonePolygon||[]).filter(p=>validCoord(p?.x)&&validCoord(p?.y)),beforeZoneMode=before?.zoneMode||(beforePoly.length>=3?'polygon':'radius'),nowZoneMode=now?.zoneMode||(nowPoly.length>=3?'polygon':'radius'),zoneTransition=beforeZoneMode===nowZoneMode?(nowZoneMode==='polygon'&&nPoly!==bPoly?'polygon-to-polygon':null):(beforeZoneMode+'-to-'+nowZoneMode);return {hasBase:true,safeOnly,safeChanged:nowSafe!==beforeSafe,spawnsOnly,zoneOnly,polygonChanged:nPoly!==bPoly,zoneChanged,beforeZoneMode,nowZoneMode,zoneTransition};
+  }
+  function highRequestExport(){
+    const m=active();if(!m)return '';const a=plannerAudit(m),pts=(m.points||[]).filter(isValidated),r=(m.category||'dominacao')==='gas'?ensureSafeRoute(m):null,isSurvival=/sobreviv[eê]ncia/i.test(m.event||''),change=requestChangeScope(m),polyRaw=(m.category||'dominacao')==='dominacao'&&Array.isArray(m.zonePolygon)?m.zonePolygon:[],polyAudit=(m.category||'dominacao')==='dominacao'?dominationPolygonAudit(m):null,polyPending=polyRaw.filter(v=>validCoord(v?.x)&&validCoord(v?.y)&&(!validCoord(v?.z)||v?.status!=='validated')).length,polyInvalid=polyRaw.filter(v=>!validCoord(v?.x)||!validCoord(v?.y)).length;
+    const operation=zoneOperation(m),creating=operation==='create-event'||operation==='create-zone',zoneName=m.name||'Zona Principal',eventName=m.event||'Sem nome',facXFac=/fac\s*x\s*fac/i.test(eventName),subject=operation==='create-event'?'Solicitação de Criação do Evento '+eventName:(operation==='create-zone'?'Solicitação de Criação de Zona do Evento '+eventName+' — Zona '+zoneName:'Solicitação de Alteração da Zona do Evento '+eventName+' — Zona '+zoneName);
+    const lines=['ASSUNTO:','- '+subject+'.','','SOLICITAÇÃO:','- '+(creating?'Solicitamos a criação':'Solicitamos a alteração')+' da zona "'+zoneName+'" do evento "'+eventName+'" no painel '+(m.panel||'/ilegal')+'.'];
+    if(facXFac&&!creating)lines.push('- Evento base: Fac x Fac.');
+    if(dominationZoneMode(m)==='polygon'&&(polyPending>0||polyInvalid>0)){lines.push('','STATUS DA ENTREGA:','- RASCUNHO — NÃO IMPLEMENTAR AINDA.');if(polyPending>0)lines.push('- Existem '+polyPending+' vértice(s) do polígono pendente(s) de validação com CDS reais no FiveM.');if(polyInvalid>0)lines.push('- Existem '+polyInvalid+' vértice(s) com X/Y inválidos que precisam ser corrigidos antes de fechar a zona.');lines.push('- As coordenadas válidas abaixo podem ser usadas para planejamento visual, mas devem ser confirmadas antes da implementação.');}
+    if(isSurvival)lines.push('','BASE DO EVENTO — CLONE DO FAC X FAC:','- Utilizar o Fac X Fac atual como base do Sobrevivência.','- Preservar as mecânicas, regras, sistemas, escalação, inventário entregue aos participantes, caixas de loot, drop de itens ao morrer, ping para aliados, ranking e premiações já existentes no Fac X Fac.','- Não recriar nem alterar essas mecânicas sem necessidade; a diferença funcional desta solicitação é a SAFE DINÂMICA progressiva descrita abaixo.');
+    if(change.safeOnly&&!creating)lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva da SAFE progressiva desta zona.','- Manter centro, raio inicial, spawns, regras e demais configurações atuais sem alteração.','- Implementar somente as etapas, movimentos e possibilidades da SAFE descritas abaixo.');
+    else if(change.spawnsOnly&&!creating)lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva dos pontos de spawn desta zona.','- Manter centro, raio/zona de disputa, regras e demais configurações atuais sem alteração.','- Atualizar somente os spawns conforme as CDS abaixo.','','SPAWNS ATUALIZADOS:',...pts.map((p,i)=>'  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)));
+    else if(change.zoneOnly&&!creating){const poly=dominationPolygon(m),polyMode=dominationZoneMode(m)==='polygon';lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva da Zona de Pontuação deste evento.','- Manter spawns, mecânica de pontuação, regras, premiações e demais configurações atuais sem alteração.');if(polyMode&&poly.length<3){lines.push('- A forma escolhida é POLÍGONO POR CDS, porém o contorno ainda está incompleto.','- NÃO converter para Centro + Raio e NÃO implementar esta alteração enquanto faltarem vértices.','','ZONA ATUALIZADA — POLÍGONO EM CONSTRUÇÃO:','- Vértices válidos cadastrados: '+poly.length+' / mínimo 3.');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));}else if(polyMode&&poly.length>=3){if(change.zoneTransition==='radius-to-polygon')lines.push('- Converter a Zona de Pontuação atual de CENTRO + RAIO para POLÍGONO POR CDS.');else if(change.zoneTransition==='polygon-to-polygon')lines.push('- Substituir o contorno atual do POLÍGONO pelas novas CDS abaixo.');else lines.push('- Atualizar os limites da Zona de Dominação pelas CDS abaixo.');lines.push('','ZONA ATUALIZADA — POLÍGONO POR CDS:');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));lines.push('- As CDS acima formam o limite da Zona de Dominação, devem ser ligadas na ordem informada e fechadas do último ponto ao primeiro.','- Estas CDS NÃO são pontos de spawn.');}else{if(change.zoneTransition==='polygon-to-radius')lines.push('- Converter a Zona de Pontuação atual de POLÍGONO POR CDS para CENTRO + RAIO.','- O polígono/CDS de contorno anterior deixa de definir a área válida da Zona de Pontuação.','- Manter os pontos de spawn atuais sem alteração.');else lines.push('- Atualizar somente o centro e o raio conforme abaixo.');lines.push('','ZONA ATUALIZADA — CENTRO + RAIO:','- Centro: '+f(m.center?.x)+', '+f(m.center?.y)+', '+f(m.center?.z),'- Raio: '+Math.round(effectiveEventRadius(m))+'m');}}
+    else{const poly=dominationPolygon(m),polyMode=dominationZoneMode(m)==='polygon';lines.push('','CONFIGURAÇÃO DA ZONA:');if((m.category||'dominacao')==='dominacao'&&polyMode&&poly.length<3){lines.push('- Forma da Zona de Pontuação: POLÍGONO POR CDS — INCOMPLETO.','- Vértices válidos cadastrados: '+poly.length+' / mínimo 3.','- NÃO implementar como Centro + Raio; concluir e validar o polígono antes da implementação.');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));}else if((m.category||'dominacao')==='dominacao'&&polyMode&&poly.length>=3){lines.push('- Forma da Zona de Pontuação: POLÍGONO POR CDS.','- CDS que formam o limite da Zona de Dominação:');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));lines.push('- Ligar as CDS na ordem informada e fechar do último ponto ao primeiro.','- Estas CDS formam a zona e NÃO são spawns.');}else lines.push('- Forma da zona: CENTRO + RAIO.','- Centro: '+f(m.center?.x)+', '+f(m.center?.y)+', '+f(m.center?.z),'- Raio inicial: '+Math.round(effectiveEventRadius(m))+'m');lines.push('','SPAWNS / PONTOS DE ENTRADA:','- Spawns validados: '+pts.length);pts.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)));}
+    if(r){lines.push('','SAFE DINÂMICA:','- Referência vertical da Safe: Z = 0.','- Fluxo: FECHA 1 → MOVE → FECHA 2 → MOVE → SAFE FINAL.');r.stages.forEach((st,i)=>lines.push('- Safe '+(i+1)+': '+f(st.x)+', '+f(st.y)+', 0.00 | raio '+Math.round(Number(st.radius)||0)+'m | fechamento '+(Number(st.closeSeconds)||0)+'s'+(i<2?' | movimento '+(Number(st.moveSeconds)||0)+'s':'')));const o2=(r.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),o3=(r.stage3Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));if(o2.length){lines.push('','OPÇÕES ALEATÓRIAS — SAFE 2:');o2.forEach((p,i)=>lines.push('  S2-'+(i+1)+' - '+f(p.x)+', '+f(p.y)+', 0.00'));}if(o3.length){lines.push('','OPÇÕES ALEATÓRIAS — SAFE 3:');o3.forEach((p,i)=>lines.push('  S3-'+(i+1)+' - '+f(p.x)+', '+f(p.y)+', 0.00'));}if(o2.length&&o3.length){const pairs=[];o2.forEach((p2,i2)=>{const parent={...r.stages[1],x:p2.x,y:p2.y,z:0};if(!safeCircleFits(r.stages[0],parent))return;o3.forEach((p3,i3)=>{const child={...r.stages[2],x:p3.x,y:p3.y,z:0};if(safeCircleFits(parent,child))pairs.push('S2-'+(i2+1)+' → S3-'+(i3+1));});});lines.push('','COMBINAÇÕES VÁLIDAS PARA SORTEIO:');if(pairs.length)pairs.forEach(x=>lines.push('  - '+x));else lines.push('  - NENHUMA COMBINAÇÃO VÁLIDA — corrigir antes da implementação.');}if(o2.length||o3.length)lines.push('','REGRA DO SORTEIO:','- Sortear somente rotas geometricamente compatíveis: a Safe seguinte deve permanecer completamente contida na Safe anterior.','- Nunca sortear uma combinação S2 → S3 incompatível; utilizar apenas combinações aprovadas pela validação da rota.');lines.push('- Duração configurada da progressão: '+(safeTimeline(m).at(-1)?.at||0)+' segundos.');}
+    lines.push('','VALIDAÇÃO:');if(!a.issues.length&&!a.warns.length)lines.push('- Configuração aprovada pelas validações automáticas do Planejador.');else{a.issues.forEach(x=>lines.push('- BLOQUEIO: '+x));a.warns.forEach(x=>lines.push('- AVISO: '+x));}
+    lines.push('','OBSERVAÇÕES:',isSurvival?'- O Fac X Fac existente permanece como referência de funcionamento; implementar somente as diferenças necessárias para o Sobrevivência.':'- Preservar as mecânicas/regras já existentes do evento base quando aplicável.','- As CDS acima estão em formato simples; vec3/vec4 não é obrigatório.','- Spawns utilizam Z real; somente a referência visual da Safe utiliza Z = 0.');
+    return lines.join('\n');
+  }
+  function technicalSummary(){
+    const m=active();if(!m)return '';const a=plannerAudit(m),tl=(m.category||'dominacao')==='gas'?safeTimeline(m):[];
+    return ['EVENTO: '+m.event,'ZONA: '+m.name,'STATUS: '+(a.issues.length?'BLOQUEADO':a.warns.length?'PRONTO COM AVISOS':'PRONTO'),'SPAWNS: '+(m.points||[]).filter(isValidated).length+'/'+(m.points||[]).length,'RAIO: '+Math.round(effectiveEventRadius(m))+'m',...(tl.length?['SAFE: '+tl.map(x=>x.label+' @ '+x.at+'s / '+Math.round(x.radius)+'m').join(' | ')]:[]),...(a.issues.length?['BLOQUEIOS: '+a.issues.join(' • ')]:[]),...(a.warns.length?['AVISOS: '+a.warns.join(' • ')]:[])].join('\n');
+  }
+  function exportMission(format='lua'){
+    const m=active();if(!m)return '';if(format==='high')return highRequestExport();if(format==='summary')return technicalSummary();const pts=(m.points||[]).filter(isValidated);
+    if(format==='json')return JSON.stringify({event:m.event,zone:m.name,center:m.center,radius:effectiveEventRadius(m),spawns:pts,safeRoute:m.safeRoute||null},null,2);
+    if(format==='plain')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)).join('\n');
+    if(format==='vec3')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - vec3('+f(p.x)+', '+f(p.y)+', '+f(p.z)+')').join('\n');
+    if(format==='vec4')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - vec4('+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)+')').join('\n');
+    return pts.map((p,i)=>'['+(i+1)+'] = vector4('+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)+'),').join('\n');
+  }
+  function togglePlannerFullscreen(){
+    const el=qs('#missionPlannerMap')?.closest('.mp-map-card')||qs('#missionPlannerMap');if(!el)return;
+    el.classList.toggle('mp-pro-fullscreen');const on=el.classList.contains('mp-pro-fullscreen');
+    Object.assign(el.style,on?{position:'fixed',inset:'0',zIndex:'99999',background:'#0b1018',padding:'12px'}:{position:'',inset:'',zIndex:'',background:'',padding:''});
+    const map=qs('#missionPlannerMap');if(map)map.style.height=on?'calc(100vh - 24px)':'';
+    qsa('.mp-map-toolbar,.mp-map-status',el).forEach(x=>x.style.display=on?'none':'');
+    if(on&&active()){const m=active(),pts=(m.points||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>ll(p.x,p.y));if(validCoord(m.center?.x)&&validCoord(m.center?.y))pts.push(ll(m.center.x,m.center.y));if(pts.length>1)setTimeout(()=>state.map?.fitBounds(L.latLngBounds(pts).pad(.08),{maxZoom:5}),120);}
+    setTimeout(()=>state.map?.invalidateSize(),80);
+  }
+  function applyLayerVisibility(){
+    (state.drawn||[]).forEach(l=>{const k=l._mpKind;if(!k)return;const visible=state.layerVisibility?.[k]!==false;try{if(visible&&!state.map.hasLayer(l))l.addTo(state.map);else if(!visible&&state.map.hasLayer(l))state.map.removeLayer(l);}catch(e){}});
+  }
+  const DRAFT_KEY='highos_mp_edit_draft_v1',LOCAL_PRESETS='highos_mp_local_presets_v1';
+  function saveEditDraft(){
+    if(!state.editing||!state.dirty)return;
+    try{localStorage.setItem(DRAFT_KEY,JSON.stringify({at:nowIso(),activeId:state.activeId,eventId:active()?.eventId,missions:state.missions}));const el=qs('#mpDraftState');if(el)el.textContent='Rascunho salvo às '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}catch(e){}
+  }
+  function clearEditDraft(){try{localStorage.removeItem(DRAFT_KEY)}catch(e){}}
+  function recoverEditDraft(){
+    let d=null;try{d=JSON.parse(localStorage.getItem(DRAFT_KEY)||'null')}catch(e){}
+    if(!d?.missions?.length)return;
+    const current=state.missions.find(m=>m.id===d.activeId),draft=d.missions.find(m=>m.id===d.activeId);
+    if(!draft)return;
+    const newer=!current||new Date(draft.updatedAt||d.at||0)>new Date(current.updatedAt||0);
+    if(newer&&confirm('Existe um rascunho não salvo do Planejador. Deseja recuperar?')){state.missions=d.missions;state.activeId=d.activeId;state.activeEventId=d.eventId||draft.eventId;saveStore();setSaveState('Rascunho recuperado • revise antes de salvar');}
+    clearEditDraft();
+  }
+  function readLocalPresets(){try{return JSON.parse(localStorage.getItem(LOCAL_PRESETS)||'[]')}catch(e){return []}}
+  function saveLocalPreset(){
+    const m=active();if(!m)return;const list=readLocalPresets(),copy=JSON.parse(JSON.stringify(m));copy.id='localpreset_'+Date.now();copy.official=false;copy.createdAt=nowIso();copy.updatedAt=nowIso();list.unshift({name:(m.event||'Evento')+' — '+(m.name||'Zona'),mission:copy});try{localStorage.setItem(LOCAL_PRESETS,JSON.stringify(list.slice(0,12)));renderLocalPresets();}catch(e){alert('Não foi possível salvar o preset local.');}
+  }
+  function renderLocalPresets(){
+    const el=qs('#mpLocalPresets');if(!el)return;const list=readLocalPresets();if(!list.length){el.textContent='Presets locais: nenhum salvo.';return;}
+    el.innerHTML='<b>Presets locais:</b> '+list.map((p,i)=>'<button type="button" data-localpreset="'+i+'" style="margin:3px">'+esc(p.name)+'</button>').join('');
+    qsa('[data-localpreset]',el).forEach(b=>b.onclick=()=>{cleanupSafePresentation();const p=readLocalPresets()[Number(b.dataset.localpreset)];if(!p?.mission)return;const m=JSON.parse(JSON.stringify(p.mission));m.id=uid();m.eventId=eventUid();m.event=(m.event||'Evento')+' (Preset)';m.createdAt=nowIso();m.updatedAt=nowIso();state.missions.push(m);state.activeId=m.id;state.activeEventId=m.eventId;saveStore();render();fit();});
+  }
+  function renderProTools(){
+    let box=qs('#mpProTools');const anchor=qs('#mpSafeRouteBox')||qs('#mpCoverageBox');if(!anchor)return;
+    if(!box){box=document.createElement('div');box.id='mpProTools';box.className='mp-card';box.style.marginTop='10px';box.innerHTML=`<h3>FERRAMENTAS DE MISSÃO</h3>
+      <div id="mpAuditStatus" class="mp-readout"></div>
+      <div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" id="mpAuditBtn">VALIDAR ANTES DE PUBLICAR</button><button type="button" id="mpChecklistBtn">CHECKLIST DO EVENTO</button><button type="button" id="mpCompareBtn">ANTES × DEPOIS</button><button type="button" id="mpFullscreenBtn">MAPA TELA CHEIA</button><button type="button" id="mpSurvivalBtn">CRIAR SOBREVIVÊNCIA DO FAC X FAC</button>
+      </div>
+      <div class="mp-grid" style="margin-top:8px"><label>Exportação<select id="mpExportFormat"><option value="plain">CDS simples</option><option value="lua">Lua / vector4</option><option value="vec4">vec4</option><option value="vec3">vec3</option><option value="json">JSON</option><option value="high">Solicitação HIGH</option><option value="summary">Resumo técnico</option></select></label><label>Camadas<div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:8px"><span><input type="checkbox" data-mplayer="zone" checked> Zona</span><span><input type="checkbox" data-mplayer="spawns" checked> Spawns</span><span><input type="checkbox" data-mplayer="center" checked> Centro</span><span><input type="checkbox" data-mplayer="access"> Acessos</span><span><input type="checkbox" id="mpLegendToggle" checked> Legenda</span><span><input type="checkbox" id="mpCompareLayerToggle"> Antes</span></div></label></div>
+      <div class="mp-grid" style="margin-top:8px"><label>Ir para CDS <small style="opacity:.65">formato livre • vec é opcional</small><input id="mpGoCoord" placeholder="Cole a CDS como tiver: X,Y,Z • vec3/vec4 • /tpcds • /tp..."></label><label>Rascunho<div id="mpDraftState" class="mp-note" style="padding-top:8px">Nenhum rascunho pendente.</div></label></div>
+      <div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpGoCoordBtn">CENTRALIZAR CDS</button><button type="button" id="mpSavePresetBtn">SALVAR COMO PRESET LOCAL</button><button type="button" id="mpCopyExportPro">COPIAR EXPORTAÇÃO</button></div>
+      <div id="mpLocalPresets" class="mp-note" style="margin-top:8px"></div>`;
+      anchor.insertAdjacentElement('afterend',box);
+      qs('#mpAuditBtn')?.addEventListener('click',()=>{renderProTools();const a=plannerAudit(active());alert(a.issues.length?'BLOQUEIOS:\n- '+a.issues.join('\n- ')+(a.warns.length?'\n\nAVISOS:\n- '+a.warns.join('\n- '):''):'Validação concluída sem bloqueios.'+(a.warns.length?'\n\nAvisos:\n- '+a.warns.join('\n- '):''));});
+      qs('#mpChecklistBtn')?.addEventListener('click',()=>{const m=active(),a=plannerAudit(m),r=(m?.category||'dominacao')==='gas'?ensureSafeRoute(m):null,checks=[['Centro definido',validCoord(m?.center?.x)&&validCoord(m?.center?.y)],['Spawns cadastrados',(m?.points?.length||0)>0],['Todos os spawns validados',(m?.points||[]).length>0&&(m?.points||[]).every(isValidated)],['Raio da zona definido',effectiveEventRadius(m)>0],['Safe progressiva completa',!r||r.stages.every(safeStageValid)],['Sem bloqueios automáticos',a.issues.length===0]];alert('CHECKLIST — '+(m?.event||'EVENTO')+'\n\n'+checks.map(([n,ok])=>(ok?'✓ ':'✗ ')+n).join('\n')+(a.warns.length?'\n\nAVISOS:\n- '+a.warns.join('\n- '):''));});
+      qs('#mpCompareBtn')?.addEventListener('click',()=>{const m=active(),old=state.editBackup?.zones?.find(z=>z.id===m?.id);if(!old){alert('Entre em EDITAR ZONA para comparar a versão salva com a alteração atual.');return;}state.compareOverlay=!state.compareOverlay;renderMap();const b=qs('#mpCompareBtn');if(b)b.textContent=state.compareOverlay?'OCULTAR ANTES':'ANTES × DEPOIS';const changes=[];if(Number(old.eventRadius)!==Number(m.eventRadius))changes.push('Raio: '+effectiveEventRadius(old)+' → '+effectiveEventRadius(m)+' m');if(old.points?.length!==m.points?.length)changes.push('Spawns: '+(old.points?.length||0)+' → '+(m.points?.length||0));if(distXY(old.center,m.center)>1)changes.push('Centro movido '+distXY(old.center,m.center).toFixed(0)+' m');setSaveState((state.compareOverlay?'Comparação visual ativa':'Comparação visual ocultada')+(changes.length?' • '+changes.join(' • '):''));});
+      qs('#mpFullscreenBtn')?.addEventListener('click',togglePlannerFullscreen);qs('#mpSurvivalBtn')?.addEventListener('click',cloneFacXFacAsSurvival);
+      qs('#mpGoCoordBtn')?.addEventListener('click',()=>{const r=parseCds(qs('#mpGoCoord')?.value);if(!r.ok||!validCoord(r.x)||!validCoord(r.y)){alert('CDS não reconhecida. Cole pelo menos X e Y.');return;}state.map?.setView(ll(r.x,r.y),5);});
+      qs('#mpGoCoord')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();qs('#mpGoCoordBtn')?.click();}});qs('#mpGoCoord')?.addEventListener('input',e=>{const lab=e.target.closest('label')?.querySelector('small');if(lab)lab.textContent=cdsFormatHint(e.target.value)+' • vec é opcional';});
+      qs('#mpSavePresetBtn')?.addEventListener('click',()=>saveLocalPreset());
+      qsa('[data-mplayer]',box).forEach(c=>{c.checked=state.layerVisibility[c.dataset.mplayer]!==false;c.addEventListener('change',()=>{state.layerVisibility[c.dataset.mplayer]=c.checked;renderMap();});});qs('#mpLegendToggle')?.addEventListener('change',e=>{const x=qs('#mpMapLegend');if(x)x.style.display=e.target.checked?'':'none';});qs('#mpCompareLayerToggle')?.addEventListener('change',e=>{if(!state.editing&&e.target.checked){e.target.checked=false;alert('Entre em EDITAR ZONA para visualizar a versão anterior.');return;}state.compareOverlay=e.target.checked;renderMap();});
+      qs('#mpCopyExportPro')?.addEventListener('click',async()=>{const fmt=qs('#mpExportFormat')?.value||'lua';await copyText(exportMission(fmt));const b=qs('#mpCopyExportPro');if(b){b.textContent='COPIADO ✓';setTimeout(()=>b.textContent='COPIAR EXPORTAÇÃO',900);}});
+    }
+    const a=plannerAudit(active()),el=qs('#mpAuditStatus');if(el)el.innerHTML=a.issues.length?'<b style="color:#ff7474">NÃO PRONTO PARA PUBLICAR</b><br>'+esc(a.issues.join(' • ')):(a.warns.length?'<b style="color:#ffd166">PRONTO COM AVISOS</b><br>'+esc(a.warns.join(' • ')):'<b class="mp-ok">PRONTO PARA PUBLICAR ✓</b><br>Centro, spawns e cobertura passaram nas validações automáticas.');
+    qsa('[data-mplayer]',box).forEach(c=>c.checked=state.layerVisibility?.[c.dataset.mplayer]!==false);const lg=qs('#mpMapLegend');if(lg)lg.style.display=qs('#mpLegendToggle')?.checked===false?'none':'';const ct=qs('#mpCompareLayerToggle');if(ct){ct.checked=!!state.compareOverlay;ct.disabled=!state.editing;}const cb=qs('#mpCompareBtn');if(cb)cb.textContent=state.compareOverlay?'OCULTAR ANTES':'ANTES × DEPOIS';renderLocalPresets();
+  }
+
   function updateExport(){const m=active(),
 out=qs('#mpExport');if(out&&m)out.value=m.points.filter(isValidated).map((p,i)=>`${p.id||i+1} - ${rawCds(p)}`).join('\n');}
-  function render(){adoptStrayCards();ensureSafeRouteUi();adoptStrayCards();renderMissionList();renderPointList();renderMap();analyze();updateExport();syncForm();renderCenterValidation();renderCoverage();renderPlannerBadges();renderWorkspaceBar();renderBackupList();const rt=qs('#mpRequestText'),
+  function render(){adoptStrayCards();ensureSafeRouteUi();adoptStrayCards();renderMissionList();renderPointList();renderMap();analyze();updateExport();syncForm();renderCenterValidation();renderCoverage();renderProTools();renderPlannerBadges();renderWorkspaceBar();renderBackupList();const rt=qs('#mpRequestText'),
 m=active();if(rt&&document.activeElement!==rt)rt.value=m?.requestText||'';loadSnapshotPreview();}
 
   function syncForm(){
@@ -1659,22 +1986,32 @@ v])=>{const el=qs('#'+id);if(el&&document.activeElement!==el)el.value=v;});
     const assist=m.mode==='assistant';qs('#mpModeHint')&&(qs('#mpModeHint').textContent=assist?'ASSISTENTE: todo ponto novo começa PENDENTE (vermelho), recebe Z provisório 0.00 para TPCDS/NC e só fica verde após validação com a CDS real.':'MANUAL: CDS completa e não-zero pode ser adicionada já como validada.');
   }
 
-  function commit(reason='Alteração'){
-    const m=active();if(!m)return;m.updatedAt=nowIso();
-    if(state.editing){state.dirty=true;render();setSaveState(`${reason} • NÃO SALVO`);return;}
-    saveStore();render();setSaveState(`${reason} • salvo`);queueSnapshot();
+  function editSnapshot(){return JSON.stringify({missions:state.missions,activeId:state.activeId,activeEventId:state.activeEventId});}
+  function pushUndo(){
+    if(!state.editing)return false;const before=state.lastEditSnapshot,current=editSnapshot();if(!before||before===current)return false;if(state.undoStack.at(-1)!==before){state.undoStack.push(before);if(state.undoStack.length>30)state.undoStack.shift();}state.redoStack=[];return true;
   }
+  function restoreEditSnapshot(raw,label){
+    if(!raw)return;try{const x=JSON.parse(raw);state.missions=x.missions;state.activeId=x.activeId;state.activeEventId=x.activeEventId;state.lastEditSnapshot=editSnapshot();state.dirty=true;render();updateEditUi();setSaveState(label+' • NÃO SALVO');}catch(e){}
+  }
+  function undoEdit(){if(!state.editing||!state.undoStack.length)return;state.redoStack.push(editSnapshot());const target=state.undoStack.pop();restoreEditSnapshot(target,'DESFEITO');state.lastEditSnapshot=editSnapshot();}
+  function redoEdit(){if(!state.editing||!state.redoStack.length)return;state.undoStack.push(editSnapshot());const target=state.redoStack.pop();restoreEditSnapshot(target,'REFAZENDO');state.lastEditSnapshot=editSnapshot();}
+  function commit(reason='Alteração'){
+    const m=active();if(!m)return;
+    if(state.editing){const changed=pushUndo();if(!changed){setSaveState('Nenhuma alteração detectada');return;}m.updatedAt=nowIso();state.lastEditSnapshot=editSnapshot();state.dirty=true;render();setSaveState(`${reason} • NÃO SALVO`);return;}
+    m.updatedAt=nowIso();saveStore();render();setSaveState(`${reason} • salvo`);queueSnapshot();
+  }
+  function resetMapPlacementModes(){state.placing=false;state.polygonPlacement=false;state.safePlacementStage=null;clearSafeHover();qs('#missionPlannerMap')?.classList.remove('mp-crosshair');if(state.map?.getContainer())state.map.getContainer().style.cursor='';const pb=qs('#mpPlaceBtn');if(pb)pb.textContent='MARCAR PONTO NO MAPA';const vb=qs('#mpDomPolygonPlace');if(vb)vb.textContent='MARCAR VÉRTICE NO MAPA';}
   function requireEdit(){if(state.editing)return true;alert('Zona travada em modo visualização. Clique em EDITAR ZONA para fazer alterações.');return false;}
-  function startEdit(){const m=active();if(!m||state.editing)return;state.editBackup={eventId:m.eventId,
-zones:JSON.parse(JSON.stringify(zonesOfEvent(m.eventId)))};state.editing=true;state.dirty=false;state.placing=false;render();updateEditUi();setSaveState('MODO EDIÇÃO • alterações ainda não salvas');}
-  function saveMission(){const m=active();if(!m)return;if(!state.editing){setSaveState('Nenhuma alteração para salvar');return;}m.updatedAt=nowIso();saveStore();state.editBackup=null;state.editing=false;state.dirty=false;state.placing=false;render();updateEditUi();setSaveState('Zona salva ✓');queueSnapshot();}
-  function cancelEdit(){if(!state.editing)return;if(state.editBackup?.eventId&&Array.isArray(state.editBackup.zones)){const eid=state.editBackup.eventId;const keep=state.missions.filter(x=>x.eventId!==eid);state.missions=[...state.editBackup.zones,
-...keep];}state.editBackup=null;state.editing=false;state.dirty=false;state.placing=false;state.activeEventId=active()?.eventId||state.activeEventId;render();updateEditUi();setSaveState('Alterações descartadas • visualização');}
+  function startEdit(){const m=active();if(!m||state.editing)return;state.undoStack=[];state.redoStack=[];state.compareOverlay=false;state.editBackup={eventId:m.eventId,
+zones:JSON.parse(JSON.stringify(zonesOfEvent(m.eventId)))};state.editing=true;state.dirty=false;resetMapPlacementModes();state.lastEditSnapshot=editSnapshot();render();updateEditUi();setSaveState('MODO EDIÇÃO • alterações ainda não salvas');}
+  function saveMission(){const m=active();if(!m)return;if(!state.editing){setSaveState('Nenhuma alteração para salvar');return;}const audit=plannerAudit(m);if(audit.issues.length&&!confirm('Existem bloqueios de validação:\n\n- '+audit.issues.join('\n- ')+'\n\nSalvar mesmo assim como rascunho?'))return;m.updatedAt=nowIso();const original=state.editBackup?.zones?.find(z=>z.id===m.id);if(original)m._lastSavedRequestBase=requestComparable(original);saveStore();clearEditDraft();state.editBackup=null;state.editing=false;state.dirty=false;resetMapPlacementModes();state.undoStack=[];state.redoStack=[];state.lastEditSnapshot=null;state.compareOverlay=false;render();updateEditUi();setSaveState(audit.issues.length?'Zona salva como rascunho ⚠':'Zona salva ✓');queueSnapshot();}
+  function cancelEdit(){if(!state.editing)return;clearEditDraft();if(state.editBackup?.eventId&&Array.isArray(state.editBackup.zones)){const eid=state.editBackup.eventId;const keep=state.missions.filter(x=>x.eventId!==eid);state.missions=[...state.editBackup.zones,
+...keep];}state.editBackup=null;state.editing=false;state.dirty=false;resetMapPlacementModes();state.undoStack=[];state.redoStack=[];state.lastEditSnapshot=null;state.activeEventId=active()?.eventId||state.activeEventId;render();updateEditUi();setSaveState('Alterações descartadas • visualização');}
   function updateEditUi(){
     const edit=state.editing;const eb=qs('#mpEditMission'),
 sb=qs('#mpSaveMission'),
 cb=qs('#mpCancelEdit');
-    if(eb)eb.style.display=edit?'none':'';if(sb)sb.style.display=edit?'':'none';if(cb)cb.style.display=edit?'':'none';
+    if(eb)eb.style.display=edit?'none':'';if(sb)sb.style.display=edit?'':'none';if(cb)cb.style.display=edit?'':'none';const ub=qs('#mpUndoEdit'),rb=qs('#mpRedoEdit');if(ub){ub.style.display=edit?'':'none';ub.disabled=!state.undoStack.length;}if(rb){rb.style.display=edit?'':'none';rb.disabled=!state.redoStack.length;}
     qsa('#page-planejador input:not(#mpRequestText),#page-planejador select,#page-planejador textarea:not(#mpRequestText):not(#mpExport)').forEach(el=>{if(!['mpValidateCds',
 'mpCenterRealCds',
 'mpCloneTarget'].includes(el.id))el.disabled=!edit;});
@@ -1717,7 +2054,7 @@ ratio=Math.min(1,max/canvas.width);let out=canvas;
 img=qs('#mpSnapshotPreview');if(!m||!img)return;const s=await getSnapshot(m.id);if(s?.dataUrl){img.src=s.dataUrl;img.classList.add('show');if(qs('#mpSnapshotEmpty'))qs('#mpSnapshotEmpty').style.display='none';}else{img.removeAttribute('src');img.classList.remove('show');if(qs('#mpSnapshotEmpty'))qs('#mpSnapshotEmpty').style.display='block';}}
   const safeName=s=>String(s||'missao').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase();
 
-  function fit(){const m=active();if(!state.map||!m)return;const arr=m.points.map(p=>ll(p.x,p.y));if(validCoord(m.center.x)&&validCoord(m.center.y))arr.push(ll(m.center.x,m.center.y));if(arr.length)state.map.fitBounds(L.latLngBounds(arr).pad(.12));}
+  function fit(){const m=active();if(!state.map||!m)return;const arr=(m.points||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>ll(p.x,p.y)),poly=activeDominationPolygon(m);poly.forEach(p=>arr.push(ll(p.x,p.y)));if(dominationZoneMode(m)!=='polygon'&&validCoord(m.center?.x)&&validCoord(m.center?.y))arr.push(ll(m.center.x,m.center.y));if(arr.length===1)state.map.setView(arr[0],5);else if(arr.length)state.map.fitBounds(L.latLngBounds(arr).pad(.12),{padding:[30,30],maxZoom:6});}
   function generateCircle(){if(!requireEdit())return;
     const m=active();if(!m)return;const cx=num(qs('#mpCenterX')?.value),
 cy=num(qs('#mpCenterY')?.value),
@@ -1734,10 +2071,11 @@ h:(deg+180)%360,
 status:'planned'},i));}
     commit(`${qty} pontos gerados como PENDENTES`);fit();
   }
-  function parseBulk(text){const out=[];String(text||'').split(/\n+/).forEach(line=>{const c=line.replace(/^\s*\d+\s*[-–—:)]\s*/,'').trim();if(!c)return;const r=parseCds(c);if(!r.ok)return;out.push({x:r.x,
-y:r.y,
-z:r.z,
-h:r.h});});return out;}
+  function parseBulk(text){const out=[];String(text||'').split(/\n+/).forEach(line=>{const c=line.replace(/^\s*\d+\s*[-–—:)]\s*/,'').trim();if(!c)return;const r=parseCds(c);if(!r.ok)return;out.push({x:r.x,y:r.y,z:r.z,h:r.h});});return out;}
+  function cdsFormatHint(raw){
+    const t=String(raw||'').trim();if(!t)return 'Formato livre';
+    if(/vector4|vec4/i.test(t))return 'vec4 detectado';if(/vector3|vec3/i.test(t))return 'vec3 detectado';if(/^\s*\/?(tpcds|tp|nc|setcoords|coords?)/i.test(t))return 'Comando detectado';return 'CDS simples detectada';
+  }
   function importBulk(){if(!requireEdit())return;
     const m=active(),
 arr=parseBulk(qs('#mpBulk')?.value);if(!m||!arr.length){alert('Nenhuma coordenada válida encontrada.');return;}
@@ -1835,14 +2173,14 @@ validatedAt:can?nowIso():null},m.points.length));commit(can?'Ponto manual valida
   }
   function createEvent(){
     if(state.editing&&state.dirty&&!confirm('Descartar alterações não salvas e criar um novo evento?'))return;
-    if(state.editing)cancelEdit();
+    cleanupSafePresentation();if(state.editing)cancelEdit();
     const m=newMission(null,null,state.libraryCategory||'dominacao');
     m.name='Zona Principal';m.requestKind='create-event';
     state.missions.unshift(m);state.activeId=m.id;state.activeEventId=m.eventId;saveStore();setWorkspace(true);render();startEdit();state.map?.setView(ll(900,-600),3);setSaveState('Novo evento criado • configure a Zona Principal e clique SALVAR EVENTO');
   }
   function createZone(){
     if(state.editing&&state.dirty&&!confirm('Descartar alterações não salvas e criar uma nova zona?'))return;
-    if(state.editing)cancelEdit();
+    cleanupSafePresentation();if(state.editing)cancelEdit();
     const base=active(),
 eid=activeEventId();
     if(!eid||!base){alert('Selecione primeiro um evento.');return;}
@@ -1855,11 +2193,18 @@ eid=activeEventId();
     const pts=[m.center,
 ...(m.points||[])].filter(p=>validCoord(p?.x)&&validCoord(p?.y));
     const isCayo=/cayo\s*perico/i.test(`${m.name||''} ${m.event||''}`)||pts.some(p=>Number(p.x)>3800&&Number(p.y)<-3800);
-    const overlays=[state.cayoLayer,
-state.cayoPostalLayer].filter(Boolean);
+    const overlays=[state.cayoLayer,state.cayoPostalLayer].filter(Boolean),checks=qsa('#mpLayerControl [data-over]');
     if(isCayo){
-      if(state.cayoLayer&&!state.map.hasLayer(state.cayoLayer)&&!state.map.hasLayer(state.cayoPostalLayer))state.cayoLayer.addTo(state.map);
-    }else overlays.forEach(l=>{if(state.map.hasLayer(l))state.map.removeLayer(l);});
+      if(state.cayoOceanLayer&&!state.map.hasLayer(state.cayoOceanLayer))state.cayoOceanLayer.addTo(state.map);
+      const satCheck=qs('#mpLayerControl [data-over="cayo"]'),postalCheck=qs('#mpLayerControl [data-over="cayoPostal"]');
+      // Ao entrar em Cayo sem preferência ativa, liga somente o satélite para evitar duas imagens sobrepostas.
+      if(state.cayoLayer&&!state.map.hasLayer(state.cayoLayer)&&!state.map.hasLayer(state.cayoPostalLayer)){state.cayoLayer.addTo(state.map);if(satCheck)satCheck.checked=true;if(postalCheck)postalCheck.checked=false;}
+      checks.forEach(x=>{x.disabled=false;const layer=x.dataset.over==='cayo'?state.cayoLayer:state.cayoPostalLayer;x.checked=!!layer&&state.map.hasLayer(layer);});
+    }else{
+      [...overlays,state.cayoOceanLayer].filter(Boolean).forEach(l=>{if(state.map.hasLayer(l))state.map.removeLayer(l);});
+      checks.forEach(x=>{x.checked=false;x.disabled=false;});
+    }
+    updateMapDiagnostics(isCayo?'região Cayo':'região Los Santos');
   }
   function focusActiveMission(scrollToMap=false){
     const m=active();if(!state.map||!m)return;syncMapRegion(m);
@@ -1870,19 +2215,25 @@ maxZoom:5});else if(arr.length===1)state.map.setView(arr[0],5,{animate:true});};
     if(scrollToMap){const el=qs('#missionPlannerMap')?.closest('.mission-planner-mapwrap')||qs('#missionPlannerMap');if(el)setTimeout(()=>el.scrollIntoView({behavior:'smooth',
 block:'center'}),40);}
   }
+  function cleanupSafePresentation(){
+    if(state.safePresentation){stopSafePreview();exitSafePresentation();}
+    else stopSafePreview();
+    state.safePlacementStage=null;
+    const mapEl=state.map?.getContainer?.();if(mapEl)mapEl.style.cursor='';
+  }
   function switchEvent(eventId){
     if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja descartá-las?'))return;
-    if(state.editing)cancelEdit();
+    cleanupSafePresentation();if(state.editing)cancelEdit();
     const zones=zonesOfEvent(eventId);if(!zones.length)return;
     state.activeEventId=eventId;state.activeId=zones[0].id;state.libraryCategory=zones[0].category||state.libraryCategory;saveStore();render();updateEditUi();focusActiveMission(false);
   }
-  function switchMission(id){if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja descartá-las?'))return;if(state.editing)cancelEdit();state.activeId=id;const m=state.missions.find(m=>m.id===id);state.activeEventId=m?.eventId||state.activeEventId;state.libraryCategory=(m?.category||state.libraryCategory||'dominacao');saveStore();setWorkspace(true);render();updateEditUi();focusActiveMission(true);}
-  function deleteZone(){const m=active();if(!m)return;const zones=zonesOfEvent(m.eventId);if(zones.length<=1){alert('Este é o único mapa/zona do evento. Para removê-lo, exclua o evento inteiro.');return;}if(!confirm(`Apagar somente a zona "${m.name}" do evento "${m.event}"?`))return;state.missions=state.missions.filter(x=>x.id!==m.id);const next=zones.find(x=>x.id!==m.id);state.activeId=next?.id||null;saveStore();render();focusActiveMission(false);}
+  function switchMission(id){if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja descartá-las?'))return;cleanupSafePresentation();if(state.editing)cancelEdit();state.activeId=id;const m=state.missions.find(m=>m.id===id);state.activeEventId=m?.eventId||state.activeEventId;state.libraryCategory=(m?.category||state.libraryCategory||'dominacao');saveStore();setWorkspace(true);render();updateEditUi();focusActiveMission(true);}
+  function deleteZone(){const m=active();if(!m)return;const zones=zonesOfEvent(m.eventId);if(zones.length<=1){alert('Este é o único mapa/zona do evento. Para removê-lo, exclua o evento inteiro.');return;}if(!confirm(`Apagar somente a zona "${m.name}" do evento "${m.event}"?`))return;cleanupSafePresentation();state.missions=state.missions.filter(x=>x.id!==m.id);const next=zones.find(x=>x.id!==m.id);state.activeId=next?.id||null;saveStore();render();focusActiveMission(false);}
   function deleteEvent(){
     const m=active();if(!m)return;const zones=zonesOfEvent(m.eventId);
     if(zones.some(z=>z.official)){if(!confirm(`Este evento contém zona(s) cadastrada(s) originalmente no sistema. Excluir o evento "${m.event}" e suas ${zones.length} zona(s)?`))return;}
     else if(!confirm(`Excluir o evento "${m.event}" e TODAS as ${zones.length} zona(s)?`))return;
-    state.missions=state.missions.filter(x=>x.eventId!==m.eventId);
+    cleanupSafePresentation();state.missions=state.missions.filter(x=>x.eventId!==m.eventId);
     const first=state.missions.find(x=>(x.category||'dominacao')===state.libraryCategory)||state.missions[0];
     state.activeId=first?.id||null;state.activeEventId=first?.eventId||null;saveStore();render();focusActiveMission(false);
   }
@@ -1931,6 +2282,13 @@ targetEventName;if(targetEventId==='__new__'){targetEventName=prompt('Nome do no
     const m=active();if(!m)return;if(state.editing&&state.dirty){alert('Salve ou cancele as alterações antes de clonar.');return;}
     const c=JSON.parse(JSON.stringify(m));c.id=uid();c.name=`${m.name} — Cópia`;c.official=false;c.createdAt=nowIso();c.updatedAt=nowIso();c.requestText='';c.requestKind='create-zone';
     state.missions.unshift(c);state.activeId=c.id;state.activeEventId=c.eventId;saveStore();render();startEdit();setSaveState('Zona clonada • evento original preservado');
+  }
+  function cloneFacXFacAsSurvival(){
+    const m=active();if(!m)return;if(!/fac\s*x\s*fac/i.test(m.event||'')){alert('Selecione primeiro um evento Fac x Fac para criar o Sobrevivência.');return;}
+    if(state.editing&&state.dirty){alert('Salve ou cancele as alterações antes de criar o Sobrevivência.');return;}
+    const source=zonesOfEvent(m.eventId),eid=eventUid();
+    const clones=source.map((z,idx)=>{const c=JSON.parse(JSON.stringify(z));c.id=uid();c.eventId=eid;c.event='Sobrevivência';c.category='gas';c.official=false;c.createdAt=nowIso();c.updatedAt=nowIso();c.requestText='';c.requestKind=idx===0?'create-event':'create-zone';c.center.label='Centro da Safe / Marco Zero';ensureSafeRoute(c);c.safeRoute.stages.forEach(st=>st.z=0);return c;});
+    state.missions.unshift(...clones);state.activeId=clones[0].id;state.activeEventId=eid;state.libraryCategory='gas';saveStore();render();startEdit();setSaveState('Sobrevivência criado a partir do Fac x Fac • original preservado');
   }
   function cloneEventTo(targetCategory){
     const m=active();if(!m)return;if(state.editing&&state.dirty){alert('Salve ou cancele as alterações antes de clonar.');return;}
@@ -1985,18 +2343,9 @@ intro='';
     }
     const centerTitle=category==='gas'?'CENTRO DO GÁS / MARCO ZERO':'COORDENADA CENTRAL';
     const radiusTitle=category==='gas'?'RAIO INICIAL DA SAFE / GÁS':'RAIO DA ÁREA DE DOMINAÇÃO';
-    const isFacXFac=/fac\s*x\s*fac/i.test(eventName),isSurvival=/sobreviv[eê]ncia/i.test(eventName);
-    const cloneNote=isSurvival?`
-
-BASE DO EVENTO — CLONE DO FAC X FAC:
-
-- O evento "Sobrevivencia" deverá ser criado como clone do Fac X Fac atual, preservando suas mecânicas, regras, sistemas, escalação, inventário entregue aos participantes, caixas de loot, drop de itens ao morrer, ping para aliados, ranking e premiações.
-
-- A principal diferença do Sobrevivencia será a SAFE DINÂMICA: além de fechar progressivamente, o círculo inteiro poderá deslocar seu centro entre as etapas configuradas abaixo.
-
-- Não substituir as demais mecânicas do Fac X Fac por uma implementação nova; utilizar o funcionamento já existente como base e acrescentar a movimentação da Safe.`:''; 
+    const isFacXFac=/fac\s*x\s*fac/i.test(eventName);
     const mechanic=category==='gas'
-      ? ((isFacXFac||isSurvival) ? `- Cada facção deverá nascer em uma coordenada diferente da zona selecionada.
+      ? (isFacXFac ? `- Cada facção deverá nascer em uma coordenada diferente da zona selecionada.
 
 - Todos os participantes deverão receber automaticamente os itens necessários no inventário conforme o padrão atual do Fac x Fac.
 
@@ -2026,7 +2375,6 @@ BASE DO EVENTO — CLONE DO FAC X FAC:
       const s=safeRoute.stages||[],o2=(safeRoute.stage2Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)),o3=(safeRoute.stage3Options||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));
       if(!o2.length&&!o3.length)return '';
       const fmtOpt=(p,i,prefix)=>`- ${prefix}${String.fromCharCode(65+i)}: ${f(p.x)},${f(p.y)} • raio da etapa: ${Math.round(Number(s[prefix==='SAFE 2'?1:2]?.radius)||0)} m`;
-      const matrix=o2.map((p2,i)=>{const allowed=o3.map((p3,j)=>({j,d:safeDistance(p2,p3)})).filter(v=>v.d<=SAFE_MOVE_LIMIT_23);return `- SAFE 2${String.fromCharCode(65+i)} → ${allowed.length?allowed.map(v=>`SAFE 3${String.fromCharCode(65+v.j)} (${Math.round(v.d)}m)`).join(' / '):'SEM SAFE 3 VÁLIDA'}`;}).join('\n');
       return `
 
 MOVIMENTAÇÃO DA SAFE:
@@ -2035,16 +2383,7 @@ MOVIMENTAÇÃO DA SAFE:
 ${o2.map((p,i)=>fmtOpt(p,i,'SAFE 2')).join('\n')}
 ${o3.map((p,i)=>fmtOpt(p,i,'SAFE 3')).join('\n')}
 
-- A cada execução, sortear somente uma combinação de SAFE 2 e SAFE 3 que respeite os limites de deslocamento a pé.
-- Limite de deslocamento do centro SAFE 1→SAFE 2: máximo de 500 metros.
-- Limite de deslocamento do centro SAFE 2→SAFE 3: máximo de 250 metros.
-- Combinações acima desses limites não deverão ser utilizadas/sorteadas.
-
-COMBINAÇÕES VÁLIDAS SAFE 2 → SAFE 3:
-
-${matrix}
-
-- O sorteio deverá utilizar exclusivamente uma das combinações válidas listadas acima.
+- A cada execução, sortear uma opção de SAFE 2 e uma opção de SAFE 3 dentre as CDS configuradas.
 - Fluxo: SAFE 1 fecha → círculo inteiro se desloca até SAFE 2 mantendo o raio alcançado → fecha novamente → desloca até SAFE 3 → fechamento final.
 - Movimento SAFE 1→2: ${Number(s[0]?.moveSeconds)||0}s. Movimento SAFE 2→3: ${Number(s[1]?.moveSeconds)||0}s.
 - Durante o deslocamento, centro e área do gás devem se mover continuamente, sem teleporte da zona.`;
@@ -2062,7 +2401,7 @@ OBSERVAÇÃO — ALTURA DA SAFE:
 
 Solicitação:
 
-${intro}${selectorNote}${cloneNote}
+${intro}${selectorNote}
 
 ${centerTitle}:
 
@@ -2106,29 +2445,29 @@ z=zones[0];if(!z)return false;
   }
   function renderCentralV954(){
     const host=ensureCentralV954();if(!host)return;
-    const filter=centralCategory(),
-allEvents=[];
-    ['dominacao',
-'gas'].forEach(cat=>eventsOfCategory(cat).forEach(e=>allEvents.push({...e,
-category:cat})));
-    const events=filter==='all'?allEvents:allEvents.filter(e=>e.category===filter);
+    const filter=centralCategory(),query=String(state.centralSearch||'').trim().toLowerCase(),allEvents=[];
+    ['dominacao','gas'].forEach(cat=>eventsOfCategory(cat).forEach(e=>allEvents.push({...e,category:cat})));
+    let events=filter==='all'?allEvents:allEvents.filter(e=>e.category===filter);
+    if(query)events=events.filter(e=>String(e.name||'').toLowerCase().includes(query)||zonesOfEvent(e.id).some(z=>String(z.name||'').toLowerCase().includes(query)));
     const readyTotal=state.missions.filter(z=>isCenterValidated(z)&&z.points?.length&&z.points.every(isValidated)).length;
-    host.innerHTML=`<div class="mpc-head"><div><span>MISSÕES</span><strong>${allEvents.length} eventos <i>•</i> ${state.missions.length} zonas <i>•</i> ${readyTotal} prontas</strong></div><span id="mpCloudStateCentral" class="mp-cloud-state ${state.cloudState||'local'}">${state.cloudState==='synced'?'☁ SINCRONIZADO':'↻ SINCRONIZANDO'}</span></div>
-      <div class="mpc-toolbar"><div class="mpc-filters"><button data-cfilter="all" class="${filter==='all'?'active':''}">TODOS</button><button data-cfilter="dominacao" class="${filter==='dominacao'?'active':''}">DOMINAÇÃO</button><button data-cfilter="gas" class="${filter==='gas'?'active':''}">ZONA DE GÁS</button></div><button id="mpCentralNewEvent" class="mpc-primary">+ NOVO EVENTO</button></div>
+    const pendingTotal=state.missions.length-readyTotal;
+    host.innerHTML=`<div class="mpc-head"><div><span>BIBLIOTECA DE MAPAS</span><strong>${allEvents.length} eventos <i>•</i> ${state.missions.length} zonas <i>•</i> ${readyTotal} prontas <i>•</i> ${pendingTotal} em revisão</strong></div><span id="mpCloudStateCentral" class="mp-cloud-state ${state.cloudState||'local'}">${state.cloudState==='synced'?'☁ SINCRONIZADO':'↻ SINCRONIZANDO'}</span></div>
+      <div class="mpc-toolbar" style="align-items:center;gap:10px;flex-wrap:wrap"><div class="mpc-filters"><button data-cfilter="all" class="${filter==='all'?'active':''}">TODOS</button><button data-cfilter="dominacao" class="${filter==='dominacao'?'active':''}">DOMINAÇÃO</button><button data-cfilter="gas" class="${filter==='gas'?'active':''}">GÁS / SAFE</button></div><div style="display:flex;gap:8px;flex:1;justify-content:flex-end;min-width:280px"><input id="mpCentralSearch" value="${esc(state.centralSearch||'')}" placeholder="Buscar evento ou zona…" style="max-width:300px"><button id="mpCentralNewEvent" class="mpc-primary">+ NOVO EVENTO</button></div></div>
       <div class="mpc-events">${events.length?events.map(e=>{
         const zones=zonesOfEvent(e.id),ready=zones.filter(z=>isCenterValidated(z)&&z.points?.length&&z.points.every(isValidated)).length;
-        return `<article class="mpc-event"><header><div><span>${e.category==='gas'?'ZONA DE GÁS':'DOMINAÇÃO'}</span><h3>${esc(e.name)}</h3><small>${zones.length} zona${zones.length===1?'':'s'} • ${ready}/${zones.length} pronta${zones.length===1?'':'s'}</small></div><div class="mpc-event-actions"><button data-newzone="${esc(e.id)}">+ NOVA ZONA</button><button class="danger" data-delevent="${esc(e.id)}">EXCLUIR EVENTO</button></div></header><div class="mpc-zones">${zones.map(z=>{const total=z.points?.length||0,val=(z.points||[]).filter(isValidated).length;return `<button class="mpc-zone" data-openzone="${esc(z.id)}"><span><b>${esc(z.name||'Zona sem nome')}</b><small>${total?`${val}/${total} validados`:'Sem pontos'}</small></span><em class="${total&&val===total?'ok':''}">${total&&val===total?'✓':'ABRIR'}</em></button>`}).join('')||'<div class="mpc-empty">Nenhuma zona cadastrada.</div>'}</div></article>`
-      }).join(''):'<div class="mpc-empty big">Nenhum evento neste filtro.</div>'}</div>`;
-    qsa('[data-cfilter]',host).forEach(b=>b.onclick=()=>{state.centralFilter=b.dataset.cfilter;renderCentralV954();});
-    qsa('[data-openzone]',host).forEach(b=>b.onclick=()=>switchMission(b.dataset.openzone));
-    qsa('[data-newzone]',host).forEach(b=>b.onclick=()=>{if(selectEventForAction(b.dataset.newzone))createZone();});
-    qsa('[data-delevent]',host).forEach(b=>b.onclick=()=>{if(selectEventForAction(b.dataset.delevent))deleteEvent();});
+        return `<article class="mpc-event"><header><div><span>${e.category==='gas'?'GÁS / SAFE DINÂMICA':'DOMINAÇÃO'}</span><h3>${esc(e.name)}</h3><small>${zones.length} zona${zones.length===1?'':'s'} • ${ready}/${zones.length} pronta${zones.length===1?'':'s'}</small></div><div class="mpc-event-actions"><button data-newzone="${esc(e.id)}">+ NOVA ZONA</button><button class="danger" data-delevent="${esc(e.id)}">EXCLUIR EVENTO</button></div></header><div class="mpc-zones">${zones.map(z=>{const total=z.points?.length||0,val=(z.points||[]).filter(isValidated).length,centerOk=isCenterValidated(z),readyZone=centerOk&&total>0&&val===total,geom=e.category==='gas'?'SAFE':(dominationZoneMode(z)==='polygon'?'POLÍGONO':'RAIO'),updated=z.updatedAt?new Date(z.updatedAt).toLocaleDateString('pt-BR'):'—';return `<button class="mpc-zone" data-openzone="${esc(z.id)}" title="Abrir ${esc(z.name||'zona')}"><span style="min-width:0"><b>${esc(z.name||'Zona sem nome')}</b><small>${geom} • ${total?val+'/'+total+' CDS validadas':'sem CDS'} • atualizado ${updated}</small></span><em class="${readyZone?'ok':''}">${readyZone?'✓ PRONTA':centerOk?'REVISAR':'PENDENTE'}</em></button>`}).join('')||'<div class="mpc-empty">Nenhuma zona cadastrada.</div>'}</div></article>`
+      }).join(''):'<div class="mpc-empty big">Nenhum mapa encontrado neste filtro.</div>'}</div>`;
+    qsa('[data-cfilter]',host).forEach(btn=>btn.onclick=()=>{state.centralFilter=btn.dataset.cfilter;renderCentralV954();});
+    const search=qs('#mpCentralSearch',host);if(search){search.oninput=()=>{state.centralSearch=search.value;clearTimeout(state.centralSearchTimer);state.centralSearchTimer=setTimeout(renderCentralV954,180);};setTimeout(()=>{if(document.activeElement?.id==='mpCentralSearch'){const el=qs('#mpCentralSearch');el?.focus();el?.setSelectionRange(el.value.length,el.value.length);}},0);}
+    qsa('[data-openzone]',host).forEach(btn=>btn.onclick=()=>switchMission(btn.dataset.openzone));
+    qsa('[data-newzone]',host).forEach(btn=>btn.onclick=()=>{if(selectEventForAction(btn.dataset.newzone))createZone();});
+    qsa('[data-delevent]',host).forEach(btn=>btn.onclick=()=>{if(selectEventForAction(btn.dataset.delevent))deleteEvent();});
     qs('#mpCentralNewEvent',host)?.addEventListener('click',()=>{if(filter!=='all')state.libraryCategory=filter;createEvent();});
   }
 
   function bindFormAutosave(){
     const map={mpMissionName:['name'],mpEventCategory:['category'],mpEventType:['event'],mpPanel:['panel'],mpMode:['mode'],mpRequestKind:['requestKind'],mpCenterLabel:['center','label'],mpCenterX:['center','x'],mpCenterY:['center','y'],mpCenterZ:['center','z'],mpCenterH:['center','h'],mpCircleRadius:['circleRadius'],mpStartAngle:['startAngle'],mpRadius:['spawnRadius']};
-    Object.entries(map).forEach(([id,path])=>qs('#'+id)?.addEventListener((['mpMode','mpEventCategory','mpRequestKind'].includes(id))?'change':'input',e=>{const m=active();if(!m||!state.editing)return;let v=e.target.value;const oldCategory=m.category;if(['mpCenterX','mpCenterY','mpCenterZ','mpCenterH','mpCircleRadius','mpStartAngle','mpRadius'].includes(id))v=num(v);if(path.length===2){if((id==='mpCenterX'||id==='mpCenterY')&&Number(m.center[path[1]])!==Number(v)){m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';}m[path[0]][path[1]]=v;}else m[path[0]]=v;if(id==='mpEventType'){zonesOfEvent(m.eventId).forEach(z=>z.event=v);}if(id==='mpPanel'){zonesOfEvent(m.eventId).forEach(z=>z.panel=v);}if(id==='mpEventCategory'){zonesOfEvent(m.eventId).forEach(z=>z.category=v);}if(id==='mpEventCategory'&&oldCategory!==v){state.libraryCategory=v;if(v==='gas'){m.center.label='Centro do Gás / Marco Zero';}else{m.center.label='Centro da Zona do Evento';}/* trocar categoria não muda a CDS; mantém validação existente */}if(id==='mpMode'&&v==='assistant'){m.points.forEach(p=>{if(!p.validatedAt&&p.status!=='validated')p.status='planned';});}state.dirty=true;setSaveState('Alteração • NÃO SALVO');renderMap();renderCenterValidation();renderCoverage();if(id==='mpRadius'&&qs('#mpRadiusValue'))qs('#mpRadiusValue').textContent=`${v||100} m`; }));
+    Object.entries(map).forEach(([id,path])=>{const el=qs('#'+id);if(!el)return;let inputStart=null;const eventName=['mpMode','mpEventCategory','mpRequestKind'].includes(id)?'change':'input';el.addEventListener('focus',()=>{inputStart=state.editing?editSnapshot():null;});el.addEventListener(eventName,e=>{const m=active();if(!m||!state.editing)return;let v=e.target.value;const oldCategory=m.category;if(['mpCenterX','mpCenterY','mpCenterZ','mpCenterH','mpCircleRadius','mpStartAngle','mpRadius'].includes(id))v=num(v);if(path.length===2){if((id==='mpCenterX'||id==='mpCenterY')&&Number(m.center[path[1]])!==Number(v)){m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';}m[path[0]][path[1]]=v;}else m[path[0]]=v;if(id==='mpEventType'){zonesOfEvent(m.eventId).forEach(z=>z.event=v);}if(id==='mpPanel'){zonesOfEvent(m.eventId).forEach(z=>z.panel=v);}if(id==='mpEventCategory'){zonesOfEvent(m.eventId).forEach(z=>z.category=v);}if(id==='mpEventCategory'&&oldCategory!==v){state.libraryCategory=v;if(v==='gas'){m.center.label='Centro do Gás / Marco Zero';}else{m.center.label='Centro da Zona do Evento';}/* trocar categoria não muda a CDS; mantém validação existente */}if(id==='mpMode'&&v==='assistant'){m.points.forEach(p=>{if(!p.validatedAt&&p.status!=='validated')p.status='planned';});}state.dirty=true;setSaveState('Alteração • NÃO SALVO');renderMap();renderCenterValidation();renderCoverage();if(id==='mpRadius'&&qs('#mpRadiusValue'))qs('#mpRadiusValue').textContent=`${v||100} m`; });if(eventName==='input')el.addEventListener('change',()=>{if(!state.editing)return;if(inputStart&&inputStart!==editSnapshot()){const current=editSnapshot();state.lastEditSnapshot=inputStart;pushUndo();state.lastEditSnapshot=current;state.dirty=true;updateEditUi();}inputStart=null;});else el.addEventListener('change',()=>{if(!state.editing)return;const current=editSnapshot();if(inputStart&&inputStart!==current){state.lastEditSnapshot=inputStart;pushUndo();state.lastEditSnapshot=current;state.dirty=true;updateEditUi();}inputStart=null;});});
   }
 
   function setWorkspace(open){
@@ -2140,7 +2479,7 @@ category:cat})));
   function ensureWorkspaceBar(){
     const shell=qs('.mission-planner-shell');if(!shell||qs('#mpWorkspaceBar'))return;
     const bar=document.createElement('div');bar.id='mpWorkspaceBar';bar.className='mp-workspace-bar';
-    bar.innerHTML=`<button type="button" id="mpBackLibrary">← VOLTAR ÀS MISSÕES</button><div class="mp-workspace-path"><b id="mpWorkspaceEvent">Evento</b><span>›</span><strong id="mpWorkspaceZone">Zona</strong></div><div class="mp-editor-actions"><button type="button" id="mpNewZone">+ NOVA ZONA</button><button type="button" id="mpReplicateZone">REPLICAR</button><button type="button" id="mpCloneZone">CLONAR</button><button type="button" id="mpDeleteMission" class="mp-delete-action">EXCLUIR ZONA</button><button type="button" id="mpEditMission">EDITAR</button><button type="button" id="mpSaveMission" class="primary" style="display:none">SALVAR</button><button type="button" id="mpCancelEdit" style="display:none">CANCELAR</button></div><span id="mpCloudState" class="mp-cloud-state local">⚠ MODO LOCAL</span>`;
+    bar.innerHTML=`<button type="button" id="mpBackLibrary">← VOLTAR ÀS MISSÕES</button><div class="mp-workspace-path"><b id="mpWorkspaceEvent">Evento</b><span>›</span><strong id="mpWorkspaceZone">Zona</strong></div><div class="mp-editor-actions"><button type="button" id="mpNewZone">+ NOVA ZONA</button><button type="button" id="mpReplicateZone">REPLICAR</button><button type="button" id="mpCloneZone">CLONAR</button><button type="button" id="mpDeleteMission" class="mp-delete-action">EXCLUIR ZONA</button><button type="button" id="mpUndoEdit" style="display:none">↶ DESFAZER</button><button type="button" id="mpRedoEdit" style="display:none">↷ REFAZER</button><button type="button" id="mpEditMission">EDITAR</button><button type="button" id="mpSaveMission" class="primary" style="display:none">SALVAR</button><button type="button" id="mpCancelEdit" style="display:none">CANCELAR</button></div><span id="mpCloudState" class="mp-cloud-state local">⚠ MODO LOCAL</span>`;
     shell.insertAdjacentElement('beforebegin',bar);
     qs('#mpBackLibrary')?.addEventListener('click',()=>{if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja voltar às missões?'))return;if(state.editing)cancelEdit();setWorkspace(false);renderCentralV954();});
   }
@@ -2149,9 +2488,9 @@ category:cat})));
   }
 
   function bind(){
-    if(state.initialized)return;state.initialized=true;loadStore();state.activeEventId=active()?.eventId||state.activeEventId;ensureCentralV954();ensureWorkspaceBar();ensureBackupCard();ensurePlannerTabs();ensureSafeRouteUi();adoptStrayCards();ensureMapKpis();initMap();render();renderWorkspaceBar();setWorkspace(false);bindFormAutosave();updateEditUi();
-    qs('#mpEditMission')?.addEventListener('click',startEdit);qs('#mpSaveMission')?.addEventListener('click',saveMission);qs('#mpCancelEdit')?.addEventListener('click',cancelEdit);qs('#mpNewZone')?.addEventListener('click',createZone);qs('#mpCloneZone')?.addEventListener('click',cloneZone);qs('#mpReplicateZone')?.addEventListener('click',openReplicator);qs('#mpDeleteMission')?.addEventListener('click',deleteZone);
-    qs('#mpPlaceBtn')?.addEventListener('click',()=>{if(!requireEdit())return;state.placing=!state.placing;qs('#missionPlannerMap')?.classList.toggle('mp-crosshair',state.placing);qs('#mpPlaceBtn').textContent=state.placing?'PARAR DE MARCAR':'MARCAR PONTO NO MAPA';});
+    if(state.initialized)return;state.initialized=true;loadStore();recoverEditDraft();window.addEventListener('beforeunload',e=>{if(state.editing&&state.dirty){saveEditDraft();e.preventDefault();e.returnValue='';}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.safePresentation){e.preventDefault();stopSafePreview();exitSafePresentation();return;}if(!state.editing)return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redoEdit():undoEdit();}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redoEdit();}});state.activeEventId=active()?.eventId||state.activeEventId;ensureCentralV954();ensureWorkspaceBar();ensureBackupCard();ensurePlannerTabs();ensureSafeRouteUi();adoptStrayCards();ensureMapKpis();initMap();render();renderWorkspaceBar();setWorkspace(false);bindFormAutosave();updateEditUi();
+    qs('#mpEditMission')?.addEventListener('click',startEdit);qs('#mpUndoEdit')?.addEventListener('click',undoEdit);qs('#mpRedoEdit')?.addEventListener('click',redoEdit);qs('#mpSaveMission')?.addEventListener('click',saveMission);qs('#mpCancelEdit')?.addEventListener('click',cancelEdit);qs('#mpNewZone')?.addEventListener('click',createZone);qs('#mpCloneZone')?.addEventListener('click',cloneZone);qs('#mpReplicateZone')?.addEventListener('click',openReplicator);qs('#mpDeleteMission')?.addEventListener('click',deleteZone);
+    qs('#mpPlaceBtn')?.addEventListener('click',()=>{if(!requireEdit())return;const enable=!state.placing;resetMapPlacementModes();state.placing=enable;qs('#missionPlannerMap')?.classList.toggle('mp-crosshair',state.placing);if(state.map?.getContainer())state.map.getContainer().style.cursor=state.placing?'crosshair':'';qs('#mpPlaceBtn').textContent=state.placing?'PARAR DE MARCAR':'MARCAR PONTO NO MAPA';});
     qs('#mpFit')?.addEventListener('click',fit);qs('#mpGoLS')?.addEventListener('click',()=>state.map?.setView(ll(900,-600),3));qs('#mpGoCayo')?.addEventListener('click',()=>{if(state.map&&state.cayoBounds)state.map.fitBounds(state.cayoBounds,{padding:[20,20]});});qs('#mpGenerateCircle')?.addEventListener('click',generateCircle);qs('#mpImport')?.addEventListener('click',importBulk);qs('#mpValidateBtn')?.addEventListener('click',()=>validateSelected());
     qs('#mpValidateBulkBtn')?.addEventListener('click',validateBulk);
     qs('#mpInvalidateBtn')?.addEventListener('click',invalidateSelected);
@@ -2159,7 +2498,7 @@ category:cat})));
     qs('#mpJumpPending')?.addEventListener('click',()=>{const m=active();const id=nextPendingId(m,m?.selectedId||0);if(!id){setValidationFeedback('<b>Nenhum ponto pendente nesta zona.</b>','ok');return;}selectPoint(id);const p=m.points[id-1];if(p)state.map?.setView(ll(p.x,p.y),5);qs('#mpValidateCds')?.focus();});
     qs('#mpValidateCds')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();validateSelected();}});qs('#mpAddCoord')?.addEventListener('click',addManual);qs('#mpClear')?.addEventListener('click',clearPoints);qs('#mpExportBtn')?.addEventListener('click',exportValidated);qs('#mpExportXYBtn')?.addEventListener('click',exportXY);qs('#mpGenerateRequest')?.addEventListener('click',generateRequest);qs('#mpCopyRequest')?.addEventListener('click',copyCurrentRequest);qs('#mpCaptureBtn')?.addEventListener('click',()=>captureSnapshot(true));
     setTimeout(()=>{state.map?.invalidateSize();fit();queueSnapshot();},180);
-    setTimeout(()=>syncMissionsFromCloud(),1200);
+    setTimeout(()=>syncMissionsFromCloud(),1200);clearInterval(state.autosaveTimer);state.autosaveTimer=setInterval(saveEditDraft,5000);
   }
   /* ---------------------------------------------------------------
      V9.4.1 - A lateral tinha 11 cards empilhados e exigia rolagem
