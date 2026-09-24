@@ -1542,6 +1542,7 @@ iconAnchor:[12,
         <button type="button" id="mpAddSafeTop" class="primary">＋ ADICIONAR SAFE</button>
         <button type="button" id="mpRemoveSafeTop" style="display:none">REMOVER ÚLTIMA SAFE</button>
         <button type="button" id="mpSafeViableOnly">GRAFO: TODAS</button>
+        <button type="button" id="mpElevationToggle">RELEVO: OFF</button>
       </div>
       <div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
       <div id="mpSafeStages"></div>
@@ -1571,6 +1572,7 @@ iconAnchor:[12,
     qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
     qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
     qs('#mpSafeViableOnly')?.addEventListener('click',()=>{state.safeGraphViableOnly=!state.safeGraphViableOnly;const b=qs('#mpSafeViableOnly');if(b)b.textContent=state.safeGraphViableOnly?'GRAFO: VIÁVEIS':'GRAFO: TODAS';renderMap();});
+    qs('#mpElevationToggle')?.addEventListener('click',()=>{state.showElevationKnowledge=!state.showElevationKnowledge;const b=qs('#mpElevationToggle');if(b)b.textContent=state.showElevationKnowledge?'RELEVO: ON':'RELEVO: OFF';renderMap();});
   }
   function safePlacementCheck(latlng){
     const m=active(),idx=state.safePlacementStage;if(!m||idx===null||!latlng)return {ok:false,reason:'Marcação inativa.'};
@@ -1659,7 +1661,7 @@ iconAnchor:[12,
       return;
     }
     const r=ensureSafeRoute(m),timeline=safeTimeline(m),audit=safeRouteAudit(m),initial=effectiveEventRadius(m),tl=qs('#mpSafeTimeline');
-    if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';const gv=qs('#mpSafeViableOnly');if(gv)gv.textContent=state.safeGraphViableOnly?'GRAFO: VIÁVEIS':'GRAFO: TODAS';}
+    if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';const gv=qs('#mpSafeViableOnly');if(gv)gv.textContent=state.safeGraphViableOnly?'GRAFO: VIÁVEIS':'GRAFO: TODAS';const et=qs('#mpElevationToggle');if(et)et.textContent=state.showElevationKnowledge?'RELEVO: ON':'RELEVO: OFF';}
 
     if(tl){const total=safeTotalSeconds(m);tl.innerHTML='<b>TIMELINE COMPLETA • DURAÇÃO ESTIMADA: '+formatDuration(total)+'</b><br>'+timeline.map(x=>{const mm=Math.floor(x.at/60),ss=String(x.at%60).padStart(2,'0');return mm+':'+ss+' • '+x.label+(x.duration?' ('+formatDuration(x.duration)+')':'')+' • '+Math.round(x.radius)+' m';}).join('<br>')+(audit.length?'<br><span style="color:#ff7474"><b>ATENÇÃO:</b> '+esc(audit.join(' • '))+'</span>':'');}
     const openSafe=Math.min(Math.max(0,Number(state.safeEditorStage)||0),r.stages.length-1);state.safeEditorStage=openSafe;
@@ -1816,6 +1818,19 @@ iconAnchor:[12,
     state.safePreviewTimer=setInterval(()=>{const p=phases[pi];if(!p){stopSafePreview();if(!state.safePresentation)renderMap();return;}t++;const u=Math.min(1,t/steps);elapsed=phases.slice(0,pi).reduce((a,x)=>a+x.seconds,0)+p.seconds*u,smooth=u*u*(3-2*u);let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);updateSafeGasMask({x,y},rad);if(hud){const remain=Math.max(0,Math.ceil(p.seconds*(1-u)));hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(totalSeconds)+'</div>';}if(u>=1){pi++;t=0;if(pi>=phases.length){if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+routeMode+'</div><div>SAFE FINAL CONCLUÍDA</div><div style="font-size:13px;font-weight:500">Raio final '+Math.round(Number(route[route.length-1].radius))+' m</div>';clearInterval(state.safePreviewTimer);state.safePreviewTimer=null;if(!state.safePresentation)setTimeout(()=>{stopSafePreview();renderMap();},900);}}},45);
   }
 
+  function drawElevationKnowledge(m){
+    if(!state.map||!state.showElevationKnowledge)return;
+    const samples=elevationSamples();if(!samples.length)return;
+    samples.forEach(p=>{const c=L.circleMarker(ll(p.x,p.y),{radius:4,weight:1,opacity:.75,fillOpacity:.55,interactive:true}).addTo(state.map).bindPopup(`<b>ALTURA CONFIRMADA</b><br>Z ${f(p.z)} • ${esc(p.source)}`);state.drawn.push(c);});
+    const bounds=state.map.getBounds?.();if(!bounds)return;
+    const sw=bounds.getSouthWest(),ne=bounds.getNorthEast(),nx=7,ny=7;
+    for(let ix=0;ix<nx;ix++)for(let iy=0;iy<ny;iy++){
+      const x=sw.lng+(ne.lng-sw.lng)*(ix/(nx-1)),y=sw.lat+(ne.lat-sw.lat)*(iy/(ny-1)),e=estimateElevation(x,y);
+      if(!e.count||e.confidence<20)continue;
+      const icon=L.divIcon({className:'',html:`<div class="mp-elev-label" style="opacity:${Math.max(.35,e.confidence/100)}">Z~${Math.round(e.z)}<small>${e.confidence}%</small></div>`,iconSize:[48,28],iconAnchor:[24,14]});
+      const mk=L.marker(ll(x,y),{icon,interactive:false}).addTo(state.map);state.drawn.push(mk);
+    }
+  }
   function renderMapLegend(m){
     const host=qs('.mission-planner-mapwrap')||qs('#missionPlannerMap')?.parentElement;if(!host)return;let el=qs('#mpMapLegend');
     if(!el){el=document.createElement('div');el.id='mpMapLegend';Object.assign(el.style,{position:'absolute',left:'12px',bottom:'12px',zIndex:'900',background:'rgba(8,10,18,.86)',border:'1px solid rgba(255,255,255,.16)',borderRadius:'10px',padding:'8px 10px',fontSize:'11px',lineHeight:'1.55',color:'#fff',pointerEvents:'none',boxShadow:'0 8px 24px rgba(0,0,0,.3)'});host.appendChild(el);}
@@ -1825,7 +1840,7 @@ iconAnchor:[12,
     el.innerHTML='<b>'+esc(m.event||'EVENTO')+' • '+esc(m.name||'ZONA')+'</b><br>'+centerLabel+zoneLabel+'<br>Spawns '+valid+'/'+total+' validados'+(category==='gas'?'<br>Safe inicial: '+counts.inside+'/'+counts.total+' dentro'+(counts.outside?' • '+counts.outside+' fora ⚠':' ✓'):'');
   }
   function renderMap(){
-    if(!state.map)return;clearLayers();const m=active();if(!m)return;renderSafeRouteUi();renderCalibration(m);renderMapLegend(m);
+    if(!state.map)return;clearLayers();const m=active();if(!m)return;renderSafeRouteUi();renderCalibration(m);renderMapLegend(m);drawElevationKnowledge(m);
     const poly=dominationPolygon(m),hasCenter=validCoord(m.center?.x)&&validCoord(m.center?.y),polyMode=(m.category||'dominacao')==='dominacao'&&dominationZoneMode(m)==='polygon';
     if(hasCenter&&!polyMode){
       const cicon=L.divIcon({className:'',html:`<div class="mp-center-pin ${isCenterValidated(m)?'validated':'planned'}">◎</div>`,iconSize:[32,32],iconAnchor:[16,16]});
