@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
+mapMode:'center',safePlacementStage:null,safePlacementAsOption:false,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -1313,14 +1313,11 @@ cayoPostal});
       if(!state.editing){if(qs('#mpClicked'))qs('#mpClicked').textContent='Modo visualização: clique em EDITAR EVENTO para alterar posições.';return;}
       const suggested=suggestedMapCoord(m,e.latlng);
       if(qs('#mpClicked'))qs('#mpClicked').innerHTML=`MAPA ${f(e.latlng.lng)}, ${f(e.latlng.lat)} → <b>CDS SUGERIDA ${f(suggested.x)}, ${f(suggested.y)}, ${suggested.elevation.count?f(suggested.z):'Z ?'}</b>${suggested.elevation.count?` • confiança Z ${suggested.elevation.confidence}% • ${suggested.elevation.count} ref.`:''}`;
-      if(state.safePlacementStage!==null){placeSafeOnMap(e.latlng);return;}
-      if(state.polygonPlacement){if((m.category||'dominacao')!=='dominacao')return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:e.latlng.lng,y:e.latlng.lat,z:0,status:'planned',validatedAt:null,validationReason:'map-placement'});m.zoneMode='polygon';commit('Vértice '+String(m.zonePolygon.length).padStart(2,'0')+' marcado no mapa');return;}
-      if(state.placing){m.points.push(normalizePoint({x:e.latlng.lng,
-y:e.latlng.lat,
-z:0,
-h:0,
-status:'planned'},m.points.length));commit('Ponto marcado no mapa');}
-      else {if((m.category||'dominacao')==='dominacao'&&dominationZoneMode(m)==='polygon'){if(qs('#mpClicked'))qs('#mpClicked').textContent=`${f(e.latlng.lng)},${f(e.latlng.lat)} • Polígono ativo: use MARCAR VÉRTICE NO MAPA`;return;}m.center.x=e.latlng.lng;m.center.y=e.latlng.lat;m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';syncForm();commit('Centro ajustado no mapa — validação removida');}
+      if(state.mapMode==='safe-stage'||state.mapMode==='safe-option'){placeSafeOnMap(e.latlng);return;}
+      if(state.mapMode==='polygon'){if((m.category||'dominacao')!=='dominacao')return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:e.latlng.lng,y:e.latlng.lat,z:0,status:'planned',validatedAt:null,validationReason:'map-placement'});m.zoneMode='polygon';commit('Vértice '+String(m.zonePolygon.length).padStart(2,'0')+' marcado no mapa');return;}
+      if(state.mapMode==='spawn'){m.points.push(normalizePoint({x:e.latlng.lng,y:e.latlng.lat,z:0,h:0,status:'planned'},m.points.length));commit('Ponto marcado no mapa');return;}
+      if(state.mapMode!=='center')return;
+      if((m.category||'dominacao')==='dominacao'&&dominationZoneMode(m)==='polygon'){if(qs('#mpClicked'))qs('#mpClicked').textContent=`${f(e.latlng.lng)},${f(e.latlng.lat)} • Polígono ativo: use MARCAR VÉRTICE NO MAPA`;return;}m.center.x=e.latlng.lng;m.center.y=e.latlng.lat;m.center.z=0;m.center.h=0;m.center.status='planned';m.center.validatedAt=null;m.center.validationReason='coordinate-change';syncForm();commit('Centro ajustado no mapa — validação removida');
     });
   }
 
@@ -1600,10 +1597,10 @@ iconAnchor:[12,
     const mapEl=state.map?.getContainer();if(mapEl)mapEl.style.cursor=chk.ok?'crosshair':'not-allowed';
     const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${idx+1}</b><br><span style="color:${chk.ok?'#52ff9a':'#ff7474'}"><b>${esc(chk.reason)}</b></span>`;
   }
-  function beginSafePlacement(stageIndex){
+  function beginSafePlacement(stageIndex,asOption=false){
     if(!requireEdit())return;
     const m=active();if(!m||((m.category||'dominacao')!=='gas'))return;
-    const r=ensureSafeRoute(m);if(!r?.stages?.[stageIndex])return;state.safeEditorStage=stageIndex;resetMapPlacementModes();state.safePlacementStage=stageIndex;
+    const r=ensureSafeRoute(m);if(!r?.stages?.[stageIndex])return;resetMapPlacementModes();state.safeEditorStage=stageIndex;state.safePlacementStage=stageIndex;state.safePlacementAsOption=!!asOption;state.mapMode=asOption?'safe-option':'safe-stage';
     const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${stageIndex+1}</b><br>Mova o mouse: verde permite marcar; vermelho bloqueia o clique.`;
     if(state.map?.getContainer())state.map.getContainer().style.cursor='crosshair';
   }
@@ -1612,12 +1609,12 @@ iconAnchor:[12,
     const check=safePlacementCheck(latlng);
     if(!check.ok){previewSafePlacement(latlng);if(qs('#mpClicked'))qs('#mpClicked').textContent='SAFE BLOQUEADA • '+check.reason;return false;}
     const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
-    const asOption=!!state.safePlacementAsOption;
+    const asOption=state.mapMode==='safe-option';
     if(asOption&&idx>0){
       const opts=safeOptions(r,idx,true),candidate={x:latlng.lng,y:latlng.lat,z:0};
       if(!opts.some(p=>distXY(p,candidate)<1))opts.push(candidate);
     }else{s.x=latlng.lng;s.y=latlng.lat;s.z=0;}
-    state.safePlacementAsOption=false;state.safeEditorStage=idx;state.safePlacementStage=null;clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
+    state.safeEditorStage=idx;state.safePlacementStage=null;state.safePlacementAsOption=false;state.mapMode='center';clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
     commit(`${asOption?'Possibilidade da SAFE':'Safe'} ${idx+1} marcada no mapa`);
     state.map?.panTo(latlng);renderSafeRouteUi();return true;
   }
@@ -1677,8 +1674,8 @@ iconAnchor:[12,
       </div>
     </section>`;}).join('');
     qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeToggle);renderSafeRouteUi();renderMap();focusSafeStage(state.safeEditorStage);}));
-    qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safePlace);beginSafePlacement(Number(btn.dataset.safePlace));}));
-    qsa('[data-safe-option]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeOption);state.safePlacementAsOption=true;beginSafePlacement(Number(btn.dataset.safeOption));}));
+    qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safePlace);beginSafePlacement(Number(btn.dataset.safePlace),false);}));
+    qsa('[data-safe-option]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeOption);beginSafePlacement(Number(btn.dataset.safeOption),true);}));
     qsa('[data-safe-clear]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeClear);setSafeOptions(r,i,[]);commit('Possibilidades da SAFE '+(i+1)+' removidas');renderSafeRouteUi();renderMap();}));
     qsa('[data-safe-add-next]',host).forEach(btn=>btn.addEventListener('click',()=>addDynamicSafeStage()));
     qsa('[data-safe-option-remove]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeOptionRemove),n=Number(btn.dataset.index),opts=safeOptions(r,i,true);if(!opts[n])return;opts.splice(n,1);commit('Possibilidade inválida S'+(i+1)+'-'+(n+1)+' removida');renderSafeRouteUi();renderMap();}));
@@ -2071,7 +2068,7 @@ s=coverageStats(m);if(!m||!s)return;applyRadius(s.recommended);});
     const box=document.createElement('div');box.id='mpDomPolygonBox';box.className='mp-card';box.dataset.forceTab='zona';box.style.marginTop='10px';
     box.innerHTML=`<h3>CDS DA ZONA — POLÍGONO</h3><p class="mp-note">Opcional. Cole 3 ou mais CDS na ordem do contorno. O mapa une os pontos e fecha a Zona de Pontuação automaticamente. Estas CDS não são spawns.</p><div id="mpDomPolygonStatus" class="mp-readout">Nenhum vértice cadastrado.</div><div id="mpDomPolygonList" style="margin-top:8px"></div><label style="margin-top:8px">CDS do vértice<input id="mpDomPolygonCds" type="text" placeholder="x, y, z ou vec3(x, y, z)"></label><label style="margin-top:8px">COLAR VÁRIAS CDS<textarea id="mpDomPolygonBulk" rows="5" placeholder="01 - x, y, z&#10;02 - x, y, z&#10;03 - vec3(x, y, z)"></textarea></label><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpDomPolygonAdd">ADICIONAR VÉRTICE</button><button type="button" id="mpDomPolygonPlace">MARCAR VÉRTICE NO MAPA</button><button type="button" id="mpDomPolygonBulkAdd">IMPORTAR / ACRESCENTAR</button><button type="button" id="mpDomPolygonBulkReplace">SUBSTITUIR POLÍGONO</button><button type="button" id="mpDomPolygonValidateAll">VALIDAR TODAS</button><button type="button" id="mpDomPolygonUndo">REMOVER ÚLTIMO</button><button type="button" id="mpDomPolygonClear">LIMPAR POLÍGONO</button></div><div class="mp-note" style="margin-top:10px"><b>PLANEJADOR ASSISTIDO</b> • gera apenas uma proposta visual; nada é alterado até clicar APLICAR. Ao aplicar, as CDS ficam PENDENTES até validação real no FiveM.</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0"><label>ESCALA<input id="mpDomProposalScale" type="number" min="0.2" max="3" step="0.1" value="1"></label><label>ROTAÇÃO °<input id="mpDomProposalRotation" type="number" min="-180" max="180" step="5" value="0"></label></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" data-zoneproposal="square">QUADRADO</button><button type="button" data-zoneproposal="rectangle">RETÂNGULO</button><button type="button" data-zoneproposal="triangle">TRIÂNGULO</button><button type="button" data-zoneproposal="hexagon">HEXÁGONO</button><button type="button" id="mpDomProposalApply">APLICAR PROPOSTA</button><button type="button" id="mpDomProposalCancel">CANCELAR</button></div>`;
     anchor.insertAdjacentElement('afterend',box);
-    qs('#mpDomPolygonPlace')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();if(!m||m.category!=='dominacao')return;const enable=!state.polygonPlacement;resetMapPlacementModes();state.polygonPlacement=enable;const b=qs('#mpDomPolygonPlace');if(b)b.textContent=state.polygonPlacement?'PARAR MARCAÇÃO':'MARCAR VÉRTICE NO MAPA';if(state.map?.getContainer())state.map.getContainer().style.cursor=state.polygonPlacement?'crosshair':'';const el=qs('#mpDomPolygonStatus');if(el&&state.polygonPlacement)el.innerHTML='<b>MARCAÇÃO DE VÉRTICES ATIVA</b><br>Clique no mapa seguindo a ordem do contorno. Os pontos entram como PENDENTES até validação real no FiveM.';});
+    qs('#mpDomPolygonPlace')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();if(!m||m.category!=='dominacao')return;const enable=!state.polygonPlacement;resetMapPlacementModes();state.polygonPlacement=enable;state.mapMode=enable?'polygon':'center';const b=qs('#mpDomPolygonPlace');if(b)b.textContent=state.polygonPlacement?'PARAR MARCAÇÃO':'MARCAR VÉRTICE NO MAPA';if(state.map?.getContainer())state.map.getContainer().style.cursor=state.polygonPlacement?'crosshair':'';const el=qs('#mpDomPolygonStatus');if(el&&state.polygonPlacement)el.innerHTML='<b>MARCAÇÃO DE VÉRTICES ATIVA</b><br>Clique no mapa seguindo a ordem do contorno. Os pontos entram como PENDENTES até validação real no FiveM.';});
     qs('#mpDomPolygonAdd')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active();if(!m||m.category!=='dominacao')return;const r=parseCds(qs('#mpDomPolygonCds')?.value);if(!r.ok||!validCoord(r.x)||!validCoord(r.y)){alert('CDS do vértice não reconhecida.');return;}if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:r.x,y:r.y,z:Number.isFinite(r.z)?r.z:0,status:'planned',validatedAt:null,validationReason:'pending-explicit-validation'});if(qs('#mpDomPolygonCds'))qs('#mpDomPolygonCds').value='';commit('Vértice da Zona de Dominação adicionado');});
     function readPolygonBulk(){const input=qs('#mpDomPolygonBulk'),lines=String(input?.value||'').split(/\n+/).map(x=>x.trim()).filter(Boolean),parsed=[],bad=[];lines.forEach((line,i)=>{const clean=line.replace(/^\s*\d+\s*[-–—:.)]\s*/,'').trim(),r=parseCds(clean);if(!r.ok||!validCoord(r.x)||!validCoord(r.y)){bad.push(i+1);return;}parsed.push({x:r.x,y:r.y,z:Number.isFinite(r.z)?r.z:0,status:'planned',validatedAt:null,validationReason:'pending-explicit-validation'});});return {input,parsed,bad};}
     function confirmPolygonBulk(result,action){if(!result.parsed.length){alert('Nenhuma CDS válida encontrada.');return false;}if(result.bad.length&&!confirm(result.parsed.length+' CDS reconhecida(s). Linha(s) não reconhecida(s): '+result.bad.join(', ')+'.\n\n'+action+' somente as CDS válidas?'))return false;return true;}
@@ -2382,7 +2379,7 @@ v])=>{const el=qs('#'+id);if(el&&document.activeElement!==el)el.value=v;});
     if(state.editing){const changed=pushUndo();if(!changed){setSaveState('Nenhuma alteração detectada');return;}m.updatedAt=nowIso();state.lastEditSnapshot=editSnapshot();state.dirty=true;render();setSaveState(`${reason} • NÃO SALVO`);return;}
     m.updatedAt=nowIso();saveStore();render();setSaveState(`${reason} • salvo`);queueSnapshot();
   }
-  function resetMapPlacementModes(){state.placing=false;state.polygonPlacement=false;state.safePlacementStage=null;clearSafeHover();qs('#missionPlannerMap')?.classList.remove('mp-crosshair');if(state.map?.getContainer())state.map.getContainer().style.cursor='';const pb=qs('#mpPlaceBtn');if(pb)pb.textContent='MARCAR PONTO NO MAPA';const vb=qs('#mpDomPolygonPlace');if(vb)vb.textContent='MARCAR VÉRTICE NO MAPA';}
+  function resetMapPlacementModes(){state.mapMode='center';state.placing=false;state.polygonPlacement=false;state.safePlacementStage=null;state.safePlacementAsOption=false;clearSafeHover();qs('#missionPlannerMap')?.classList.remove('mp-crosshair');if(state.map?.getContainer())state.map.getContainer().style.cursor='';const pb=qs('#mpPlaceBtn');if(pb)pb.textContent='MARCAR PONTO NO MAPA';const vb=qs('#mpDomPolygonPlace');if(vb)vb.textContent='MARCAR VÉRTICE NO MAPA';}
   function requireEdit(){if(state.editing)return true;alert('Zona travada em modo visualização. Clique em EDITAR ZONA para fazer alterações.');return false;}
   function startEdit(){const m=active();if(!m||state.editing)return;state.undoStack=[];state.redoStack=[];state.compareOverlay=false;state.editBackup={eventId:m.eventId,
 zones:JSON.parse(JSON.stringify(zonesOfEvent(m.eventId)))};state.editing=true;state.dirty=false;resetMapPlacementModes();state.lastEditSnapshot=editSnapshot();render();updateEditUi();setSaveState('MODO EDIÇÃO • alterações ainda não salvas');}
@@ -2868,7 +2865,7 @@ z=zones[0];if(!z)return false;
   function bind(){
     if(state.initialized)return;state.initialized=true;loadStore();recoverEditDraft();window.addEventListener('beforeunload',e=>{if(state.editing&&state.dirty){saveEditDraft();e.preventDefault();e.returnValue='';}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.safePresentation){e.preventDefault();stopSafePreview();exitSafePresentation();return;}if(!state.editing)return;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redoEdit():undoEdit();}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redoEdit();}});state.activeEventId=active()?.eventId||state.activeEventId;ensureCentralV954();ensureWorkspaceBar();ensureBackupCard();ensurePlannerTabs();ensureSafeRouteUi();adoptStrayCards();ensureMapKpis();initMap();render();renderWorkspaceBar();setWorkspace(false);bindFormAutosave();updateEditUi();
     qs('#mpEditMission')?.addEventListener('click',startEdit);qs('#mpUndoEdit')?.addEventListener('click',undoEdit);qs('#mpRedoEdit')?.addEventListener('click',redoEdit);qs('#mpSaveMission')?.addEventListener('click',saveMission);qs('#mpCancelEdit')?.addEventListener('click',cancelEdit);qs('#mpNewZone')?.addEventListener('click',createZone);qs('#mpCloneZone')?.addEventListener('click',cloneZone);qs('#mpReplicateZone')?.addEventListener('click',openReplicator);qs('#mpDeleteMission')?.addEventListener('click',deleteZone);
-    qs('#mpPlaceBtn')?.addEventListener('click',()=>{if(!requireEdit())return;const enable=!state.placing;resetMapPlacementModes();state.placing=enable;qs('#missionPlannerMap')?.classList.toggle('mp-crosshair',state.placing);if(state.map?.getContainer())state.map.getContainer().style.cursor=state.placing?'crosshair':'';qs('#mpPlaceBtn').textContent=state.placing?'PARAR DE MARCAR':'MARCAR PONTO NO MAPA';});
+    qs('#mpPlaceBtn')?.addEventListener('click',()=>{if(!requireEdit())return;const enable=state.mapMode!=='spawn';resetMapPlacementModes();state.placing=enable;state.mapMode=enable?'spawn':'center';qs('#missionPlannerMap')?.classList.toggle('mp-crosshair',state.placing);if(state.map?.getContainer())state.map.getContainer().style.cursor=state.placing?'crosshair':'';qs('#mpPlaceBtn').textContent=state.placing?'PARAR DE MARCAR':'MARCAR PONTO NO MAPA';});
     qs('#mpFit')?.addEventListener('click',fit);qs('#mpGoLS')?.addEventListener('click',()=>state.map?.setView(ll(900,-600),3));qs('#mpGoCayo')?.addEventListener('click',()=>{if(state.map&&state.cayoBounds)state.map.fitBounds(state.cayoBounds,{padding:[20,20]});});qs('#mpGenerateCircle')?.addEventListener('click',generateCircle);qs('#mpImport')?.addEventListener('click',importBulk);qs('#mpValidateBtn')?.addEventListener('click',()=>validateSelected());
     qs('#mpValidateBulkBtn')?.addEventListener('click',validateBulk);
     qs('#mpInvalidateBtn')?.addEventListener('click',invalidateSelected);
