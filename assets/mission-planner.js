@@ -871,24 +871,151 @@ corpo});
   }
   /* Fusão multi-PC: adiciona zonas novas e resolve a mesma zona pela versão
      mais recente. Em empate com conteúdo diferente, preserva o local e registra conflito. */
-  function missionComparable(m){const x=JSON.parse(JSON.stringify(m||{}));delete x._syncConflict;return JSON.stringify(x);}
+  function missionComparable(m){const x=JSON.parse(JSON.stringify(m||{}));delete x._syncConflict;delete x._rev;return JSON.stringify(x);}
+  /* V12.7 - sincronização por zona.
+     _rev (na zona)       = versão da nuvem que este navegador conhece;
+     state.syncedHash[id] = assinatura do conteúdo na última sincronização;
+     state.deletedIds     = zonas excluídas: backups e presets não podem recriá-las. */
+  const DELETED_KEY='highos_mission_planner_deleted';
+  const SYNCED_KEY='highos_mission_planner_synced';
+  function loadSyncMeta(){
+    try{state.deletedIds=new Set(JSON.parse(localStorage.getItem(DELETED_KEY)||'[]').map(String))}catch(e){state.deletedIds=new Set()}
+    try{state.syncedHash=JSON.parse(localStorage.getItem(SYNCED_KEY)||'{}')||{}}catch(e){state.syncedHash={}}
+  }
+  function saveSyncMeta(){
+    try{localStorage.setItem(DELETED_KEY,JSON.stringify([...state.deletedIds]));localStorage.setItem(SYNCED_KEY,JSON.stringify(state.syncedHash||{}));}catch(e){}
+  }
+  function zoneHash(m){const s=missionComparable(m);let h=5381;for(let i=0;i<s.length;i++)h=((h*33)^s.charCodeAt(i))>>>0;return h.toString(36)+':'+s.length;}
+  function isPendingZone(m){return !!m&&state.syncedHash?.[String(m.id)]!==zoneHash(m);}
+  function isEditingZone(m){return !!(m&&state.editing&&state.dirty&&m.eventId===active()?.eventId);}
+  function cloudSummary(){return `☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`;}
   function missionTime(m){const t=Date.parse(m?.updatedAt||'');return Number.isFinite(t)?t:0;}
+  function prepareIncoming(raw,id){
+    const m=JSON.parse(JSON.stringify(raw||{}));if(!m.id)m.id=id;delete m._syncConflict;normalizeCenter(m);
+    if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');
+    inferLegacyStructure(m);return m;
+  }
+  /* V12.7 - recebe entradas da nuvem: {id, rev, deleted, zona, legacy}.
+     - exclusão na nuvem remove a zona aqui (se não estiver em edição);
+     - versão maior na nuvem substitui a local, a menos que exista alteração
+       local ainda não enviada: aí marca conflito e não sobrescreve nada. */
   function mergeMissions(entrada=[]){
-    const result={added:0,updated:0,keptLocal:0,conflicts:[]};
+    const result={added:0,updated:0,removed:0,keptLocal:0,conflicts:[]};
     if(!Array.isArray(entrada)||!entrada.length)return result;
-    const chave=m=>`${String(m.eventId||'')}|${normalizeText(m.name||'')}`;
-    entrada.forEach(raw=>{
-      if(!raw||!raw.id)return;
-      const m=JSON.parse(JSON.stringify(raw));delete m._syncConflict;normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);
-      let idx=state.missions.findIndex(x=>x.id===m.id);if(idx<0)idx=state.missions.findIndex(x=>chave(x)===chave(m));
-      if(idx<0){state.missions.push(m);result.added++;return;}
-      const local=state.missions[idx],isDirtyEdit=!!(state.editing&&state.dirty&&local.id===state.activeId);
-      if(missionComparable(local)===missionComparable(m)){delete local._syncConflict;return;}
-      if(isDirtyEdit){local._syncConflict={at:nowIso(),remote:m};result.keptLocal++;result.conflicts.push({id:local.id,name:local.name,resolution:'manual',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});return;}
-      state.missions[idx]=m;result.updated++;
+    if(!state.deletedIds)loadSyncMeta();
+    entrada.forEach(e=>{
+      if(!e||!e.id)return;
+      const id=String(e.id),idx=state.missions.findIndex(x=>String(x.id)===id),local=idx>=0?state.missions[idx]:null;
+      if(e.deleted){
+        state.deletedIds.add(id);delete state.syncedHash[id];
+        if(!local)return;
+        if(isEditingZone(local)){local._syncConflict={at:nowIso(),deleted:true,remote:null,by:e.deletedBy||e.updatedBy||'',when:e.deletedAtText||'',remoteRev:e.rev};result.keptLocal++;result.conflicts.push({id,name:local.name,resolution:'manual',deleted:true});return;}
+        state.missions.splice(idx,1);result.removed++;return;
+      }
+      if(!e.zona)return;
+      const m=prepareIncoming(e.zona,id);
+      if(e.legacy){
+        // Antes da migração: comportamento antigo, sem apagar nada.
+        if(state.deletedIds.has(id))return;
+        if(!local){state.missions.push(m);result.added++;return;}
+        if(missionComparable(local)===missionComparable(m)||isEditingZone(local))return;
+        if(missionTime(m)>missionTime(local)){state.missions[idx]=m;result.updated++;}
+        return;
+      }
+      const remoteRev=Number(e.rev)||0;m._rev=remoteRev;
+      state.deletedIds.delete(id);
+      if(!local){state.missions.push(m);state.syncedHash[id]=zoneHash(m);result.added++;return;}
+      const localRev=Number(local._rev)||0;
+      if(missionComparable(local)===missionComparable(m)){local._rev=Math.max(localRev,remoteRev);delete local._syncConflict;state.syncedHash[id]=zoneHash(local);return;}
+      if(remoteRev<=localRev)return; // alteração local ainda não enviada
+      const pendenteLocal=localRev?isPendingZone(local):(missionTime(local)>missionTime(m));
+      if(isEditingZone(local)||pendenteLocal){
+        local._syncConflict={at:nowIso(),remote:m,by:e.updatedBy||'',when:e.updatedAtText||'',remoteRev};
+        result.keptLocal++;result.conflicts.push({id,name:local.name,resolution:'manual',localAt:local.updatedAt||'',remoteAt:e.updatedAtText||''});return;
+      }
+      state.missions[idx]=m;state.syncedHash[id]=zoneHash(m);result.updated++;
     });
-    if(result.added||result.updated)render();
+    saveSyncMeta();
+    if(result.added||result.updated||result.removed){
+      if(!state.missions.some(x=>x.id===state.activeId)){const f=state.missions[0];state.activeId=f?.id||null;state.activeEventId=f?.eventId||null;}
+      try{localStorage.setItem(STORE,JSON.stringify(state.missions));localStorage.setItem(ACTIVE,state.activeId||'');}catch(err){}
+      render();
+    }
     return result;
+  }
+
+  /* Envia zonas com alteração local. Antes de qualquer gravação garante a
+     migração do formato antigo (senão a coleção nova esconderia o restante). */
+  async function syncPendingZones(lista){
+    const cloud=window.HighOSMissionCloud;
+    if(!cloud?.saveZones||!cloud.canEdit())return {ok:false,reason:'permission',conflicts:[]};
+    const mig=await cloud.ensureMigrated(state.missions);
+    if(!mig.ok)return {ok:false,reason:mig.reason||'migration',error:mig.error,conflicts:[]};
+    if(mig.migrated){const res=await cloud.pull({force:true});if(res?.entries)mergeMissions(res.entries);}
+    const ids=new Set((lista||[]).map(z=>String(z.id)));
+    const alvo=state.missions.filter(z=>ids.has(String(z.id))&&isPendingZone(z));
+    if(!alvo.length)return {ok:true,conflicts:[],sent:0};
+    const r=await cloud.saveZones(alvo.map(z=>({zona:z,baseRev:Number(z._rev)||0})));
+    (r.results||[]).forEach(x=>{
+      const z=state.missions.find(m=>String(m.id)===x.id);if(!z)return;
+      if(x.ok){z._rev=x.rev;delete z._syncConflict;state.syncedHash[x.id]=zoneHash(z);state.deletedIds.delete(x.id);}
+      else if(x.conflict){z._syncConflict={at:nowIso(),remote:x.remote?.zona?prepareIncoming(x.remote.zona,x.id):null,deleted:!!x.remote?.deleted,by:x.remote?.deletedBy||x.remote?.updatedBy||'',when:x.remote?.deletedAtText||x.remote?.updatedAtText||'',remoteRev:x.remoteRev};}
+    });
+    saveSyncMeta();
+    try{localStorage.setItem(STORE,JSON.stringify(state.missions));}catch(e){}
+    const conflicts=(r.results||[]).filter(x=>x.conflict),grandes=(r.results||[]).filter(x=>x.tooBig);
+    if(grandes.length)alert('Zona grande demais para salvar na nuvem (limite do Firestore): '+grandes.map(g=>g.id).join(', '));
+    return {ok:!!r.ok,conflicts,error:r.error,sent:alvo.length};
+  }
+
+  /* Conflito: outra pessoa salvou a mesma zona depois que você abriu.
+     A pessoa decide, zona por zona: manter a sua ou usar a da nuvem. */
+  async function resolveZoneConflicts(){
+    const cloud=window.HighOSMissionCloud;let resolvidas=0;
+    const lista=state.missions.filter(z=>z._syncConflict&&!isEditingZone(z));
+    for(const z of lista){
+      const c=z._syncConflict,quem=c.by?` por ${c.by}`:'',quando=c.when?` em ${new Date(c.when).toLocaleString('pt-BR')}`:'';
+      const texto=c.deleted
+        ?`A zona "${z.name}" foi EXCLUÍDA${quem}${quando}.\n\nOK = manter a sua versão (restaura a zona)\nCancelar = aceitar a exclusão`
+        :`A zona "${z.name}" foi alterada${quem}${quando} depois que você abriu.\n\nOK = manter a SUA versão (sobrescreve a da nuvem)\nCancelar = descartar a sua e usar a da nuvem`;
+      if(confirm(texto)){
+        const r=await cloud.saveZones([{zona:z,baseRev:c.remoteRev}]);const x=r.results?.[0];
+        if(x?.ok){z._rev=x.rev;delete z._syncConflict;state.syncedHash[x.id]=zoneHash(z);state.deletedIds.delete(x.id);resolvidas++;}
+      }else{
+        const idx=state.missions.indexOf(z);
+        if(c.deleted){state.missions.splice(idx,1);state.deletedIds.add(String(z.id));delete state.syncedHash[String(z.id)];}
+        else if(c.remote){const m=c.remote;m._rev=c.remoteRev;state.missions[idx]=m;state.syncedHash[String(m.id)]=zoneHash(m);}
+        resolvidas++;
+      }
+    }
+    if(lista.length){saveSyncMeta();if(!state.missions.some(x=>x.id===state.activeId)){const f=state.missions[0];state.activeId=f?.id||null;state.activeEventId=f?.eventId||null;}saveStore();render();}
+    return resolvidas;
+  }
+
+  /* Exclusão só acontece com a nuvem confirmando. Sem Firebase, nada é apagado. */
+  async function deleteZonesSynced(zonas){
+    const cloud=window.HighOSMissionCloud;
+    if(!cloud?.deleteZones||!cloud.canEdit()){alert('A exclusão precisa do Firebase conectado e de permissão de edição no Planejador. Nada foi apagado.');return false;}
+    setCloudState('sync','↻ EXCLUINDO NO FIREBASE...');
+    const mig=await cloud.ensureMigrated(state.missions);
+    if(!mig.ok){setCloudState('local','⚠ FIREBASE PENDENTE');alert('Não foi possível preparar a nuvem para excluir. Nada foi apagado.');return false;}
+    if(mig.migrated){const res=await cloud.pull({force:true});if(res?.entries)mergeMissions(res.entries);}
+    const revDe=z=>Number(state.missions.find(m=>m.id===z.id)?._rev??z._rev)||0;
+    let r=await cloud.deleteZones(zonas.map(z=>({zona:z,baseRev:revDe(z)})));
+    const jaExcluida=x=>x.conflict&&x.remote?.deleted;
+    const conflitos=(r.results||[]).filter(x=>x.conflict&&!jaExcluida(x));
+    let resultados=(r.results||[]).filter(x=>!x.conflict||jaExcluida(x)),erro=r.error;
+    if(conflitos.length){
+      const nomes=conflitos.map(c=>zonas.find(z=>String(z.id)===c.id)?.name||c.id).join('\n- ');
+      if(!confirm(`Estas zonas foram alteradas por outra pessoa depois que você abriu:\n- ${nomes}\n\nExcluir mesmo assim?`)){setCloudState('ok',cloudSummary());return false;}
+      const r2=await cloud.deleteZones(conflitos.map(c=>({zona:zonas.find(z=>String(z.id)===c.id),baseRev:c.remoteRev})));
+      resultados=resultados.concat(r2.results||[]);erro=erro||r2.error;
+    }
+    const falhou=erro||resultados.length<zonas.length||resultados.some(x=>!x.ok&&!jaExcluida(x));
+    if(falhou){setCloudState('local','⚠ FIREBASE PENDENTE');alert('Falha ao excluir no Firebase'+(erro?.message?': '+erro.message:'')+'. Nada foi apagado neste navegador.');return false;}
+    zonas.forEach(z=>{state.deletedIds.add(String(z.id));delete state.syncedHash[String(z.id)];});
+    saveSyncMeta();setCloudState('ok',cloudSummary());
+    return true;
   }
 
   function saveStore(){
@@ -917,9 +1044,13 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     const btn=qs('#mpForceCloudSync');if(btn){btn.disabled=true;btn.textContent='↻ SINCRONIZANDO...';}
     setCloudState('sync','↻ SINCRONIZANDO FIREBASE...');
     try{
-      const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],merge=mergeMissions(remote);if(res?.updatedAtText)state.cloudMeta={updatedAtText:res.updatedAtText,updatedBy:res.updatedBy||''};
+      let res=await cloud.pull({force:true});
+      if(res?.legacy&&cloud.canEdit()){const mig=await cloud.ensureMigrated(state.missions);if(mig.migrated)res=await cloud.pull({force:true});}
+      const merge=mergeMissions(Array.isArray(res?.entries)?res.entries:[]);state.cloudMeta={updatedAtText:res?.pulledAt||new Date().toISOString(),updatedBy:''};
+      if(cloud.canEdit()){const pend=state.missions.filter(z=>!isEditingZone(z)&&!z._syncConflict&&isPendingZone(z));if(pend.length){const sp=await syncPendingZones(pend);if(!sp.ok&&!sp.conflicts.length)throw sp.error||new Error('envio pendente falhou');}}
+      await resolveZoneConflicts();
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
-      setSaveState(`Firebase atualizado em memória ✓${merge.added?' • '+merge.added+' nova(s)':''}${merge.updated?' • '+merge.updated+' atualizada(s)':''}${merge.conflicts.some(x=>x.resolution==='manual')?' • ⚠ edição local não salva em conflito':''}`);
+      setSaveState(`Firebase sincronizado ✓${merge.added?' • '+merge.added+' nova(s)':''}${merge.updated?' • '+merge.updated+' atualizada(s)':''}${merge.removed?' • '+merge.removed+' excluída(s)':''}`);
       render();
     }catch(e){
       console.warn('Planejador: sincronização manual falhou',e);setCloudState('local','⚠ FIREBASE PENDENTE');setSaveState('Falha ao sincronizar Firebase • dados locais preservados');
@@ -930,12 +1061,14 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     if(!cloud||!cloud.pull){if(tries<12)setTimeout(()=>syncMissionsFromCloud(tries+1),1500);else setCloudState('local');return;}
     setCloudState('sync');
     cloud.pull().then(async res=>{
-      const remote=Array.isArray(res?.missions)?res.missions:[];
-      const merge=mergeMissions(remote);
+      // V12.7 - a primeira abertura de quem edita converte o formato antigo (uma vez só, para toda a equipe).
+      if(res?.legacy&&cloud.canEdit()&&cloud.ensureMigrated){const mig=await cloud.ensureMigrated(state.missions);if(mig.migrated){res=await cloud.pull({force:true});setStatus(`Planejador convertido para o novo formato da nuvem: ${mig.count} zona(s).`,'ok');}}
+      const merge=mergeMissions(Array.isArray(res?.entries)?res.entries:[]);
       // Leitura pura: abrir/sincronizar nunca grava de volta no Firebase.
       // Escrita acontece somente no SALVAR explícito após alteração real.
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
-      if(merge.added||merge.updated)setStatus(`${merge.added} nova(s) • ${merge.updated} atualizada(s) recebidas do Firebase.`,'ok');if(merge.conflicts.some(x=>x.resolution==='manual'))setSaveState('⚠ Existem conflitos de sincronização que não foram sobrescritos.');
+      if(merge.added||merge.updated||merge.removed)setStatus(`${merge.added} nova(s) • ${merge.updated} atualizada(s) • ${merge.removed} excluída(s) pela equipe.`,'ok');
+      if(state.missions.some(z=>z._syncConflict&&!isEditingZone(z)))await resolveZoneConflicts();
     }).catch(()=>setCloudState('local'));
   }
 
@@ -943,6 +1076,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     const byId=new Set(state.missions.map(m=>m.id));
     let changed=false;
     presets.forEach(p=>{
+      if(state.deletedIds?.has(String(p.id)))return; // V12.7 - preset excluído não volta
       const existing=state.missions.find(m=>m.id===p.id);
       if(existing){
         const fresh=presetMission(p);
@@ -975,6 +1109,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
       if(!Array.isArray(list))return;
       list.forEach(raw=>{
         if(!raw||!raw.id)return;
+        if(state.deletedIds?.has(String(raw.id)))return; // V12.7 - zona excluída não volta do backup
         const k=key(raw);if(known.has(k))return;
         const m=JSON.parse(JSON.stringify(raw));delete m._syncConflict;normalizeCenter(m);
         if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');
@@ -984,6 +1119,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     return recovered;
   }
   function loadStore(){
+    loadSyncMeta();
     let raw=null;
     try{raw=JSON.parse(localStorage.getItem(STORE)||'null')}catch(e){}
     if(Array.isArray(raw)&&raw.length){
@@ -991,7 +1127,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
       state.missions.forEach(m=>{delete m._syncConflict;normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);});
     }else{
       // Nunca envia presets para o Firebase antes do primeiro pull.
-      state.missions=presets.map(presetMission);
+      state.missions=presets.filter(p=>!state.deletedIds.has(String(p.id))).map(presetMission);
     }
     const recovered=recoverMissingFromLocalBackups();
     repairKnownZoneAssignments();repairFacxFacHierarchy();mergeOfficialPresets();
@@ -1490,7 +1626,7 @@ iconAnchor:[12,
   function renderSafeRouteUi(){
     ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;const gas=(m.category||'dominacao')==='gas';box.style.display=gas?'block':'none';if(!gas)return;
     const host=qs('#mpSafeStages'),strip=qs('#mpSafeStageStrip'),status=qs('#mpSafeRouteStatus'),validator=qs('#mpSafeValidator');if(!host||!strip)return;
-    if(!hasDynamicSafe(m)){host.innerHTML='<div class="mp-gas-empty"><b>SAFE DINÂMICA</b><span>A zona e os spawns atuais serão preservados.</span><button type="button" id="mpEnableDynamicSafe" class="primary">⚡ IMPLANTAR SAFE DINÂMICA</button></div>';strip.innerHTML='';validator.innerHTML='';qs('#mpEnableDynamicSafe')?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');});return;}
+    if(!hasDynamicSafe(m)){host.innerHTML='<button type="button" id="mpEnableDynamicSafe" class="primary">CRIAR SAFE DINÂMICA</button>';strip.innerHTML='';validator.innerHTML='';qs('#mpEnableDynamicSafe')?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');});return;}
     const r=ensureSafeRoute(m),open=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));state.safeEditorStage=open;
     strip.innerHTML=r.stages.map((s,i)=>'<span style="display:inline-flex;gap:2px;align-items:center"><button type="button" data-safe-tab="'+i+'" title="Editar SAFE '+(i+1)+'" class="'+(i===open?'primary':'')+'">S'+(i+1)+'</button>'+(r.stages.length>1?'<button type="button" data-safe-delete="'+i+'" title="Remover SAFE '+(i+1)+'" aria-label="Remover SAFE '+(i+1)+'">🗑</button>':'')+'</span>').join('<span>→</span>')+(r.stages.length<4?'<button type="button" id="mpAddSafeTop" title="Adicionar próxima SAFE">＋</button>':'');
     qsa('[data-safe-tab]',strip).forEach(b=>b.onclick=()=>selectSafeStage(Number(b.dataset.safeTab),{focus:false}));qsa('[data-safe-delete]',strip).forEach(b=>b.onclick=e=>{e.stopPropagation();removeSafeStage(Number(b.dataset.safeDelete));});qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
@@ -2072,7 +2208,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
 
   function updateExport(){const m=active(),
 out=qs('#mpExport');if(out&&m)out.value=m.points.filter(isValidated).map((p,i)=>`${p.id||i+1} - ${rawCds(p)}`).join('\n');}
-  function render(){adoptStrayCards();ensureSafeRouteUi();adoptStrayCards();renderMissionList();renderPointList();renderMap();analyze();updateExport();syncForm();renderCenterValidation();renderCoverage();renderProTools();renderPlannerBadges();renderWorkspaceBar();renderOperationalMode();renderBackupList();const rt=qs('#mpRequestText'),
+  function render(){adoptStrayCards();ensureSafeRouteUi();adoptStrayCards();renderMissionList();renderPointList();renderMap();analyze();updateExport();syncForm();renderCenterValidation();renderCoverage();renderProTools();renderPlannerBadges();renderWorkspaceBar();renderBackupList();const rt=qs('#mpRequestText'),
 m=active();if(rt&&document.activeElement!==rt)rt.value=m?.requestText||'';loadSnapshotPreview();}
 
   function syncForm(){
@@ -2116,7 +2252,7 @@ v])=>{const el=qs('#'+id);if(el&&document.activeElement!==el)el.value=v;});
   function requireEdit(){if(state.editing)return true;alert('Zona travada em modo visualização. Clique em EDITAR ZONA para fazer alterações.');return false;}
   function startEdit(){const m=active();if(!m||state.editing)return;state.undoStack=[];state.redoStack=[];state.compareOverlay=false;state.editBackup={eventId:m.eventId,
 zones:JSON.parse(JSON.stringify(zonesOfEvent(m.eventId)))};state.editing=true;state.dirty=false;resetMapPlacementModes();state.lastEditSnapshot=editSnapshot();render();updateEditUi();setSaveState('MODO EDIÇÃO • alterações ainda não salvas');}
-  function saveMission(){const m=active();if(!m)return;if(!state.editing){setSaveState('Nenhuma alteração para salvar');return;}const audit=plannerAudit(m);if(audit.issues.length&&!confirm('Existem bloqueios de validação:\n\n- '+audit.issues.join('\n- ')+'\n\nSalvar mesmo assim como rascunho?'))return;m.updatedAt=nowIso();const original=state.editBackup?.zones?.find(z=>z.id===m.id);if(original)m._lastSavedRequestBase=requestComparable(original);saveStore();const cloudPush=window.HighOSMissionCloud?.pushNow?.(JSON.parse(JSON.stringify(state.missions)));setCloudState('sync','↻ SALVANDO NO FIREBASE...');clearEditDraft();state.editBackup=null;state.editing=false;state.dirty=false;resetMapPlacementModes();state.undoStack=[];state.redoStack=[];state.lastEditSnapshot=null;state.compareOverlay=false;render();updateEditUi();setSaveState(audit.issues.length?'Zona salva como rascunho ⚠ • enviando Firebase':'Zona salva ✓ • enviando Firebase');Promise.resolve(cloudPush).then(ok=>{if(ok){setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);setSaveState(audit.issues.length?'Rascunho salvo ⚠ • Firebase sincronizado':'Zona salva ✓ • Firebase sincronizado');}else{setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');setSaveState('Salvo localmente • Firebase pendente');}}).catch(()=>{setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');setSaveState('Salvo localmente • Firebase pendente');});queueSnapshot();}
+  function saveMission(){const m=active();if(!m)return;if(!state.editing){setSaveState('Nenhuma alteração para salvar');return;}const audit=plannerAudit(m);if(audit.issues.length&&!confirm('Existem bloqueios de validação:\n\n- '+audit.issues.join('\n- ')+'\n\nSalvar mesmo assim como rascunho?'))return;m.updatedAt=nowIso();const original=state.editBackup?.zones?.find(z=>z.id===m.id);if(original)m._lastSavedRequestBase=requestComparable(original);saveStore();const pendentes=state.missions.filter(z=>isPendingZone(z)&&!z._syncConflict);const cloudPush=syncPendingZones(pendentes);setCloudState('sync','↻ SALVANDO NO FIREBASE...');clearEditDraft();state.editBackup=null;state.editing=false;state.dirty=false;resetMapPlacementModes();state.undoStack=[];state.redoStack=[];state.lastEditSnapshot=null;state.compareOverlay=false;render();updateEditUi();setSaveState(audit.issues.length?'Zona salva como rascunho ⚠ • enviando Firebase':'Zona salva ✓ • enviando Firebase');Promise.resolve(cloudPush).then(async r=>{if(r?.conflicts?.length){setCloudState('local','⚠ CONFLITO DE VERSÃO');setSaveState('Outra pessoa alterou esta zona • escolha qual versão manter');await resolveZoneConflicts();setCloudState('ok',cloudSummary());return;}if(r?.ok){setCloudState('ok',cloudSummary());setSaveState(audit.issues.length?'Rascunho salvo ⚠ • Firebase sincronizado':'Zona salva ✓ • Firebase sincronizado');}else{setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');setSaveState('Salvo localmente • Firebase pendente');}}).catch(()=>{setCloudState('local','⚠ SALVO LOCAL • FIREBASE PENDENTE');setSaveState('Salvo localmente • Firebase pendente');});queueSnapshot();}
   function cancelEdit(){if(!state.editing)return;clearEditDraft();if(state.editBackup?.eventId&&Array.isArray(state.editBackup.zones)){const eid=state.editBackup.eventId;const keep=state.missions.filter(x=>x.eventId!==eid);state.missions=[...state.editBackup.zones,
 ...keep];}state.editBackup=null;state.editing=false;state.dirty=false;resetMapPlacementModes();state.undoStack=[];state.redoStack=[];state.lastEditSnapshot=null;state.activeEventId=active()?.eventId||state.activeEventId;render();updateEditUi();setSaveState('Alterações descartadas • visualização');}
   function updateEditUi(){
@@ -2334,14 +2470,19 @@ block:'center'}),40);}
     const mapEl=state.map?.getContainer?.();if(mapEl)mapEl.style.cursor='';
   }
   function switchMission(id){if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja descartá-las?'))return;cleanupSafePresentation();if(state.editing)cancelEdit();state.activeId=id;const m=state.missions.find(m=>m.id===id);state.activeEventId=m?.eventId||state.activeEventId;state.libraryCategory=(m?.category||state.libraryCategory||'dominacao');saveStore();setWorkspace(true);render();updateEditUi();focusActiveMission(true);}
-  function deleteZone(){const m=active();if(!m)return;const zones=zonesOfEvent(m.eventId);if(zones.length<=1){alert('Este é o único mapa/zona do evento. Para removê-lo, exclua o evento inteiro.');return;}if(!confirm(`Apagar somente a zona "${m.name}" do evento "${m.event}"?`))return;cleanupSafePresentation();state.missions=state.missions.filter(x=>x.id!==m.id);const next=zones.find(x=>x.id!==m.id);state.activeId=next?.id||null;saveStore();render();focusActiveMission(false);}
+  function deleteZone(){const m=active();if(!m)return;const zones=zonesOfEvent(m.eventId);if(zones.length<=1){alert('Este é o único mapa/zona do evento. Para removê-lo, exclua o evento inteiro.');return;}if(!confirm(`Apagar somente a zona "${m.name}" do evento "${m.event}"?\n\nA exclusão vale para toda a equipe.`))return;setSaveState('Excluindo no Firebase...');deleteZonesSynced([m]).then(ok=>{if(!ok){setSaveState('Exclusão cancelada • nada foi apagado');return;}cleanupSafePresentation();state.missions=state.missions.filter(x=>x.id!==m.id);const next=zones.find(x=>x.id!==m.id);state.activeId=next?.id||null;saveStore();render();focusActiveMission(false);setSaveState('Zona excluída ✓ • Firebase sincronizado');});}
   function deleteEvent(){
     const m=active();if(!m)return;const zones=zonesOfEvent(m.eventId);
     if(zones.some(z=>z.official)){if(!confirm(`Este evento contém zona(s) cadastrada(s) originalmente no sistema. Excluir o evento "${m.event}" e suas ${zones.length} zona(s)?`))return;}
     else if(!confirm(`Excluir o evento "${m.event}" e TODAS as ${zones.length} zona(s)?`))return;
-    cleanupSafePresentation();state.missions=state.missions.filter(x=>x.eventId!==m.eventId);
-    const first=state.missions.find(x=>(x.category||'dominacao')===state.libraryCategory)||state.missions[0];
-    state.activeId=first?.id||null;state.activeEventId=first?.eventId||null;saveStore();render();focusActiveMission(false);
+    setSaveState('Excluindo no Firebase...');
+    deleteZonesSynced(zones).then(ok=>{
+      if(!ok){setSaveState('Exclusão cancelada • nada foi apagado');return;}
+      cleanupSafePresentation();state.missions=state.missions.filter(x=>x.eventId!==m.eventId);
+      const first=state.missions.find(x=>(x.category||'dominacao')===state.libraryCategory)||state.missions[0];
+      state.activeId=first?.id||null;state.activeEventId=first?.eventId||null;saveStore();render();focusActiveMission(false);
+      setSaveState('Evento excluído ✓ • Firebase sincronizado');
+    });
   }
   function eventProfiles(category,eventName){
     const fac=/fac\s*x\s*fac/i.test(eventName||'');
@@ -2585,7 +2726,7 @@ z=zones[0];if(!z)return false;
   function ensureWorkspaceBar(){
     const shell=qs('.mission-planner-shell');if(!shell||qs('#mpWorkspaceBar'))return;
     const bar=document.createElement('div');bar.id='mpWorkspaceBar';bar.className='mp-workspace-bar';
-    bar.innerHTML=`<div class="mp-workspace-brand"><img src="assets/high_logo.png" alt="High OS"><b>HIGH OS</b></div><button type="button" id="mpBackLibrary" class="mp-icon-action" title="Voltar às missões — retorna para a biblioteca de mapas" aria-label="Voltar às missões">←</button><div class="mp-workspace-path"><b id="mpWorkspaceEvent">Evento</b><span>›</span><strong id="mpWorkspaceZone">Zona</strong></div><div class="mp-editor-actions"><button type="button" id="mpNewZone" class="mp-icon-action" title="Nova zona — cria outra zona dentro deste evento" aria-label="Nova zona">＋</button><button type="button" id="mpReplicateZone" class="mp-icon-action" title="Replicar — reaproveita a configuração desta zona em uma nova zona" aria-label="Replicar zona">⧉</button><button type="button" id="mpCloneZone" class="mp-icon-action" title="Clonar — cria uma cópia independente desta zona" aria-label="Clonar zona">⎘</button><button type="button" id="mpDeleteMission" class="mp-delete-action mp-icon-action" title="Excluir zona — remove esta zona do evento" aria-label="Excluir zona">⌫</button><button type="button" id="mpUndoEdit" class="mp-icon-action" title="Desfazer — volta a última alteração da edição" aria-label="Desfazer" style="display:none">↶</button><button type="button" id="mpRedoEdit" class="mp-icon-action" title="Refazer — reaplica a alteração desfeita" aria-label="Refazer" style="display:none">↷</button><button type="button" id="mpEditMission" class="mp-icon-action" title="Editar — habilita alterações nesta zona" aria-label="Editar zona">✎</button><button type="button" id="mpSaveMission" class="primary mp-icon-action" title="Salvar — grava as alterações desta zona" aria-label="Salvar alterações" style="display:none">✓</button><button type="button" id="mpCancelEdit" class="mp-icon-action" title="Cancelar — descarta a edição atual" aria-label="Cancelar edição" style="display:none">×</button></div><span id="mpCloudState" class="mp-cloud-state local">⚠ MODO LOCAL</span>`;
+    bar.innerHTML=`<button type="button" id="mpBackLibrary" class="mp-icon-action" title="Voltar às missões — retorna para a biblioteca de mapas" aria-label="Voltar às missões">←</button><div class="mp-workspace-path"><b id="mpWorkspaceEvent">Evento</b><span>›</span><strong id="mpWorkspaceZone">Zona</strong></div><div class="mp-editor-actions"><button type="button" id="mpNewZone" class="mp-icon-action" title="Nova zona — cria outra zona dentro deste evento" aria-label="Nova zona">＋</button><button type="button" id="mpReplicateZone" class="mp-icon-action" title="Replicar — reaproveita a configuração desta zona em uma nova zona" aria-label="Replicar zona">⧉</button><button type="button" id="mpCloneZone" class="mp-icon-action" title="Clonar — cria uma cópia independente desta zona" aria-label="Clonar zona">⎘</button><button type="button" id="mpDeleteMission" class="mp-delete-action mp-icon-action" title="Excluir zona — remove esta zona do evento" aria-label="Excluir zona">⌫</button><button type="button" id="mpUndoEdit" class="mp-icon-action" title="Desfazer — volta a última alteração da edição" aria-label="Desfazer" style="display:none">↶</button><button type="button" id="mpRedoEdit" class="mp-icon-action" title="Refazer — reaplica a alteração desfeita" aria-label="Refazer" style="display:none">↷</button><button type="button" id="mpEditMission" class="mp-icon-action" title="Editar — habilita alterações nesta zona" aria-label="Editar zona">✎</button><button type="button" id="mpSaveMission" class="primary mp-icon-action" title="Salvar — grava as alterações desta zona" aria-label="Salvar alterações" style="display:none">✓</button><button type="button" id="mpCancelEdit" class="mp-icon-action" title="Cancelar — descarta a edição atual" aria-label="Cancelar edição" style="display:none">×</button></div><span id="mpCloudState" class="mp-cloud-state local">⚠ MODO LOCAL</span>`;
     shell.insertAdjacentElement('beforebegin',bar);
     qs('#mpBackLibrary')?.addEventListener('click',()=>{if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja voltar às missões?'))return;if(state.editing)cancelEdit();setWorkspace(false);renderCentralV954();});
   }
@@ -2724,71 +2865,6 @@ z=zones[0];if(!z)return false;
     let salva='zona';try{salva=localStorage.getItem('highos_mp_tab')||'zona';}catch(e){}
     setPlannerTab(PLANNER_TABS.some(t=>t.id===salva)?salva:'zona');
   }
-  const GAS_STEPS=[
-    {id:'zone',n:1,label:'Zona',sub:'Centro e tamanho'},
-    {id:'spawns',n:2,label:'Equipes',sub:'Spawns existentes'},
-    {id:'validation',n:3,label:'Validação',sub:'NC + TPCDS no jogo'},
-    {id:'safe',n:4,label:'Safe',sub:'Fases e rotas'},
-    {id:'simulation',n:5,label:'Simulação',sub:'Animação e tempo'},
-    {id:'request',n:6,label:'Solicitação',sub:'Texto do Discord'}
-  ];
-  function ensureGasStepper(){
-    const bar=qs('#mpWorkspaceBar');if(!bar||qs('#mpGasStepper'))return;
-    const stepper=document.createElement('nav');stepper.id='mpGasStepper';stepper.className='mp-gas-stepper';stepper.setAttribute('aria-label','Etapas da missão');
-    stepper.innerHTML=GAS_STEPS.map(s=>'<button type="button" data-gas-step="'+s.id+'"><i>'+s.n+'</i><span><b>'+s.label+'</b><small>'+s.sub+'</small></span></button>').join('');
-    bar.insertAdjacentElement('afterend',stepper);
-    qsa('[data-gas-step]',stepper).forEach(b=>b.onclick=()=>setGasStep(b.dataset.gasStep));
-  }
-  function setGasStep(step){
-    const page=qs('#page-planejador');if(!page)return;
-    const map={zone:'mission',spawns:'mission',validation:'tools',safe:'safe',simulation:'safe',request:'tools'};
-    page.dataset.gasStep=step;setGasOperationalView(map[step]||'safe');
-    if(step==='simulation'){setTimeout(()=>startSafePreview(),80);}
-    if(step==='request'){setTimeout(()=>qs('#mpGenerateRequest')?.scrollIntoView?.({behavior:'smooth',block:'center'}),80);}
-    if(step==='validation'){setTimeout(()=>qs('#mpValidateCds')?.focus?.(),80);}
-    renderGasStepper();
-  }
-  function renderGasStepper(){
-    const m=active(),page=qs('#page-planejador');if(!m||!page)return;
-    ensureGasStepper();const current=page.dataset.gasStep||'safe',pts=m.points||[],valid=pts.filter(isValidated).length;
-    qsa('[data-gas-step]',qs('#mpGasStepper')).forEach(b=>{
-      const id=b.dataset.gasStep,done=(id==='zone'&&validCoord(m.center?.x)&&validCoord(m.center?.y))||(id==='spawns'&&pts.length>0)||(id==='validation'&&pts.length>0&&valid===pts.length)||(id==='safe'&&hasDynamicSafe(m));
-      b.classList.toggle('active',id===current);b.classList.toggle('done',!!done);
-      const i=b.querySelector('i');if(i)i.textContent=done?'✓':GAS_STEPS.find(s=>s.id===id)?.n;
-    });
-  }
-
-  function ensureGasOperationalUi(){
-    const side=qs('.mission-planner-side');if(!side)return;
-    let bar=qs('#mpGasOperationalBar');
-    if(!bar){
-      bar=document.createElement('div');bar.id='mpGasOperationalBar';bar.className='mp-gas-operational-bar';
-      bar.innerHTML='<div class="mp-gas-op-title"><b>OPERAÇÃO GÁS</b><span>SAFE em foco • zona e spawns preservados</span></div><div class="mp-gas-op-actions"><button type="button" data-gas-view="safe" class="primary" title="Configurar SAFE dinâmica">◎ SAFE</button><button type="button" data-gas-view="mission" title="Abrir zona e spawns existentes">⌖ ZONA & SPAWNS</button><button type="button" data-gas-view="tools" title="Abrir ferramentas CDS, NC, TP e manutenção">⚙ FERRAMENTAS</button></div>';
-      side.insertBefore(bar,side.firstChild);
-      qsa('[data-gas-view]',bar).forEach(b=>b.onclick=()=>setGasOperationalView(b.dataset.gasView));
-    }
-  }
-  function setGasOperationalView(view){
-    const page=qs('#page-planejador'),side=qs('.mission-planner-side');if(!page||!side)return;
-    view=['safe','mission','tools'].includes(view)?view:'safe';page.dataset.gasView=view;
-    qsa('[data-gas-view]',side).forEach(b=>b.classList.toggle('primary',b.dataset.gasView===view));
-    qsa('.mp-tabpanel',side).forEach(p=>p.classList.remove('mp-gas-visible'));
-    const safe=qs('#mpSafeRouteBox');
-    if(view==='safe'){safe?.classList.add('mp-gas-visible');safe?.scrollIntoView?.({block:'nearest'});}
-    else if(view==='mission'){plannerPanel('zona')?.classList.add('mp-gas-visible');plannerPanel('pontos')?.classList.add('mp-gas-visible');}
-    else {plannerPanel('validacao')?.classList.add('mp-gas-visible');plannerPanel('entrega')?.classList.add('mp-gas-visible');}
-    setTimeout(()=>{try{state.map?.invalidateSize()}catch(e){}},60);
-  }
-  function renderOperationalMode(){
-    const page=qs('#page-planejador'),m=active();if(!page||!m)return;
-    const gas=(m.category||'dominacao')==='gas';page.classList.toggle('mp-gas-operational',gas);
-    if(!gas){delete page.dataset.gasView;return;}
-    ensureGasOperationalUi();ensureGasStepper();
-    if(!page.dataset.gasStep)page.dataset.gasStep='safe';
-    if(!page.dataset.gasView)setGasOperationalView('safe');else setGasOperationalView(page.dataset.gasView);
-    renderGasStepper();
-  }
-
   function renderPlannerBadges(){
     const m=active();if(!m)return;
     const pend=(m.points||[]).filter(p=>!isValidated(p)).length;

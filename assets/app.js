@@ -15,6 +15,7 @@ import { getFirestore,
  addDoc as _addDoc,
  serverTimestamp,
  writeBatch as _writeBatch,
+ runTransaction,
  deleteDoc as _deleteDoc,
  onSnapshot,
  query,
@@ -14824,46 +14825,50 @@ $('#orgV92ReportBtn')?.addEventListener('click',orgV92OpenReport);
 
 setTimeout(()=>{if($('#page-faccoes'))renderFaccoes()},0);
 
-/* ===== HIGH OS V9.4 - PONTE DE MISSOES NA NUVEM =====
-   O Planejador salva localmente (localStorage) e, quando o usuario tem permissao,
-   tambem sincroniza com Firestore para que a equipe veja as mesmas missoes. */
-const missionsDoc=doc(db,'highos','data','config','missoes_planejador');
+/* ===== HIGH OS V12.7 - MISSOES NA NUVEM: UM DOCUMENTO POR ZONA =====
+   Até a V12.6 todas as zonas ficavam em UM documento (config/missoes_planejador),
+   gravado inteiro a cada SALVAR. Isso causava três problemas:
+   - quem salvava por último sobrescrevia o trabalho de outra pessoa;
+   - excluir não ia para a nuvem e a zona voltava depois;
+   - o documento crescia até o limite de 1 MB do Firestore.
+   Agora cada zona é um documento em highos/data/missoes_zonas/{zona}:
+   - campo "rev": número da versão; só grava quem está na versão atual;
+   - exclusão vira marcador (deleted:true) que todos os navegadores respeitam
+     e guarda o último conteúdo (lixeira);
+   - o documento antigo fica intacto, só para leitura, como cópia de segurança. */
+const missionsDoc=doc(db,'highos','data','config','missoes_planejador'); // legado · somente leitura
+const missionZonesCol=collection(db,'highos','data','missoes_zonas');
+const missionMigrationDoc=doc(db,'highos','data','config','missoes_migracao');
 
-let missionCloudTimer=null,
-missionCloudBusy=false,
-missionCloudLastSignature='',
-missionCloudLastPullAt=0,
+let missionCloudLastPullAt=0,
 missionCloudLastPull=null,
-missionCloudPendingMissions=null;
+missionCloudMigrated=false;
 const MISSION_PULL_TTL=120000;
+const MISSION_MAX_JSON=900000;
 
-function missionCloudSignature(missions=[]){
- try{return JSON.stringify(missions)}catch(e){return ''}
+function missionEmail(){return String(currentUser?.email||'').toLowerCase();}
+function missionDocId(id){
+ const s=String(id||'');
+ if(/^[A-Za-z0-9_.\-]{1,150}$/.test(s)&&s!=='.'&&s!=='..')return s;
+ let h=5381;for(let i=0;i<s.length;i++)h=((h*33)^s.charCodeAt(i))>>>0;
+ return 'z_'+h.toString(36)+'_'+s.replace(/[^A-Za-z0-9_\-]/g,'').slice(0,60);
 }
-
-async function pullMissionsFromCloud({force=false}={}){
- if(!currentUser||!canViewModule('planejador'))return null;
- if(!force&&missionCloudLastPull&&Date.now()-missionCloudLastPullAt<MISSION_PULL_TTL)return missionCloudLastPull;
-
- try{
-  const snap=await getDoc(missionsDoc);
-
-  if(!snap.exists())return null;
-
-  const data=snap.data()||{};
-
-  if(!Array.isArray(data.missions)||!data.missions.length)return null;
-  missionCloudLastSignature=missionCloudSignature(data.missions);
-  missionCloudLastPull={missions:data.missions,
-updatedAtText:data.updatedAtText||'',
-updatedBy:data.updatedBy||''};
-  missionCloudLastPullAt=Date.now();
-
-  return missionCloudLastPull;
-
- }catch(e){console.warn('Missoes: falha ao ler da nuvem',e);
-return null}
+function missionZoneRef(id){return doc(db,'highos','data','missoes_zonas',missionDocId(id));}
+function missionCleanZone(z){
+ const x=JSON.parse(JSON.stringify(z||{}));
+ delete x._rev;delete x._syncConflict;
+ return x;
 }
+function missionSnapToEntry(snap){
+ const x=snap.data()||{};
+ let zona=null;
+ if(!x.deleted){try{zona=JSON.parse(x.json||'null')}catch(e){zona=null}}
+ return {id:String(x.zonaId||snap.id),rev:Number(x.rev)||0,deleted:!!x.deleted,zona,
+  updatedAtText:x.updatedAtText||'',updatedBy:x.updatedBy||'',
+  deletedAtText:x.deletedAtText||'',deletedBy:x.deletedBy||''};
+}
+function missionCloudEvent(detail){window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail}));}
+
 function missionCloudErrorInfo(e){
  const code=String(e?.code||'').toLowerCase(),msg=String(e?.message||''),raw=(code+' '+msg).toLowerCase();
  const permission=/permission-denied|unauthorized|forbidden/.test(raw);
@@ -14884,62 +14889,135 @@ function missionCloudErrorInfo(e){
  return {quota,permission,retryAt,estimated,when,code:code||'firebase-error',message:msg};
 }
 
-async function pushMissionsToCloud(missions=[]){
- if(!currentUser||!canEditModule('planejador')||!Array.isArray(missions)||!missions.length)return false;
-
- /* V10.76 - nunca descarta uma edição feita enquanto outra gravação está
-    em andamento. Guarda sempre a versão mais recente e drena a fila ao fim. */
- const snapshot=JSON.parse(JSON.stringify(missions));
- const assinatura=missionCloudSignature(snapshot);
- if(assinatura&&assinatura===missionCloudLastSignature)return true;
- if(missionCloudBusy){missionCloudPendingMissions=snapshot;return true;}
-
- missionCloudBusy=true;
- let ok=false;
+/* Leitura: coleção nova. Se ainda estiver vazia (antes da migração),
+   lê o documento antigo e marca as entradas como "legacy". */
+async function pullMissionsFromCloud({force=false}={}){
+ if(!currentUser||!canViewModule('planejador'))return null;
+ if(!force&&missionCloudLastPull&&Date.now()-missionCloudLastPullAt<MISSION_PULL_TTL)return missionCloudLastPull;
  try{
-  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:'sync'}}));
-
-  await setDoc(missionsDoc,{missions:snapshot,
-updatedAt:serverTimestamp(),
-updatedAtText:new Date().toISOString(),
-updatedBy:currentUser.email||''},{merge:true});
-
-  missionCloudLastSignature=assinatura;
-  missionCloudLastPull={missions:snapshot,updatedAtText:new Date().toISOString(),updatedBy:currentUser.email||''};
+  const snap=await getDocs(missionZonesCol);
+  let entries=snap.docs.map(missionSnapToEntry),legacy=false;
+  if(!entries.length){
+   const old=await getDoc(missionsDoc);
+   const lista=old.exists()&&Array.isArray(old.data()?.missions)?old.data().missions:[];
+   entries=lista.filter(m=>m&&m.id).map(m=>({id:String(m.id),rev:0,deleted:false,zona:m,legacy:true}));
+   legacy=true;
+  }else missionCloudMigrated=true;
+  missionCloudLastPull={entries,legacy,pulledAt:new Date().toISOString()};
   missionCloudLastPullAt=Date.now();
-  window.HighOSMissionCloudLastError=null;
-  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:'ok',missions:snapshot.length,updatedAtText:missionCloudLastPull.updatedAtText,updatedBy:missionCloudLastPull.updatedBy}}));
-  ok=true;
+  return missionCloudLastPull;
+ }catch(e){console.warn('Missoes: falha ao ler da nuvem',e);return null}
+}
 
- }catch(e){console.warn('Missoes: falha ao salvar na nuvem',e);
-  /* Mantém a última versão para nova tentativa em vez de perdê-la. */
-  missionCloudPendingMissions=snapshot;
+/* Migração única: documento antigo + cópia local deste navegador
+   (fica a versão mais recente de cada zona) viram documentos individuais.
+   Uma trava impede dois navegadores de migrarem ao mesmo tempo. */
+async function ensureMissionsMigrated(localList=[]){
+ if(missionCloudMigrated)return {ok:true,migrated:false};
+ if(!currentUser)return {ok:false,reason:'login'};
+ try{
+  const marca=await getDoc(missionMigrationDoc);
+  if(marca.exists()&&marca.data()?.status==='done'){missionCloudMigrated=true;return {ok:true,migrated:false};}
+  if(!canEditModule('planejador'))return {ok:false,reason:'permission'};
+  assertRemoteWriteAvailable();
+  const email=missionEmail(),agora=new Date().toISOString();
+  const peguei=await runTransaction(db,async tx=>{
+   const m=await tx.get(missionMigrationDoc);
+   if(m.exists()){
+    const d=m.data()||{};
+    if(d.status==='done')return 'done';
+    const inicio=Date.parse(d.startedAt||'')||0;
+    if(d.status==='running'&&Date.now()-inicio<10*60*1000)return 'busy';
+   }
+   tx.set(missionMigrationDoc,{status:'running',startedAt:agora,by:email});
+   return 'mine';
+  });
+  if(peguei==='done'){missionCloudMigrated=true;return {ok:true,migrated:false};}
+  if(peguei==='busy')return {ok:false,reason:'busy'};
+
+  const old=await getDoc(missionsDoc);
+  const antigas=old.exists()&&Array.isArray(old.data()?.missions)?old.data().missions:[];
+  const tempo=m=>{const t=Date.parse(m?.updatedAt||'');return Number.isFinite(t)?t:0};
+  const porId=new Map();
+  [...antigas,...(Array.isArray(localList)?localList:[])].forEach(m=>{
+   if(!m||!m.id)return;
+   const id=String(m.id),atual=porId.get(id);
+   if(!atual||tempo(m)>tempo(atual))porId.set(id,m);
+  });
+  const lista=[...porId.values()];
+  for(let i=0;i<lista.length;i+=400){
+   const b=writeBatch(db);
+   lista.slice(i,i+400).forEach(z=>{
+    const limpa=missionCleanZone(z),json=JSON.stringify(limpa);
+    b.set(missionZoneRef(z.id),{zonaId:String(z.id),rev:1,deleted:false,json,
+     nome:String(limpa.name||''),eventId:String(limpa.eventId||''),evento:String(limpa.event||''),categoria:String(limpa.category||''),
+     updatedAt:serverTimestamp(),updatedAtText:agora,updatedBy:email,migradoEm:agora});
+   });
+   await b.commit();
+  }
+  await setDoc(missionMigrationDoc,{status:'done',doneAt:new Date().toISOString(),by:email,zonas:lista.length,origemAntiga:antigas.length},{merge:true});
+  missionCloudMigrated=true;missionCloudLastPullAt=0;
+  return {ok:true,migrated:true,count:lista.length};
+ }catch(e){
+  console.warn('Missoes: falha na migração',e);
+  return {ok:false,reason:'error',error:missionCloudErrorInfo(e)};
+ }
+}
+
+/* Grava ou exclui uma zona só se a nuvem ainda estiver na versão baseRev.
+   baseRev=null ignora a checagem (usado quando o usuário decide sobrescrever). */
+async function writeMissionZone(zona,baseRev,excluir){
+ assertRemoteWriteAvailable();
+ const id=String(zona?.id||''),ref=missionZoneRef(id),email=missionEmail(),agora=new Date().toISOString();
+ if(!id)return {ok:false,id,reason:'sem-id'};
+ return runTransaction(db,async tx=>{
+  const cur=await tx.get(ref);
+  const atual=cur.exists()?cur.data()||{}:null;
+  const remoteRev=atual?Number(atual.rev)||0:0;
+  if(baseRev!==null&&baseRev!==undefined&&remoteRev!==(Number(baseRev)||0)){
+   return {ok:false,id,conflict:true,remoteRev,remote:cur.exists()?missionSnapToEntry(cur):null};
+  }
+  const limpa=missionCleanZone(zona),json=excluir&&atual?.json?atual.json:JSON.stringify(limpa);
+  if(json.length>MISSION_MAX_JSON)return {ok:false,id,tooBig:true};
+  const base={zonaId:id,rev:remoteRev+1,json,
+   nome:String(limpa.name||atual?.nome||''),eventId:String(limpa.eventId||atual?.eventId||''),
+   evento:String(limpa.event||atual?.evento||''),categoria:String(limpa.category||atual?.categoria||''),
+   updatedAt:serverTimestamp(),updatedAtText:agora,updatedBy:email};
+  if(excluir)tx.set(ref,{...base,deleted:true,deletedAtText:agora,deletedBy:email});
+  else tx.set(ref,{...base,deleted:false,deletedAtText:'',deletedBy:''});
+  return {ok:true,id,rev:remoteRev+1,deleted:!!excluir,updatedAtText:agora,updatedBy:email};
+ });
+}
+
+async function writeMissionZones(itens=[],excluir=false){
+ if(!currentUser||!canEditModule('planejador'))return {ok:false,permission:true,results:[]};
+ const mig=await ensureMissionsMigrated([]);
+ if(!mig.ok)return {ok:false,migration:mig,results:[]};
+ const results=[];
+ missionCloudEvent({state:'sync'});
+ try{
+  for(const it of itens)results.push(await writeMissionZone(it.zona,it.baseRev,excluir));
+ }catch(e){
+  console.warn('Missoes: falha ao gravar na nuvem',e);
   const info=missionCloudErrorInfo(e);
   window.HighOSMissionCloudLastError=info;
-  window.dispatchEvent(new CustomEvent('highos:mission-cloud',{detail:{state:info.quota?'quota':info.permission?'permission':'local',error:info}}));
- }finally{
-  missionCloudBusy=false;
-  const pending=missionCloudPendingMissions;
-  missionCloudPendingMissions=null;
-  if(pending&&missionCloudSignature(pending)!==missionCloudLastSignature){
-   setTimeout(()=>pushMissionsToCloud(pending),350);
-  }
+  missionCloudEvent({state:info.quota?'quota':info.permission?'permission':'local',error:info});
+  return {ok:false,error:info,results};
  }
- return ok;
+ missionCloudLastPullAt=0;
+ window.HighOSMissionCloudLastError=null;
+ const ok=results.every(r=>r.ok);
+ missionCloudEvent({state:ok?'ok':'local',updatedAtText:new Date().toISOString(),updatedBy:missionEmail()});
+ return {ok,results};
 }
+
 window.HighOSMissionCloud={
+ version:2,
  canEdit:()=>!!currentUser&&canEditModule('planejador'),
-
  pull:pullMissionsFromCloud,
-
- pushNow:pushMissionsToCloud,
-
- push(missions){
-  clearTimeout(missionCloudTimer);
-
-  missionCloudTimer=setTimeout(()=>pushMissionsToCloud(missions),2500);
-
- }
+ ensureMigrated:ensureMissionsMigrated,
+ saveZones:itens=>writeMissionZones(itens,false),
+ deleteZones:itens=>writeMissionZones(itens,true)
 };
 
 console.info('HIGH OS V9.5.6 · sistema carregado');
