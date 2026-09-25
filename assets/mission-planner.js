@@ -2724,6 +2724,40 @@ z=zones[0];if(!z)return false;
     let salva='zona';try{salva=localStorage.getItem('highos_mp_tab')||'zona';}catch(e){}
     setPlannerTab(PLANNER_TABS.some(t=>t.id===salva)?salva:'zona');
   }
+  const GAS_STEPS=[
+    {id:'zone',n:1,label:'Zona',sub:'Centro e tamanho'},
+    {id:'spawns',n:2,label:'Equipes',sub:'Spawns existentes'},
+    {id:'validation',n:3,label:'Validação',sub:'NC + TPCDS no jogo'},
+    {id:'safe',n:4,label:'Safe',sub:'Fases e rotas'},
+    {id:'simulation',n:5,label:'Simulação',sub:'Animação e tempo'},
+    {id:'request',n:6,label:'Solicitação',sub:'Texto do Discord'}
+  ];
+  function ensureGasStepper(){
+    const bar=qs('#mpWorkspaceBar');if(!bar||qs('#mpGasStepper'))return;
+    const stepper=document.createElement('nav');stepper.id='mpGasStepper';stepper.className='mp-gas-stepper';stepper.setAttribute('aria-label','Etapas da missão');
+    stepper.innerHTML=GAS_STEPS.map(s=>'<button type="button" data-gas-step="'+s.id+'"><i>'+s.n+'</i><span><b>'+s.label+'</b><small>'+s.sub+'</small></span></button>').join('');
+    bar.insertAdjacentElement('afterend',stepper);
+    qsa('[data-gas-step]',stepper).forEach(b=>b.onclick=()=>setGasStep(b.dataset.gasStep));
+  }
+  function setGasStep(step){
+    const page=qs('#page-planejador');if(!page)return;
+    const map={zone:'mission',spawns:'mission',validation:'tools',safe:'safe',simulation:'safe',request:'tools'};
+    page.dataset.gasStep=step;setGasOperationalView(map[step]||'safe');
+    if(step==='simulation'){setTimeout(()=>startSafePreview(),80);}
+    if(step==='request'){setTimeout(()=>qs('#mpGenerateRequest')?.scrollIntoView?.({behavior:'smooth',block:'center'}),80);}
+    if(step==='validation'){setTimeout(()=>qs('#mpValidateCds')?.focus?.(),80);}
+    renderGasStepper();
+  }
+  function renderGasStepper(){
+    const m=active(),page=qs('#page-planejador');if(!m||!page)return;
+    ensureGasStepper();const current=page.dataset.gasStep||'safe',pts=m.points||[],valid=pts.filter(isValidated).length;
+    qsa('[data-gas-step]',qs('#mpGasStepper')).forEach(b=>{
+      const id=b.dataset.gasStep,done=(id==='zone'&&validCoord(m.center?.x)&&validCoord(m.center?.y))||(id==='spawns'&&pts.length>0)||(id==='validation'&&pts.length>0&&valid===pts.length)||(id==='safe'&&hasDynamicSafe(m));
+      b.classList.toggle('active',id===current);b.classList.toggle('done',!!done);
+      const i=b.querySelector('i');if(i)i.textContent=done?'✓':GAS_STEPS.find(s=>s.id===id)?.n;
+    });
+  }
+
   function ensureGasOperationalUi(){
     const side=qs('.mission-planner-side');if(!side)return;
     let bar=qs('#mpGasOperationalBar');
@@ -2749,8 +2783,10 @@ z=zones[0];if(!z)return false;
     const page=qs('#page-planejador'),m=active();if(!page||!m)return;
     const gas=(m.category||'dominacao')==='gas';page.classList.toggle('mp-gas-operational',gas);
     if(!gas){delete page.dataset.gasView;return;}
-    ensureGasOperationalUi();
+    ensureGasOperationalUi();ensureGasStepper();
+    if(!page.dataset.gasStep)page.dataset.gasStep='safe';
     if(!page.dataset.gasView)setGasOperationalView('safe');else setGasOperationalView(page.dataset.gasView);
+    renderGasStepper();
   }
 
   function renderPlannerBadges(){
