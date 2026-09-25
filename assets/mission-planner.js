@@ -1609,18 +1609,21 @@ iconAnchor:[12,
     if(state.map?.getContainer())state.map.getContainer().style.cursor='crosshair';
   }
   function placeSafeOnMap(latlng){
-    const m=active(),idx=state.safePlacementStage;if(!m||idx===null||idx===undefined)return false;
-    const check=safePlacementCheck(latlng);
-    if(!check.ok){previewSafePlacement(latlng);if(qs('#mpClicked'))qs('#mpClicked').textContent='SAFE BLOQUEADA • '+check.reason;return false;}
+    const m=active(),idx=state.safePlacementStage;if(!m||idx===null||idx===undefined||!latlng)return false;
     const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
-    const asOption=state.mapMode==='safe-option';
+    const check=safePlacementCheck(latlng),asOption=state.mapMode==='safe-option';
     if(asOption&&idx>0){
       const opts=safeOptions(r,idx,true),candidate={x:latlng.lng,y:latlng.lat,z:0};
       if(!opts.some(p=>distXY(p,candidate)<1))opts.push(candidate);
-    }else{s.x=latlng.lng;s.y=latlng.lat;s.z=0;}
+    }else{
+      s.x=latlng.lng;s.y=latlng.lat;s.z=0;s.status='planned';s.validatedAt=null;
+    }
     state.safeEditorStage=idx;state.safePlacementStage=null;state.safePlacementAsOption=false;state.mapMode='center';clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
-    commit(`${asOption?'Possibilidade da SAFE':'Safe'} ${idx+1} marcada no mapa`);
-    state.map?.panTo(latlng);renderSafeRouteUi();return true;
+    commit(`${asOption?'Possibilidade da SAFE':'SAFE'} ${idx+1} registrada no mapa${check.ok?'':' • REVISAR: '+check.reason}`);
+    state.map?.panTo(latlng);renderSafeRouteUi();renderMap();
+    const status=qs('#mpSafeRouteStatus');if(status&&!check.ok)status.innerHTML=`<b>SAFE ${idx+1} REGISTRADA</b><br><span style="color:#facc15"><b>⚠ REVISAR:</b> ${esc(check.reason)}</span>`;
+    if(qs('#mpClicked'))qs('#mpClicked').textContent=`SAFE ${idx+1} REGISTRADA • ${f(latlng.lng)}, ${f(latlng.lat)}${check.ok?'':' • REVISAR ENCAIXE'}`;
+    return true;
   }
   function safeStageMinRadius(index){return Number(index)>=3?10:30;}
   function addDynamicSafeStage(){
