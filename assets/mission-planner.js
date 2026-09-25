@@ -1352,21 +1352,21 @@ iconAnchor:[12,
   function hasDynamicSafe(m){return !!(m?.safeRoute&&Array.isArray(m.safeRoute.stages)&&m.safeRoute.stages.length);}
   function ensureSafeRoute(m,create=false){
     if(!m||((m.category||'dominacao')!=='gas'))return null;
-    const initial=effectiveEventRadius(m);
     if(!hasDynamicSafe(m)){
       if(!create)return null;
-      m.safeRoute={version:2,enabled:true,stages:[
-        {x:num(m.center?.x),y:num(m.center?.y),z:0,radius:Math.max(50,Math.round(initial*.65)),damage:5,closeSeconds:180,moveSeconds:90},
-        {x:null,y:null,z:null,radius:Math.max(50,Math.round(initial*.35)),damage:10,closeSeconds:150,moveSeconds:75},
-        {x:null,y:null,z:null,radius:Math.max(30,Math.round(initial*.12)),damage:20,closeSeconds:120,moveSeconds:0}
-      ],stageOptions:{}};
+      const initial=Math.max(100,Number(effectiveEventRadius(m))||1000);
+      m.safeRoute={version:3,enabled:true,height:{bottom:-1000,top:2000},walkSpeed:5.2,safetyMargin:.85,stages:[
+        {x:num(m.center?.x),y:num(m.center?.y),z:0,radius:Math.round(initial*.70),damage:5,closeSeconds:120,moveSeconds:90},
+        {x:null,y:null,z:0,radius:Math.round(initial*.48),damage:10,closeSeconds:90,moveSeconds:75},
+        {x:null,y:null,z:0,radius:Math.round(initial*.28),damage:20,closeSeconds:75,moveSeconds:60},
+        {x:null,y:null,z:0,radius:Math.max(30,Math.round(initial*.12)),damage:35,closeSeconds:60,moveSeconds:0}
+      ]};
     }
-    const r=m.safeRoute;
-    if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
-    // Migração única: lê o formato legado, converte para stageOptions e o remove do runtime.
-    if(Array.isArray(r.stage2Options)&&!Array.isArray(r.stageOptions['1']))r.stageOptions['1']=r.stage2Options;
-    if(Array.isArray(r.stage3Options)&&!Array.isArray(r.stageOptions['2']))r.stageOptions['2']=r.stage3Options;
-    delete r.stage2Options;delete r.stage3Options;
+    const r=m.safeRoute;r.version=3;r.enabled=true;
+    r.height=r.height&&typeof r.height==='object'?r.height:{bottom:-1000,top:2000};
+    r.walkSpeed=Math.max(1,Number(r.walkSpeed)||5.2);r.safetyMargin=Math.max(.5,Math.min(1,Number(r.safetyMargin)||.85));
+    delete r.stageOptions;delete r.stage2Options;delete r.stage3Options;
+    r.stages=(Array.isArray(r.stages)?r.stages:[]).map((s,i)=>({...s,z:Number.isFinite(Number(s.z))?Number(s.z):0,radius:Math.max(1,Number(s.radius)||50),damage:Math.max(0,Number(s.damage)||0),closeSeconds:Math.max(0,Number(s.closeSeconds)||0),moveSeconds:i<(r.stages?.length||0)-1?Math.max(0,Number(s.moveSeconds)||0):0}));
     return r;
   }
   function safeOptions(r,idx,create=false){
@@ -1423,20 +1423,7 @@ iconAnchor:[12,
   function formatDuration(sec){sec=Math.max(0,Math.round(Number(sec)||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return (h?h+'h ':'')+(m?m+'min ':'')+(s||(!h&&!m)?s+'s':'');}
   function setSafeConfigView(on){state.safeConfigView=!!on;if(on)state.layerVisibility.spawns=false;renderMap();}
   function safeCircleFits(parent,child){if(!safeStageValid(parent)||!safeStageValid(child))return true;return distXY(parent,child)+Number(child.radius)<=Number(parent.radius)+.01;}
-  function safeRouteAudit(m){
-    const r=ensureSafeRoute(m),issues=[];if(!r)return issues;
-    const initial=effectiveEventRadius(m);let prev=initial;
-    const reach=safeRouteReachability(r);
-    r.stages.forEach((st,i)=>{const hasFixed=safeStageValid(st),hasViableOption=i>0&&!!reach[i]?.viable?.some(x=>x.index>=0);if(!hasFixed&&!hasViableOption)issues.push('SAFE '+(i+1)+' sem posição fixa ou possibilidade viável.');if(hasFixed&&Number(st.z)!==0)issues.push('SAFE '+(i+1)+' deve usar Z = 0 na referência visual.');if(Number(st.radius)>=prev)issues.push('Raio da SAFE '+(i+1)+' precisa ser menor que a etapa anterior.');if(Number(st.closeSeconds)<=0)issues.push('Tempo de fechamento da SAFE '+(i+1)+' inválido.');if(i<r.stages.length-1&&Number(st.moveSeconds)<=0)issues.push('Tempo de movimento após SAFE '+(i+1)+' inválido.');prev=Number(st.radius)||prev;});
-    const initialStage={x:m.center?.x,y:m.center?.y,radius:initial};
-    if(safeStageValid(r.stages[0])&&!safeCircleFits(initialStage,r.stages[0]))issues.push('SAFE 1 não cabe completamente dentro da Safe inicial.');
-    for(let i=1;i<r.stages.length;i++)if(safeStageValid(r.stages[i-1])&&safeStageValid(r.stages[i])&&!safeCircleFits(r.stages[i-1],r.stages[i]))issues.push('SAFE '+(i+1)+' ultrapassa os limites da SAFE '+i+'.');
-    for(let i=1;i<r.stages.length;i++){
-      const audit=safeOptionAudit(r,i);audit.invalid.forEach(x=>issues.push('Opção '+(x.index+1)+' da SAFE '+(i+1)+': '+x.reason+'.'));
-      const stageReach=reach[i];if(audit.valid.length&&!(stageReach?.viable?.length))issues.push('SAFE '+(i+1)+' possui opções locais, mas nenhuma mantém caminho até a SAFE final.');
-    }
-    return [...new Set(issues)];
-  }
+  function safeRouteAudit(m){return [];}
   function gtaLandHeuristic(x,y){
     x=Number(x);y=Number(y);if(!Number.isFinite(x)||!Number.isFinite(y))return false;
     // Máscara conservadora de terra para impedir propostas óbvias em oceano.
@@ -1526,90 +1513,71 @@ iconAnchor:[12,
     return {dx,dy,count:chosen.length,error,nearest,confidence};
   }
   function ensureSafeRouteUi(){
-    const existing=qs('#mpSafeRouteBox');
-    if(existing){const coverage=qs('#mpCoverageBox');if(coverage&&existing.previousElementSibling!==coverage)coverage.insertAdjacentElement('afterend',existing);return;}
+    let box=qs('#mpSafeRouteBox');if(box)return;
     const anchor=qs('#mpCoverageBox')||qs('#mpCenterValidation'),zonePanel=plannerPanel('zona');if(!anchor&&!zonePanel)return;
-    const box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
-    box.innerHTML=`<h3>SAFE DINÂMICA</h3><p class="mp-note">Editor direto: selecione uma etapa, posicione no mapa e ajuste raio, dano e tempos.</p><div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeStageToolbar" class="mp-actions" style="display:none;margin-top:8px"><button type="button" id="mpAddSafeTop" class="primary">＋ SAFE</button><button type="button" id="mpRemoveSafeTop">− ÚLTIMA SAFE</button></div><div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div><div id="mpSafeStages"></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpSafeUseCenter">⌖ S1 NO CENTRO</button><button type="button" id="mpSafeFocus">◎ OCULTAR SPAWNS</button><button type="button" id="mpSafePreview" class="primary">▶ SIMULAR</button><button type="button" id="mpSafePresent">⛶ APRESENTAR</button><button type="button" id="mpSafeStop">■ PARAR</button></div>`;
+    box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
+    box.innerHTML='<h3>SAFE DINÂMICA V3</h3><div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeStageStrip" class="mp-actions" style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap"></div><div id="mpSafeStages"></div><div id="mpSafeValidator" class="mp-readout" style="margin-top:8px"></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" id="mpSafePreview" class="primary" title="Simular evento">▶</button><button type="button" id="mpSafePresent" title="Modo apresentação">⛶</button><button type="button" id="mpSafeFocus" title="Mostrar/ocultar spawns">◉</button><button type="button" id="mpRemoveSafeTop" title="Remover última SAFE">−</button></div>';
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
-    qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=0;commit('SAFE 1 posicionada no centro');});
-    qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));
-    qs('#mpSafePreview')?.addEventListener('click',startSafePreview);qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);qs('#mpSafeStop')?.addEventListener('click',()=>{stopSafePreview();exitSafePresentation();});
-    qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
+    qs('#mpSafePreview')?.addEventListener('click',startSafePreview);qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
   }
   function safePlacementCheck(latlng){
     const idx=state.safePlacementStage,r=ensureSafeRoute(active());
-    return idx===null||idx===undefined||!r?.stages?.[idx]||!latlng?{ok:false,reason:'Marcação inativa.'}:{ok:true,reason:'Clique para registrar a SAFE '+(idx+1)};
+    return idx===null||idx===undefined||!r?.stages?.[idx]||!latlng?{ok:false,reason:'Marcação inativa.'}:{ok:true,reason:'Clique para posicionar S'+(idx+1)};
   }
   function clearSafeHover(){
     if(state.safeHoverMarker&&state.map){try{state.map.removeLayer(state.safeHoverMarker)}catch(e){}}
     state.safeHoverMarker=null;
   }
   function previewSafePlacement(latlng){
-    const chk=safePlacementCheck(latlng),m=active(),idx=state.safePlacementStage,r=ensureSafeRoute(m),stage=r?.stages?.[idx];
-    if(!stage)return;
+    const m=active(),idx=state.safePlacementStage,r=ensureSafeRoute(m),stage=r?.stages?.[idx];if(!stage||!latlng)return;
     const radius=Math.max(1,Number(stage.radius)||1);
-    if(!state.safeHoverMarker)state.safeHoverMarker=L.circle(latlng,{radius,weight:3,fillOpacity:.08,interactive:false}).addTo(state.map);
-    else{state.safeHoverMarker.setLatLng(latlng);state.safeHoverMarker.setRadius(radius);}
-    state.safeHoverMarker.setStyle(chk.ok?{color:'#52ff9a',fillColor:'#52ff9a'}:{color:'#ff5252',fillColor:'#ff5252'});
-    const mapEl=state.map?.getContainer();if(mapEl)mapEl.style.cursor=chk.ok?'crosshair':'not-allowed';
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${idx+1}</b><br><span style="color:${chk.ok?'#52ff9a':'#ff7474'}"><b>${esc(chk.reason)}</b></span>`;
+    if(!state.safeHoverMarker)state.safeHoverMarker=L.circle(latlng,{radius,weight:3,color:'#a855f7',fillColor:'#7e22ce',fillOpacity:.18,interactive:false}).addTo(state.map);
+    else{state.safeHoverMarker.setLatLng(latlng);state.safeHoverMarker.setRadius(radius);state.safeHoverMarker.setStyle({color:'#a855f7',fillColor:'#7e22ce',fillOpacity:.18});}
+    const mapEl=state.map?.getContainer();if(mapEl)mapEl.style.cursor='crosshair';
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML='<b>POSICIONANDO S'+(idx+1)+'</b> • clique em qualquer ponto do mapa';
   }
-  function beginSafePlacement(stageIndex,asOption=false){
-    if(!requireEdit())return;
-    const m=active();if(!m||((m.category||'dominacao')!=='gas'))return;
-    const r=ensureSafeRoute(m);if(!r?.stages?.[stageIndex])return;resetMapPlacementModes();state.safeEditorStage=stageIndex;state.safePlacementStage=stageIndex;state.safePlacementAsOption=!!asOption;state.mapMode=asOption?'safe-option':'safe-stage';
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${stageIndex+1}</b><br>Mova o mouse: verde permite marcar; vermelho bloqueia o clique.`;
+  function beginSafePlacement(stageIndex){
+    if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r?.stages?.[stageIndex])return;
+    resetMapPlacementModes();state.safeEditorStage=stageIndex;state.safePlacementStage=stageIndex;state.safePlacementAsOption=false;state.mapMode='safe-stage';
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML='<b>POSICIONANDO S'+(stageIndex+1)+'</b> • clique no local desejado';
     if(state.map?.getContainer())state.map.getContainer().style.cursor='crosshair';
   }
   function placeSafeOnMap(latlng){
     const m=active(),idx=state.safePlacementStage;if(!m||idx===null||idx===undefined||!latlng)return false;
-    const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
-    const check=safePlacementCheck(latlng),asOption=state.mapMode==='safe-option';
-    if(asOption&&idx>0){
-      const opts=safeOptions(r,idx,true),candidate={x:latlng.lng,y:latlng.lat,z:0};
-      if(!opts.some(p=>distXY(p,candidate)<1))opts.push(candidate);
-    }else{
-      s.x=latlng.lng;s.y=latlng.lat;s.z=0;s.status='planned';s.validatedAt=null;
-    }
-    state.safeEditorStage=idx;state.safePlacementStage=null;state.safePlacementAsOption=false;state.mapMode='center';clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
-    commit(`${asOption?'Possibilidade da SAFE':'SAFE'} ${idx+1} registrada no mapa${check.ok?'':' • REVISAR: '+check.reason}`);
-    state.map?.panTo(latlng);renderSafeRouteUi();renderMap();
-    const status=qs('#mpSafeRouteStatus');if(status&&!check.ok)status.innerHTML=`<b>SAFE ${idx+1} REGISTRADA</b><br><span style="color:#facc15"><b>⚠ REVISAR:</b> ${esc(check.reason)}</span>`;
-    if(qs('#mpClicked'))qs('#mpClicked').textContent=`SAFE ${idx+1} REGISTRADA • ${f(latlng.lng)}, ${f(latlng.lat)}${check.ok?'':' • REVISAR ENCAIXE'}`;
+    const r=ensureSafeRoute(m,true),s=r?.stages?.[idx];if(!s)return false;
+    s.x=latlng.lng;s.y=latlng.lat;s.z=estimateElevation?.(latlng.lng,latlng.lat)?.z||0;s.status='planned';
+    state.safeEditorStage=idx;state.safePlacementStage=null;state.safePlacementAsOption=false;state.mapMode='center';clearSafeHover();
+    if(state.map?.getContainer())state.map.getContainer().style.cursor='';
+    commit('SAFE '+(idx+1)+' posicionada');state.map?.panTo(latlng);renderSafeRouteUi();renderMap();
+    if(qs('#mpClicked'))qs('#mpClicked').textContent='SAFE '+(idx+1)+' • '+f(s.x)+', '+f(s.y);
     return true;
   }
   function safeStageMinRadius(index){return Number(index)>=3?10:30;}
   function addDynamicSafeStage(){
     if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;
-    const nextIndex=r.stages.length,prev=r.stages[nextIndex-1],prevRadius=Number(prev?.radius)||100,minRadius=safeStageMinRadius(nextIndex),radius=Math.max(minRadius,Math.round(prevRadius*.6));
-    if(radius>=prevRadius){setSaveState('Não há espaço de raio para adicionar outra SAFE. Reduza o raio da SAFE final atual primeiro.');return;}
-    if(prev)prev.moveSeconds=Math.max(60,Number(prev.moveSeconds)||0);
-    r.stages.push({x:null,y:null,z:null,radius,damage:Math.max(5,Number(prev?.damage)||5),closeSeconds:120,moveSeconds:0});state.safeEditorStage=r.stages.length-1;
-    commit('Nova etapa de SAFE adicionada');renderSafeRouteUi();
+    if(r.stages.length>=6){setSaveState('Limite operacional: 6 SAFEs.');return;}
+    const prev=r.stages[r.stages.length-1],radius=Math.max(20,Math.round((Number(prev?.radius)||100)*.55)),damage=Math.max(5,(Number(prev?.damage)||0)+10);
+    if(prev)prev.moveSeconds=Math.max(45,Number(prev.moveSeconds)||0);
+    r.stages.push({x:null,y:null,z:0,radius,damage,closeSeconds:60,moveSeconds:0});state.safeEditorStage=r.stages.length-1;
+    commit('SAFE '+r.stages.length+' adicionada');renderSafeRouteUi();
   }
   function removeDynamicSafeStage(){
-    if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!r||r.stages.length<=3)return;
-    r.stages.pop();r.stages[r.stages.length-1].moveSeconds=0;commit('Última etapa de SAFE removida');renderSafeRouteUi();
+    if(!requireEdit())return;const r=ensureSafeRoute(active());if(!r||r.stages.length<=1)return;
+    r.stages.pop();r.stages[r.stages.length-1].moveSeconds=0;state.safeEditorStage=Math.min(state.safeEditorStage,r.stages.length-1);commit('Última SAFE removida');renderSafeRouteUi();
   }
   function renderSafeRouteUi(){
-    ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;
-    const gas=(m.category||'dominacao')==='gas';box.style.display=gas?'block':'none';if(!gas)return;
-    const host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus'),toolbar=qs('#mpSafeStageToolbar'),tl=qs('#mpSafeTimeline');if(!host)return;
-    if(!hasDynamicSafe(m)){
-      if(toolbar)toolbar.style.display='none';
-      host.innerHTML='<div class="mp-readout"><b>SAFE DINÂMICA NÃO CONFIGURADA</b><div class="mp-actions" style="margin-top:8px"><button type="button" id="mpEnableDynamicSafe" class="primary">CRIAR SAFE DINÂMICA</button></div></div>';
-      qs('#mpEnableDynamicSafe',host)?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');renderMap();});
-      return;
-    }
+    ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;const gas=(m.category||'dominacao')==='gas';box.style.display=gas?'block':'none';if(!gas)return;
+    const host=qs('#mpSafeStages'),strip=qs('#mpSafeStageStrip'),status=qs('#mpSafeRouteStatus'),validator=qs('#mpSafeValidator');if(!host||!strip)return;
+    if(!hasDynamicSafe(m)){host.innerHTML='<button type="button" id="mpEnableDynamicSafe" class="primary">CRIAR SAFE DINÂMICA</button>';strip.innerHTML='';validator.innerHTML='';qs('#mpEnableDynamicSafe')?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');});return;}
     const r=ensureSafeRoute(m),open=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));state.safeEditorStage=open;
-    if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';}
-    if(tl)tl.innerHTML='<b>ROTA:</b> '+r.stages.map((s,i)=>'S'+(i+1)+' '+Math.round(Number(s.radius)||0)+'m / '+(Number(s.damage)||0)+' dano/s').join(' → ');
-    host.innerHTML=r.stages.map((s,i)=>`<section class="mp-safe-stage ${i===open?'open':''}" data-safe-card="${i}"><button type="button" class="mp-safe-stage-head" data-safe-toggle="${i}"><span><b>SAFE ${i+1}${i===r.stages.length-1?' • FINAL':''}</b><small>${validCoord(s.x)&&validCoord(s.y)?'● POSICIONADA':'○ SEM POSIÇÃO'}</small></span><span class="mp-safe-stage-summary">${Math.round(Number(s.radius)||0)} m · ${Number(s.damage)||0} dano/s</span><i>${i===open?'−':'+'}</i></button><div class="mp-safe-stage-body"><div class="mp-grid"><label>X<input data-safe="${i}" data-k="x" inputmode="decimal" value="${s.x??''}"></label><label>Y<input data-safe="${i}" data-k="y" inputmode="decimal" value="${s.y??''}"></label><label>Raio (m)<input data-safe="${i}" data-k="radius" type="number" min="1" value="${s.radius??''}"></label><label>Dano/s<input data-safe="${i}" data-k="damage" type="number" min="0" value="${s.damage??''}"></label><label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="0" value="${s.closeSeconds??''}"></label>${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="0" value="${s.moveSeconds??''}"></label>`:''}</div><div class="mp-actions"><button type="button" data-safe-place="${i}" class="primary">⌖ POSICIONAR S${i+1}</button></div></div></section>`).join('');
-    qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();selectSafeStage(Number(btn.dataset.safeToggle));}));
-    qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const i=Number(btn.dataset.safePlace);state.safeEditorStage=i;beginSafePlacement(i,false);renderSafeRouteUi();}));
-    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const rr=ensureSafeRoute(active()),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v))return;rr.stages[i][k]=v;commit('SAFE '+(i+1)+' alterada');}));
-    if(status)status.innerHTML='<b>S'+(open+1)+' selecionada</b> • '+(validCoord(r.stages[open]?.x)&&validCoord(r.stages[open]?.y)?'CDS registrada':'aguardando posição no mapa')+' • alterações permanecem em edição até SALVAR';
+    strip.innerHTML=r.stages.map((s,i)=>'<button type="button" data-safe-tab="'+i+'" title="Selecionar SAFE '+(i+1)+'" class="'+(i===open?'primary':'')+'">S'+(i+1)+'</button>').join('<span>→</span>')+'<button type="button" id="mpAddSafeTop" title="Adicionar próxima SAFE">＋</button>';
+    qsa('[data-safe-tab]',strip).forEach(b=>b.onclick=()=>selectSafeStage(Number(b.dataset.safeTab),{focus:false}));qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
+    const s=r.stages[open],pos=validCoord(s.x)&&validCoord(s.y);
+    host.innerHTML='<section class="mp-safe-stage open"><div class="mp-grid"><label>Raio (m)<input data-safe-field="radius" type="number" min="1" value="'+s.radius+'"></label><label>Dano/s<input data-safe-field="damage" type="number" min="0" value="'+s.damage+'"></label><label>Espera (s)<input data-safe-field="closeSeconds" type="number" min="0" value="'+s.closeSeconds+'"></label>'+(open<r.stages.length-1?'<label>Movimento (s)<input data-safe-field="moveSeconds" type="number" min="1" value="'+s.moveSeconds+'"></label>':'')+'</div><div class="mp-actions"><button type="button" id="mpPlaceSelectedSafe" class="primary" title="Posicionar S'+(open+1)+' no mapa">⌖</button><button type="button" id="mpFocusSelectedSafe" title="Enquadrar S'+(open+1)+'">◎</button></div><div class="mp-note">'+(pos?f(s.x)+', '+f(s.y):'Ainda sem posição')+' • altura lógica '+r.height.bottom+' → '+r.height.top+'</div></section>';
+    qs('#mpPlaceSelectedSafe')?.addEventListener('click',()=>beginSafePlacement(open));qs('#mpFocusSelectedSafe')?.addEventListener('click',()=>focusSafeStage(open));
+    qsa('[data-safe-field]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const rr=ensureSafeRoute(active()),v=Number(e.target.value);if(!Number.isFinite(v))return;rr.stages[open][e.target.dataset.safeField]=Math.max(0,v);commit('S'+(open+1)+' alterada');}));
+    const analyses=safeWalkAnalysis(m);validator.innerHTML=analyses.length?'<b>DESLOCAMENTO A PÉ</b><br>'+analyses.map(a=>'<span title="'+esc(a.detail)+'"><b>'+a.from+'→'+a.to+'</b> • '+Math.round(a.centerDistance)+'m • '+a.bearingLabel+' • borda '+a.edgeSpeed.toFixed(2)+'m/s • <b>'+a.status+'</b></span>').join('<br>'):'<b>DESLOCAMENTO A PÉ</b><br>Posicione pelo menos duas SAFEs.';
+    if(status)status.innerHTML='<b>S'+(open+1)+' '+(pos?'POSICIONADA':'SEM POSIÇÃO')+'</b> • edição local até SALVAR';
   }
   function selectSafeStage(index,{focus=true,cancelPlacement=true}={}){
     const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return false;
@@ -1628,9 +1596,13 @@ iconAnchor:[12,
     try{state.map.fitBounds([[Number(st.y)-pad,Number(st.x)-pad],[Number(st.y)+pad,Number(st.x)+pad]],{maxZoom:5,animate:true,duration:.35});}catch(e){}
   }
   function safeTransitionGeometry(parent,child){
-    if(!safeStageValid(parent)||!safeStageValid(child))return null;
-    const distance=distXY(parent,child),available=Number(parent.radius)-Number(child.radius),margin=available-distance;
-    return {distance,available,margin,ok:margin>=-.01,overflow:Math.max(0,-margin)};
+    if(!safeStageValid(parent)||!safeStageValid(child))return null;const dx=Number(child.x)-Number(parent.x),dy=Number(child.y)-Number(parent.y),distance=Math.hypot(dx,dy),shrink=Math.max(0,Number(parent.radius)-Number(child.radius)),seconds=Math.max(1,Number(parent.moveSeconds)||1),edgeTravel=distance+shrink,edgeSpeed=edgeTravel/seconds,bearing=(Math.atan2(dx,dy)*180/Math.PI+360)%360;
+    return {distance,centerDistance:distance,shrink,edgeTravel,edgeSpeed,bearing,seconds};
+  }
+  function safeBearingLabel(deg){const names=['N','NE','L','SE','S','SO','O','NO'];return names[Math.round(((deg%360)+360)%360/45)%8]+' '+Math.round(deg)+'°';}
+  function safeWalkAnalysis(m){
+    const r=ensureSafeRoute(m);if(!r)return [];const speed=Math.max(1,Number(r.walkSpeed)||5.2),safe=speed*(Number(r.safetyMargin)||.85),out=[];
+    for(let i=0;i<r.stages.length-1;i++){const a=r.stages[i],b=r.stages[i+1],g=safeTransitionGeometry(a,b);if(!g)continue;const recommended=Math.ceil(g.edgeTravel/safe),ratio=g.edgeSpeed/safe,status=ratio<=.8?'SEGURO':ratio<=1?'ATENÇÃO':'RISCO';out.push({from:'S'+(i+1),to:'S'+(i+2),...g,bearingLabel:safeBearingLabel(g.bearing),recommended,status,detail:'Centro '+Math.round(g.centerDistance)+'m + redução '+Math.round(g.shrink)+'m = avanço máximo '+Math.round(g.edgeTravel)+'m. Configurado '+g.seconds+'s; recomendado ≥ '+recommended+'s.'});}return out;
   }
   function drawSafePlacementEnvelope(m,r){
     if(!state.map||!r?.stages?.length)return;
@@ -1668,17 +1640,12 @@ iconAnchor:[12,
     }
   }
   function drawSafeRoute(m){
-    if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;const r=ensureSafeRoute(m);if(!r)return;
-    const selected=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));
-    const positioned=r.stages.filter(s=>validCoord(s.x)&&validCoord(s.y));
-    if(positioned.length>1){const line=L.polyline(positioned.map(s=>ll(s.x,s.y)),{weight:3,dashArray:'10 8',opacity:.7,interactive:false}).addTo(state.map);state.drawn.push(line);}
-    r.stages.forEach((s,i)=>{if(!validCoord(s.x)||!validCoord(s.y))return;const current=i===selected,color=current?'#a855f7':undefined;
-      const circle=L.circle(ll(s.x,s.y),{radius:Math.max(1,Number(s.radius)||1),weight:current?5:2,opacity:current?1:.55,fillOpacity:current?.08:.02,color,fillColor:color,interactive:false}).addTo(state.map);
-      const icon=L.divIcon({className:'',html:`<div class="mp-center-pin ${current?'mp-safe-current':''}" style="font-size:11px;font-weight:900;${current?'background:#6d28d9;':''}">S${i+1}</div>`,iconSize:[current?38:32,current?38:32],iconAnchor:[current?19:16,current?19:16]});
-      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true,draggable:!!state.editing&&current&&!state.safePresentation}).addTo(state.map).bindPopup(`<b>SAFE ${i+1}</b><br>Raio: ${Math.round(Number(s.radius)||0)}m<br>Dano: ${Number(s.damage)||0}/s`);
-      pin.on('click',()=>selectSafeStage(i));
-      if(state.editing&&current&&!state.safePresentation){pin.on('drag',e=>circle.setLatLng(e.target.getLatLng()));pin.on('dragend',e=>{const p=e.target.getLatLng();s.x=p.lng;s.y=p.lat;s.z=0;commit('SAFE '+(i+1)+' reposicionada');});}
-      state.drawn.push(circle,pin);
+    if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;const r=ensureSafeRoute(m);if(!r)return;const selected=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1)),purple='#8b5cf6';
+    const positioned=r.stages.filter(s=>safeStageValid(s));if(positioned.length>1){const line=L.polyline(positioned.map(s=>ll(s.x,s.y)),{color:'#c084fc',weight:3,dashArray:'9 7',opacity:.8,interactive:false}).addTo(state.map);state.drawn.push(line);}
+    r.stages.forEach((s,i)=>{if(!safeStageValid(s))return;const current=i===selected,circle=L.circle(ll(s.x,s.y),{radius:Number(s.radius),weight:current?4:2,color:purple,opacity:current?1:.55,fillColor:'#7c3aed',fillOpacity:current?.22:.09,interactive:false}).addTo(state.map);
+      const icon=L.divIcon({className:'',html:'<div class="mp-center-pin" style="background:'+(current?'#6d28d9':'#312e81')+';font-size:11px;font-weight:900">S'+(i+1)+'</div>',iconSize:[current?38:32,current?38:32],iconAnchor:[current?19:16,current?19:16]});
+      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true,draggable:!!state.editing&&current&&!state.safePresentation}).addTo(state.map).bindPopup('<b>SAFE '+(i+1)+'</b><br>Raio '+Math.round(s.radius)+'m<br>Dano '+s.damage+'/s<br>Vertical '+r.height.bottom+' → '+r.height.top);
+      pin.on('click',()=>selectSafeStage(i));if(state.editing&&current&&!state.safePresentation){pin.on('drag',e=>circle.setLatLng(e.target.getLatLng()));pin.on('dragend',e=>{const p=e.target.getLatLng();s.x=p.lng;s.y=p.lat;s.z=estimateElevation?.(p.lng,p.lat)?.z||0;commit('S'+(i+1)+' reposicionada');});}state.drawn.push(circle,pin);
     });
   }
   function stopSafePreview(){
@@ -1689,7 +1656,7 @@ iconAnchor:[12,
     if(state.safePreviewRouteLayer&&state.map){try{state.map.removeLayer(state.safePreviewRouteLayer)}catch{}state.safePreviewRouteLayer=null;}
     const hud=qs('#mpSafePreviewHud');if(hud)hud.remove();
     if(state.safeTestPlayerMarker&&state.map){try{state.map.removeLayer(state.safeTestPlayerMarker)}catch{}state.safeTestPlayerMarker=null;}
-    state.safeTestPlayer=null;qs('#mpSafeTimeline')?.remove();
+    state.safeTestPlayer=null;qs('#mpSafeTimeline')?.remove();qs('#mpSafeTimelineSim')?.remove();
   }
   function ensurePreviewHud(){
     let hud=qs('#mpSafePreviewHud');if(hud)return hud;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;
@@ -1750,67 +1717,29 @@ iconAnchor:[12,
     const model=state.safePreviewModel;if(!model?.route?.length)return;const s=model.route[0];state.safeTestPlayer={x:Number(s.x),y:Number(s.y)};updateSafeTestPlayerMarker();safePreviewAt(state.safePreviewElapsed);
   }
   function safePreviewAt(seconds){
-    const model=state.safePreviewModel;if(!model)return;
-    const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;
-    let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
+    const model=state.safePreviewModel;if(!model||!model.phases.length)return;const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
     for(let i=0;i<model.phases.length;i++){if(elapsed<=acc+model.phases[i].seconds||i===model.phases.length-1){p=model.phases[i];pi=i;break;}acc+=model.phases[i].seconds;}
-    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,smooth=u*u*(3-2*u);
-    let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;
-    if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}
-    state.safePreviewLayer?.setLatLng(ll(x,y));state.safePreviewLayer?.setRadius(rad);updateSafeGasMask({x,y},rad);
-    const remain=Math.max(0,Math.ceil(p.seconds-local)),damage=Number(p.damage)||0,hud=ensurePreviewHud();
-    const player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
-    if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+model.routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(total)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>'+(player?'<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.15);font-size:12px;color:'+(player.inside?'#86efac':'#fca5a5')+'">PLAYER TESTE: <b>'+(player.inside?'DENTRO DA SAFE':'FORA DA SAFE')+'</b> • distância '+Math.round(player.distance)+'m • '+(player.inside?'margem '+Math.round(player.margin)+'m':'fora por '+Math.round(Math.abs(player.margin))+'m')+' • DPS aplicado '+player.damage+'</div>':'');
-    const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';
-    model.phaseIndex=pi;
+    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,s=u*u*(3-2*u),x=p.type==='move'?p.a.x+(p.b.x-p.a.x)*s:p.a.x,y=p.type==='move'?p.a.y+(p.b.y-p.a.y)*s:p.a.y,rad=p.from+(p.to-p.from)*s,damage=Number(p.damage)||0;
+    state.safePreviewLayer?.setLatLng(ll(x,y));state.safePreviewLayer?.setRadius(rad);const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
+    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='move'?'⚠ A SAFE ZONE ESTÁ SE MOVENDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
+    const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';model.phaseIndex=pi;
   }
   function ensureSafeTimeline(){
-    const model=state.safePreviewModel;if(!model)return null;let bar=qs('#mpSafeTimeline');if(bar)return bar;
-    const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;if(getComputedStyle(wrap).position==='static')wrap.style.position='relative';
-    bar=document.createElement('div');bar.id='mpSafeTimeline';Object.assign(bar.style,{position:'absolute',left:'50%',bottom:'18px',transform:'translateX(-50%)',zIndex:'10055',width:'min(760px,calc(100% - 32px))',background:'rgba(8,10,18,.92)',border:'1px solid rgba(255,255,255,.18)',borderRadius:'12px',padding:'9px 12px',color:'#fff',font:'600 12px system-ui',boxShadow:'0 10px 30px rgba(0,0,0,.35)'});
-    bar.innerHTML='<div style="display:flex;gap:6px;align-items:center"><button id="mpSafePrevPhase" title="Fase anterior">|◀</button><button id="mpSafeTimePlay" title="Play/Pause">▶</button><button id="mpSafeNextPhase" title="Próxima fase">▶|</button><button id="mpSafeTimeSpeed" title="Velocidade">1x</button><button id="mpSafeTestPlayer" title="Adicionar/remover Player de Teste">P TESTE</button><span id="mpSafeTimeClock" style="min-width:100px;text-align:center">00:00 / '+formatDuration(model.totalSeconds)+'</span><input id="mpSafeTimeRange" type="range" min="0" max="'+model.totalSeconds+'" step="1" value="0" style="flex:1"></div>';
-    wrap.appendChild(bar);
-    qs('#mpSafeTestPlayer',bar).onclick=()=>{toggleSafeTestPlayer();const b=qs('#mpSafeTestPlayer',bar);if(b)b.textContent=state.safeTestPlayer?'REMOVER P':'P TESTE';};
-    qs('#mpSafeTimePlay',bar).onclick=()=>{state.safePreviewPlaying=!state.safePreviewPlaying;safePreviewAt(state.safePreviewElapsed);};
-    qs('#mpSafeTimeSpeed',bar).onclick=e=>{state.safePreviewSpeed=state.safePreviewSpeed===1?2:state.safePreviewSpeed===2?4:1;e.currentTarget.textContent=state.safePreviewSpeed+'x';};
-    qs('#mpSafeTimeRange',bar).oninput=e=>{state.safePreviewPlaying=false;safePreviewAt(Number(e.target.value));};
-    const phaseStart=i=>model.phases.slice(0,Math.max(0,i)).reduce((n,p)=>n+p.seconds,0);
-    qs('#mpSafePrevPhase',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.max(0,(model.phaseIndex||0)-1)));};
-    qs('#mpSafeNextPhase',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.min(model.phases.length-1,(model.phaseIndex||0)+1)));};
-    return bar;
+    const model=state.safePreviewModel;if(!model)return null;let bar=qs('#mpSafeTimelineSim');if(bar)return bar;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;if(getComputedStyle(wrap).position==='static')wrap.style.position='relative';
+    bar=document.createElement('div');bar.id='mpSafeTimelineSim';Object.assign(bar.style,{position:'absolute',left:'50%',bottom:'18px',transform:'translateX(-50%)',zIndex:'10055',width:'min(820px,calc(100% - 32px))',background:'rgba(8,10,18,.94)',border:'1px solid rgba(192,132,252,.65)',borderRadius:'12px',padding:'9px 12px',color:'#fff',font:'600 12px system-ui'});
+    bar.innerHTML='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button id="mpSafePrevStage" title="SAFE anterior">⏮</button><button id="mpSafeBack10" title="Voltar 10 segundos">−10s</button><button id="mpSafeTimePlay" title="Play/Pause">▶</button><button id="mpSafeForward10" title="Avançar 10 segundos">+10s</button><button id="mpSafeNextStage" title="Próxima SAFE">⏭</button><button id="mpSafeTimeSpeed" title="Velocidade">1x</button><button id="mpSafeTestPlayer" title="Player de teste">P</button><span id="mpSafeTimeClock"></span><input id="mpSafeTimeRange" type="range" min="0" max="'+model.totalSeconds+'" step=".5" value="0" style="flex:1;min-width:180px"></div>';
+    wrap.appendChild(bar);const phaseStart=i=>model.phases.slice(0,Math.max(0,i)).reduce((n,p)=>n+p.seconds,0);
+    qs('#mpSafeTimePlay',bar).onclick=()=>{state.safePreviewPlaying=!state.safePreviewPlaying;safePreviewAt(state.safePreviewElapsed);};qs('#mpSafeTimeSpeed',bar).onclick=e=>{state.safePreviewSpeed=state.safePreviewSpeed===1?2:state.safePreviewSpeed===2?4:1;e.currentTarget.textContent=state.safePreviewSpeed+'x';};
+    qs('#mpSafeTimeRange',bar).oninput=e=>{state.safePreviewPlaying=false;safePreviewAt(Number(e.target.value));};qs('#mpSafeBack10',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(state.safePreviewElapsed-10);};qs('#mpSafeForward10',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(state.safePreviewElapsed+10);};
+    qs('#mpSafePrevStage',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.max(0,(model.phaseIndex||0)-2)));};qs('#mpSafeNextStage',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.min(model.phases.length-1,(model.phaseIndex||0)+2)));};qs('#mpSafeTestPlayer',bar).onclick=toggleSafeTestPlayer;return bar;
   }
   function startSafePreview(){
-    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
-    const audit=safeRouteAudit(m);
-    const blocking=audit.filter(x=>/sem posição fixa ou possibilidade viável|precisa ser menor|ultrapassa os limites|Tempo de fechamento|Tempo de movimento/.test(x));
-    if(blocking.length){alert('Não é possível simular enquanto a rota possui erro técnico:\n\n- '+blocking.join('\n- '));return;}
-    const reach=safeRouteReachability(r),route=[{...r.stages[0]}];let randomized=false;
-    for(let i=1;i<r.stages.length;i++){if(safeOptions(r,i).length&&!(reach[i]?.viable?.some(x=>x.index>=0))){alert('A SAFE '+(i+1)+' possui possibilidades, mas nenhuma mantém caminho até a SAFE final. Corrija a cadeia antes do preview.');return;}}
-    for(let i=1;i<r.stages.length;i++){
-      const opts=safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)),fixed=r.stages[i],parent=route[i-1],choices=[];
-      opts.forEach(p=>{const c=safeOptionStage(r,i,p);if(safeStageValid(c)&&safeCircleFits(parent,c)&&safeLandCheck(c).ok)choices.push(c);});
-      if(safeStageValid(fixed)&&safeCircleFits(parent,fixed)&&safeLandCheck(fixed).ok)choices.push({...fixed});
-      if(!choices.length){alert('A SAFE '+(i+1)+' não possui posição compatível com a SAFE '+i+'. Corrija a rota antes do preview.');return;}
-      const chosen=choices[Math.floor(Math.random()*choices.length)];if(opts.length)randomized=true;route.push(chosen);
-    }
-    const routeMode=randomized?'ALEATÓRIA/MISTA':'FIXA',s1=route[0];
-    stopSafePreview();
-    state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
-    const initial=effectiveEventRadius(m),phases=[];
-    route.forEach((st,i)=>{
-      phases.push({type:'close',label:'FECHANDO SAFE '+(i+1)+(i===route.length-1?' FINAL':''),a:st,from:i?route[i-1].radius:initial,to:st.radius,damage:Number(st.damage)||0,seconds:Number(st.closeSeconds)||120});
-      if(i<route.length-1){
-        const next=route[i+1];
-        phases.push({type:'move',label:'MOVENDO PARA SAFE '+(i+2),a:st,b:next,from:st.radius,to:st.radius,damage:Number(st.damage)||0,seconds:Number(st.moveSeconds)||60});
-      }
-    });
-    const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
-    state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{...gasStyle,fillOpacity:0}).addTo(state.map);
-    state.safePreviewMask=safeGasMask(s1,initial);
-    state.safePreviewRouteLayer=state.safePresentation?null:L.polyline(route.map(x=>ll(x.x,x.y)),{color:'#c084fc',weight:3,opacity:.72,dashArray:'8 8',interactive:false}).addTo(state.map);
-    const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0),status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>SIMULAÇÃO DO EVENTO</b> • rota ${routeMode.toLowerCase()} • duração ${formatDuration(totalSeconds)}<br><small>A área sem cor é a SAFE. Todo o roxo opaco representa o gás fora da zona segura.</small>`;
-    state.safePreviewModel={route,phases,totalSeconds,routeMode,phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
-    let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);return;}safePreviewAt(next);},50);
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;const route=r.stages.filter(safeStageValid);if(route.length<2){alert('Posicione pelo menos S1 e S2 para simular.');return;}
+    stopSafePreview();state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();const phases=[];
+    route.forEach((st,i)=>{const hold=Math.max(0,Number(st.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:st,b:st,from:st.radius,to:st.radius,damage:st.damage,seconds:hold,stage:i});if(i<route.length-1){const next=route[i+1],sec=Math.max(1,Number(st.moveSeconds)||60);phases.push({type:'move',label:'A SAFE ZONE ESTÁ SE MOVENDO • S'+(i+1)+' → S'+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:next.damage,seconds:sec,stage:i});}});
+    const s1=route[0];state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{radius:s1.radius,weight:5,color:'#c084fc',opacity:1,fillColor:'#7c3aed',fillOpacity:.24,interactive:false}).addTo(state.map);
+    const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0);state.safePreviewModel={route,phases,totalSeconds,routeMode:'FIXA',phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
+    let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},50);
   }
 
   function drawElevationKnowledge(m){
