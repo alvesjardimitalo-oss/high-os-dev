@@ -1476,23 +1476,27 @@ iconAnchor:[12,
     r.stages.push({x:null,y:null,z:0,radius,damage,closeSeconds:60,moveSeconds:0});state.safeEditorStage=r.stages.length-1;
     commit('SAFE '+r.stages.length+' adicionada');renderSafeRouteUi();
   }
-  function removeDynamicSafeStage(){
+  function removeSafeStage(index){
     if(!requireEdit())return;const r=ensureSafeRoute(active());if(!r||r.stages.length<=1)return;
-    r.stages.pop();r.stages[r.stages.length-1].moveSeconds=0;state.safeEditorStage=Math.min(state.safeEditorStage,r.stages.length-1);commit('Última SAFE removida');renderSafeRouteUi();
+    const i=Math.max(0,Math.min(Number(index)||0,r.stages.length-1)),label='S'+(i+1);
+    r.stages.splice(i,1);if(r.stages.length)r.stages[r.stages.length-1].moveSeconds=0;
+    state.safeEditorStage=Math.max(0,Math.min(i,r.stages.length-1));state.safePlacementStage=null;state.mapMode='center';
+    commit(label+' removida');renderSafeRouteUi();renderMap();
   }
+  function removeDynamicSafeStage(){const r=ensureSafeRoute(active());if(r?.stages?.length)removeSafeStage(r.stages.length-1);}
   function renderSafeRouteUi(){
     ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;const gas=(m.category||'dominacao')==='gas';box.style.display=gas?'block':'none';if(!gas)return;
     const host=qs('#mpSafeStages'),strip=qs('#mpSafeStageStrip'),status=qs('#mpSafeRouteStatus'),validator=qs('#mpSafeValidator');if(!host||!strip)return;
     if(!hasDynamicSafe(m)){host.innerHTML='<button type="button" id="mpEnableDynamicSafe" class="primary">CRIAR SAFE DINÂMICA</button>';strip.innerHTML='';validator.innerHTML='';qs('#mpEnableDynamicSafe')?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');});return;}
     const r=ensureSafeRoute(m),open=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));state.safeEditorStage=open;
-    strip.innerHTML=r.stages.map((s,i)=>'<button type="button" data-safe-tab="'+i+'" title="Selecionar SAFE '+(i+1)+'" class="'+(i===open?'primary':'')+'">S'+(i+1)+'</button>').join('<span>→</span>')+'<button type="button" id="mpAddSafeTop" title="Adicionar próxima SAFE">＋</button>';
-    qsa('[data-safe-tab]',strip).forEach(b=>b.onclick=()=>selectSafeStage(Number(b.dataset.safeTab),{focus:false}));qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
+    strip.innerHTML=r.stages.map((s,i)=>'<span style="display:inline-flex;gap:2px;align-items:center"><button type="button" data-safe-tab="'+i+'" title="Editar SAFE '+(i+1)+'" class="'+(i===open?'primary':'')+'">S'+(i+1)+'</button>'+(r.stages.length>1?'<button type="button" data-safe-delete="'+i+'" title="Remover SAFE '+(i+1)+'" aria-label="Remover SAFE '+(i+1)+'">🗑</button>':'')+'</span>').join('<span>→</span>')+(r.stages.length<4?'<button type="button" id="mpAddSafeTop" title="Adicionar próxima SAFE">＋</button>':'');
+    qsa('[data-safe-tab]',strip).forEach(b=>b.onclick=()=>selectSafeStage(Number(b.dataset.safeTab),{focus:false}));qsa('[data-safe-delete]',strip).forEach(b=>b.onclick=e=>{e.stopPropagation();removeSafeStage(Number(b.dataset.safeDelete));});qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
     const s=r.stages[open],pos=validCoord(s.x)&&validCoord(s.y);
-    host.innerHTML='<section class="mp-safe-stage open"><div class="mp-grid"><label>Raio (m)<input data-safe-field="radius" type="number" min="1" value="'+s.radius+'"></label><label>Dano/s<input data-safe-field="damage" type="number" min="0" value="'+s.damage+'"></label><label>Espera (s)<input data-safe-field="closeSeconds" type="number" min="0" value="'+s.closeSeconds+'"></label>'+(open<r.stages.length-1?'<label>Movimento (s)<input data-safe-field="moveSeconds" type="number" min="1" value="'+s.moveSeconds+'"></label>':'')+'</div><div class="mp-actions"><button type="button" id="mpPlaceSelectedSafe" class="primary" title="Posicionar S'+(open+1)+' no mapa">⌖</button><button type="button" id="mpFocusSelectedSafe" title="Enquadrar S'+(open+1)+'">◎</button></div><div class="mp-note">'+(pos?f(s.x)+', '+f(s.y):'Ainda sem posição')+' • altura lógica '+r.height.bottom+' → '+r.height.top+'</div></section>';
-    qs('#mpPlaceSelectedSafe')?.addEventListener('click',()=>beginSafePlacement(open));qs('#mpFocusSelectedSafe')?.addEventListener('click',()=>focusSafeStage(open));
+    host.innerHTML='<section class="mp-safe-stage open"><div class="mp-grid"><label>Raio (m)<input data-safe-field="radius" type="number" min="1" value="'+s.radius+'"></label><label>Dano/s<input data-safe-field="damage" type="number" min="0" value="'+s.damage+'"></label><label>Espera (s)<input data-safe-field="closeSeconds" type="number" min="0" value="'+s.closeSeconds+'"></label>'+(open<r.stages.length-1?'<label>Movimento (s)<input data-safe-field="moveSeconds" type="number" min="1" value="'+s.moveSeconds+'"></label>':'')+'</div><div class="mp-actions"><button type="button" id="mpPlaceSelectedSafe" class="primary" title="Editar posição da S'+(open+1)+' no mapa">⌖</button><button type="button" id="mpFocusSelectedSafe" title="Enquadrar S'+(open+1)+'">◎</button>'+(r.stages.length>1?'<button type="button" id="mpDeleteSelectedSafe" title="Remover S'+(open+1)+'" aria-label="Remover S'+(open+1)+'">🗑</button>':'')+'</div><div class="mp-note">'+(pos?f(s.x)+', '+f(s.y):'Ainda sem posição')+' • altura lógica '+r.height.bottom+' → '+r.height.top+'</div></section>';
+    qs('#mpPlaceSelectedSafe')?.addEventListener('click',()=>beginSafePlacement(open));qs('#mpFocusSelectedSafe')?.addEventListener('click',()=>focusSafeStage(open));qs('#mpDeleteSelectedSafe')?.addEventListener('click',()=>removeSafeStage(open));
     qsa('[data-safe-field]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const rr=ensureSafeRoute(active()),v=Number(e.target.value);if(!Number.isFinite(v))return;rr.stages[open][e.target.dataset.safeField]=Math.max(0,v);commit('S'+(open+1)+' alterada');}));
     const analyses=safeWalkAnalysis(m);validator.innerHTML=analyses.length?'<b>DESLOCAMENTO A PÉ</b><br>'+analyses.map(a=>'<span title="'+esc(a.detail)+'"><b>'+a.from+'→'+a.to+'</b> • '+Math.round(a.centerDistance)+'m • '+a.bearingLabel+' • borda '+a.edgeSpeed.toFixed(2)+'m/s • <b>'+a.status+'</b></span>').join('<br>'):'<b>DESLOCAMENTO A PÉ</b><br>Posicione pelo menos duas SAFEs.';
-    if(status)status.innerHTML='<b>S'+(open+1)+' '+(pos?'POSICIONADA':'SEM POSIÇÃO')+'</b> • edição local até SALVAR';
+    if(status)status.innerHTML='<b>S'+(open+1)+' '+(pos?'POSICIONADA':'SEM POSIÇÃO')+'</b> • clique em S1–S4 para editar • 🗑 remove individualmente';
   }
   function selectSafeStage(index,{focus=true,cancelPlacement=true}={}){
     const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return false;
@@ -1527,7 +1531,7 @@ iconAnchor:[12,
     r.stages.forEach((s,i)=>{if(!safeStageValid(s))return;const current=i===selected,circle=L.circle(ll(s.x,s.y),{radius:Number(s.radius),weight:current?4:2,color:purple,opacity:current?1:.55,fillColor:'#7c3aed',fillOpacity:current?.22:.09,interactive:false}).addTo(state.map);
       const icon=L.divIcon({className:'',html:'<div class="mp-center-pin" style="background:'+(current?'#6d28d9':'#312e81')+';font-size:11px;font-weight:900">S'+(i+1)+'</div>',iconSize:[current?38:32,current?38:32],iconAnchor:[current?19:16,current?19:16]});
       const pin=L.marker(ll(s.x,s.y),{icon,interactive:true,draggable:!!state.editing&&current&&!state.safePresentation}).addTo(state.map).bindPopup('<b>SAFE '+(i+1)+'</b><br>Raio '+Math.round(s.radius)+'m<br>Dano '+s.damage+'/s<br>Vertical '+r.height.bottom+' → '+r.height.top);
-      pin.on('click',()=>selectSafeStage(i));if(state.editing&&current&&!state.safePresentation){pin.on('drag',e=>circle.setLatLng(e.target.getLatLng()));pin.on('dragend',e=>{const p=e.target.getLatLng();s.x=p.lng;s.y=p.lat;s.z=estimateElevation?.(p.lng,p.lat)?.z||0;commit('S'+(i+1)+' reposicionada');});}state.drawn.push(circle,pin);
+      circle._mpKind='safe';pin._mpKind='safe';pin.on('click',()=>selectSafeStage(i));if(state.editing&&current&&!state.safePresentation){pin.on('drag',e=>circle.setLatLng(e.target.getLatLng()));pin.on('dragend',e=>{const p=e.target.getLatLng();s.x=p.lng;s.y=p.lat;s.z=estimateElevation?.(p.lng,p.lat)?.z||0;commit('S'+(i+1)+' reposicionada');});}state.drawn.push(circle,pin);
     });
   }
   function stopSafePreview(){
@@ -1599,9 +1603,11 @@ iconAnchor:[12,
   function safePreviewAt(seconds){
     const model=state.safePreviewModel;if(!model||!model.phases.length)return;const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
     for(let i=0;i<model.phases.length;i++){if(elapsed<=acc+model.phases[i].seconds||i===model.phases.length-1){p=model.phases[i];pi=i;break;}acc+=model.phases[i].seconds;}
-    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,s=u*u*(3-2*u),x=p.type==='move'?p.a.x+(p.b.x-p.a.x)*s:p.a.x,y=p.type==='move'?p.a.y+(p.b.y-p.a.y)*s:p.a.y,rad=p.from+(p.to-p.from)*s,damage=Number(p.damage)||0;
-    state.safePreviewLayer?.setLatLng(ll(x,y));state.safePreviewLayer?.setRadius(rad);const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
-    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='move'?'⚠ A SAFE ZONE ESTÁ SE MOVENDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
+    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,x=p.type==='move'?Number(p.a.x)+(Number(p.b.x)-Number(p.a.x))*u:Number(p.a.x),y=p.type==='move'?Number(p.a.y)+(Number(p.b.y)-Number(p.a.y))*u:Number(p.a.y),rad=Number(p.from)+(Number(p.to)-Number(p.from))*u,damage=p.type==='move'?Math.round(Number(p.a.damage||0)+(Number(p.b.damage||0)-Number(p.a.damage||0))*u):Number(p.damage)||0;
+    if(state.safePreviewLayer){state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);state.safePreviewLayer.bringToFront?.();}
+    updateSafeGasMask({x,y},rad);const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
+    const geom=p.type==='move'?safeTransitionGeometry(p.a,p.b):null;
+    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='move'?'⚠ A SAFE ZONE ESTÁ SE MOVENDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='move'?'S'+(p.stage+1)+' → S'+(p.stage+2)+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
     const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';model.phaseIndex=pi;
   }
   function ensureSafeTimeline(){
@@ -1615,11 +1621,12 @@ iconAnchor:[12,
   }
   function startSafePreview(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;const route=r.stages.filter(safeStageValid);if(route.length<2){alert('Posicione pelo menos S1 e S2 para simular.');return;}
-    stopSafePreview();state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();const phases=[];
-    route.forEach((st,i)=>{const hold=Math.max(0,Number(st.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:st,b:st,from:st.radius,to:st.radius,damage:st.damage,seconds:hold,stage:i});if(i<route.length-1){const next=route[i+1],sec=Math.max(1,Number(st.moveSeconds)||60);phases.push({type:'move',label:'A SAFE ZONE ESTÁ SE MOVENDO • S'+(i+1)+' → S'+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:next.damage,seconds:sec,stage:i});}});
-    const s1=route[0];state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{radius:s1.radius,weight:5,color:'#c084fc',opacity:1,fillColor:'#7c3aed',fillOpacity:.24,interactive:false}).addTo(state.map);
+    stopSafePreview();state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
+    (state.drawn||[]).filter(l=>l?._mpKind==='safe').forEach(l=>{try{if(state.map?.hasLayer(l))state.map.removeLayer(l);}catch(e){}});
+    const phases=[];route.forEach((st,i)=>{const hold=Math.max(0,Number(st.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:st,b:st,from:st.radius,to:st.radius,damage:st.damage,seconds:hold,stage:i});if(i<route.length-1){const next=route[i+1],sec=Math.max(1,Number(st.moveSeconds)||60);phases.push({type:'move',label:'A SAFE ZONE ESTÁ SE MOVENDO • S'+(i+1)+' → S'+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:st.damage,seconds:sec,stage:i});}});
+    const s1=route[0];state.safePreviewMask=safeGasMask(s1,s1.radius);state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{radius:Number(s1.radius),weight:5,color:'#d8b4fe',opacity:1,fillColor:'#7c3aed',fillOpacity:.34,interactive:false,pane:'overlayPane'}).addTo(state.map);state.safePreviewLayer.bringToFront?.();
     const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0);state.safePreviewModel={route,phases,totalSeconds,routeMode:'FIXA',phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
-    let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},50);
+    let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},40);
   }
 
   function drawElevationKnowledge(m){
