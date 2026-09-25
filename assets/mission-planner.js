@@ -1575,8 +1575,19 @@ iconAnchor:[12,
     if(!state.safePresentation)return;state.safePresentation=false;const prev=state.safePresentationPrev||{},el=qs('[data-safe-presentation="1"]');if(el){delete el.dataset.safePresentation;const wasFullscreen=!!prev.fullscreen;Object.assign(el.style,wasFullscreen?{position:'fixed',inset:'0',zIndex:'99999',background:'#0b1018',padding:'12px'}:{position:'',inset:'',zIndex:'',background:'',padding:''});const map=qs('#missionPlannerMap');if(map)map.style.height=wasFullscreen?'calc(100vh - 24px)':'';qsa('.mp-map-toolbar,.mp-map-status,.leaflet-control-container',el).forEach(x=>{x.style.display=x.dataset.mpPresentationDisplay||'';delete x.dataset.mpPresentationDisplay;});}
     qs('#mpPresentationTitle')?.remove();state.safePresentationPrev=null;renderMap();const legend=qs('#mpMapLegend');if(legend)legend.style.display=qs('#mpLegendToggle')?.checked===false?'none':'';setTimeout(()=>state.map?.invalidateSize(),80);
   }
-  function safeGasMask(){return null;}
-  function updateSafeGasMask(){}
+  function safeGasMask(center,radius){
+    if(!state.map||!center)return null;
+    const bounds=[[-12000,-12000],[-12000,12000],[12000,12000],[12000,-12000]];
+    const hole=[];for(let deg=0;deg<=360;deg+=4){const a=deg*Math.PI/180;hole.push(ll(Number(center.x)+Math.sin(a)*Number(radius),Number(center.y)+Math.cos(a)*Number(radius)));}
+    return L.polygon([bounds,hole],{stroke:false,fillColor:'#6d28d9',fillOpacity:.68,fillRule:'evenodd',interactive:false,pane:'overlayPane'}).addTo(state.map);
+  }
+  function updateSafeGasMask(center,radius){
+    if(!state.map||!center)return;
+    const bounds=[[-12000,-12000],[-12000,12000],[12000,12000],[12000,-12000]],hole=[];
+    for(let deg=0;deg<=360;deg+=4){const a=deg*Math.PI/180;hole.push(ll(Number(center.x)+Math.sin(a)*Number(radius),Number(center.y)+Math.cos(a)*Number(radius)));}
+    if(state.safePreviewMask)state.safePreviewMask.setLatLngs([bounds,hole]);else state.safePreviewMask=safeGasMask(center,radius);
+    state.safePreviewMask?.bringToFront?.();state.safePreviewLayer?.bringToFront?.();
+  }
 
   function safeTestPlayerStatus(center,radius,damage){
     const p=state.safeTestPlayer;if(!p||!center)return null;const distance=distXY(p,center),margin=Number(radius)-distance,inside=margin>=0;
@@ -1598,7 +1609,7 @@ iconAnchor:[12,
     const model=state.safePreviewModel;if(!model||!model.phases.length)return;const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
     for(let i=0;i<model.phases.length;i++){if(elapsed<=acc+model.phases[i].seconds||i===model.phases.length-1){p=model.phases[i];pi=i;break;}acc+=model.phases[i].seconds;}
     const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,x=p.type==='move'?Number(p.a.x)+(Number(p.b.x)-Number(p.a.x))*u:Number(p.a.x),y=p.type==='move'?Number(p.a.y)+(Number(p.b.y)-Number(p.a.y))*u:Number(p.a.y),rad=Number(p.from)+(Number(p.to)-Number(p.from))*u,damage=p.type==='move'?Math.round(Number(p.a.damage||0)+(Number(p.b.damage||0)-Number(p.a.damage||0))*u):Number(p.damage)||0;
-    if(state.safePreviewLayer){state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);state.safePreviewLayer.bringToFront?.();}
+    if(state.safePreviewLayer){state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);}updateSafeGasMask({x,y},rad);
     const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
     const geom=p.type==='move'?safeTransitionGeometry(p.a,p.b):null;
     if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='move'?'⚠ A SAFE ZONE ESTÁ SE MOVENDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='move'?'S'+(p.stage+1)+' → S'+(p.stage+2)+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
@@ -1618,7 +1629,7 @@ iconAnchor:[12,
     stopSafePreview();state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
     (state.drawn||[]).filter(l=>l?._mpKind==='safe').forEach(l=>{try{if(state.map?.hasLayer(l))state.map.removeLayer(l);}catch(e){}});
     const phases=[];route.forEach((st,i)=>{const hold=Math.max(0,Number(st.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:st,b:st,from:st.radius,to:st.radius,damage:st.damage,seconds:hold,stage:i});if(i<route.length-1){const next=route[i+1],sec=Math.max(1,Number(st.moveSeconds)||60);phases.push({type:'move',label:'A SAFE ZONE ESTÁ SE MOVENDO • S'+(i+1)+' → S'+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:st.damage,seconds:sec,stage:i});}});
-    const s1=route[0];state.safePreviewMask=null;state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{radius:Number(s1.radius),weight:5,color:'#d8b4fe',opacity:1,fillColor:'#7c3aed',fillOpacity:.34,interactive:false,pane:'overlayPane'}).addTo(state.map);state.safePreviewLayer.bringToFront?.();
+    const s1=route[0];state.safePreviewMask=safeGasMask(s1,s1.radius);state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{radius:Number(s1.radius),weight:5,color:'#d8b4fe',opacity:1,fill:false,fillOpacity:0,interactive:false,pane:'overlayPane'}).addTo(state.map);state.safePreviewLayer.bringToFront?.();
     const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0);state.safePreviewModel={route,phases,totalSeconds,routeMode:'FIXA',phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
     let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},40);
   }
