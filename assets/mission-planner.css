@@ -313,3 +313,56 @@
  .mp-gas-op-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
  .mp-gas-op-actions button{text-align:center!important;font-size:8px!important}
 }
+
+
+/* V11.2 — redesign inspirado no protótipo aprovado, mantendo mapa GTA atual */
+#page-planejador.mp-gas-operational:not(.mp-library-mode)>.page-head{display:none!important}
+#page-planejador.mp-gas-operational:not(.mp-library-mode){padding:0!important;background:#09080d!important}
+#page-planejador.mp-gas-operational:not(.mp-library-mode) .mp-workspace-bar{
+  height:52px!important;margin:0!important;border-radius:0!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.065)!important;
+  background:#0d0b12!important;padding:0 14px!important;
+}
+#page-planejador.mp-gas-operational .mp-workspace-path{font-size:9px!important}
+#page-planejador.mp-gas-operational .mp-workspace-path:before{display:none!important}
+#page-planejador.mp-gas-operational .mp-workspace-path{display:flex!important;align-items:center!important}
+.mp-gas-stepper{display:none}
+#page-planejador.mp-gas-operational .mp-gas-stepper{
+ display:grid;grid-template-columns:repeat(6,minmax(0,1fr));height:64px;background:#0d0b12;border-bottom:1px solid rgba(255,255,255,.065);padding:0 14px
+}
+.mp-gas-stepper button{position:relative;display:flex;align-items:center;gap:8px;padding:0 10px!important;border:0!important;border-radius:0!important;background:transparent!important;color:#7f7888!important;text-align:left!important;min-width:0}
+.mp-gas-stepper button:after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:transparent}
+.mp-gas-stepper button.active{color:#fff!important;background:rgba(139,92,246,.055)!important}.mp-gas-stepper button.active:after{background:#a855f7}
+.mp-gas-stepper button.done{color:#c4b5fd!important}.mp-gas-stepper button.done i{background:#123b2a!important;color:#65e6a7!important}
+.mp-gas-stepper i{font-style:normal;display:grid;place-items:center;flex:0 0 23px;width:23px;height:23px;border-radius:50%;background:#1c1823;color:#8f8799;font-size:9px;font-weight:950}
+.mp-gas-stepper button.active i{background:#7c3aed;color:#fff}.mp-gas-stepper span{min-width:0;display:flex;flex-direction:column;gap:2px}.mp-gas-stepper b{font-size:9px;letter-spacing:.02em}.mp-gas-stepper small{font-size:7px;color:#6f6877;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-shell{
+ grid-template-columns:300px minmax(0,1fr)!important;gap:0!important;min-height:calc(100vh - 116px)!important
+}
+#page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-side{
+ top:116px!important;max-height:calc(100vh - 116px)!important;border-radius:0!important;border-width:0 1px 0 0!important;padding:12px!important;background:#0d0b12!important
+}
+#page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-mapwrap{
+ top:116px!important;height:calc(100vh - 116px)!important;min-height:calc(100vh - 116px)!important;border-radius:0!important;border:0!important;background:#0b1118!important
+}
+#page-planejador.mp-gas-operational .mp-map-status{height:38px!important;min-height:38px!important;background:rgba(10,9,14,.82)!important;border-bottom:1px solid rgba(255,255,255,.055)!important}
+#page-planejador.mp-gas-operational #missionPlannerMap{height:calc(100% - 38px)!important}
+#page-planejador.mp-gas-operational .mp-gas-operational-bar{padding:0 0 10px!important;margin:0 0 10px!important;background:transparent!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.06)!important}
+#page-planejador.mp-gas-operational .mp-gas-op-title b{font-size:13px!important;text-transform:none!important;letter-spacing:0!important}
+#page-planejador.mp-gas-operational .mp-gas-op-title span{font-size:8px!important}
+#page-planejador.mp-gas-operational .mp-gas-op-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+#page-planejador.mp-gas-operational .mp-gas-op-actions button{padding:0 5px!important;text-align:center!important;font-size:7px!important}
+#page-planejador.mp-gas-operational #mpSafeStageStrip{padding:7px 0!important;border-bottom:1px solid rgba(255,255,255,.055)}
+#page-planejador.mp-gas-operational .mp-safe-stage{background:#121019!important;border-color:rgba(255,255,255,.065)!important}
+#page-planejador.mp-gas-operational .mp-safe-stage.open{border-color:rgba(168,85,247,.38)!important;background:rgba(88,28,135,.12)!important}
+#page-planejador.mp-gas-operational input,#page-planejador.mp-gas-operational select,#page-planejador.mp-gas-operational textarea{background:#14111b!important;border-color:rgba(255,255,255,.075)!important}
+@media(max-width:900px){
+ #page-planejador.mp-gas-operational .mp-gas-stepper{grid-template-columns:repeat(3,1fr);height:auto;padding:4px}
+ .mp-gas-stepper button{min-height:42px!important}.mp-gas-stepper small{display:none}
+ #page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-shell{grid-template-columns:1fr!important}
+ #page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-side,#page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-mapwrap{top:auto!important;max-height:none!important}
+}
+
+.mp-workspace-brand{display:none}
+#page-planejador.mp-gas-operational .mp-workspace-brand{display:flex;align-items:center;gap:7px;padding-right:10px;border-right:1px solid rgba(255,255,255,.07)}
+#page-planejador.mp-gas-operational .mp-workspace-brand img{width:23px;height:23px;object-fit:contain;filter:drop-shadow(0 0 8px rgba(141,53,255,.42))}
+#page-planejador.mp-gas-operational .mp-workspace-brand b{font-size:9px;letter-spacing:.12em;white-space:nowrap}

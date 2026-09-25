@@ -2585,7 +2585,7 @@ z=zones[0];if(!z)return false;
   function ensureWorkspaceBar(){
     const shell=qs('.mission-planner-shell');if(!shell||qs('#mpWorkspaceBar'))return;
     const bar=document.createElement('div');bar.id='mpWorkspaceBar';bar.className='mp-workspace-bar';
-    bar.innerHTML=`<button type="button" id="mpBackLibrary" class="mp-icon-action" title="Voltar às missões — retorna para a biblioteca de mapas" aria-label="Voltar às missões">←</button><div class="mp-workspace-path"><b id="mpWorkspaceEvent">Evento</b><span>›</span><strong id="mpWorkspaceZone">Zona</strong></div><div class="mp-editor-actions"><button type="button" id="mpNewZone" class="mp-icon-action" title="Nova zona — cria outra zona dentro deste evento" aria-label="Nova zona">＋</button><button type="button" id="mpReplicateZone" class="mp-icon-action" title="Replicar — reaproveita a configuração desta zona em uma nova zona" aria-label="Replicar zona">⧉</button><button type="button" id="mpCloneZone" class="mp-icon-action" title="Clonar — cria uma cópia independente desta zona" aria-label="Clonar zona">⎘</button><button type="button" id="mpDeleteMission" class="mp-delete-action mp-icon-action" title="Excluir zona — remove esta zona do evento" aria-label="Excluir zona">⌫</button><button type="button" id="mpUndoEdit" class="mp-icon-action" title="Desfazer — volta a última alteração da edição" aria-label="Desfazer" style="display:none">↶</button><button type="button" id="mpRedoEdit" class="mp-icon-action" title="Refazer — reaplica a alteração desfeita" aria-label="Refazer" style="display:none">↷</button><button type="button" id="mpEditMission" class="mp-icon-action" title="Editar — habilita alterações nesta zona" aria-label="Editar zona">✎</button><button type="button" id="mpSaveMission" class="primary mp-icon-action" title="Salvar — grava as alterações desta zona" aria-label="Salvar alterações" style="display:none">✓</button><button type="button" id="mpCancelEdit" class="mp-icon-action" title="Cancelar — descarta a edição atual" aria-label="Cancelar edição" style="display:none">×</button></div><span id="mpCloudState" class="mp-cloud-state local">⚠ MODO LOCAL</span>`;
+    bar.innerHTML=`<div class="mp-workspace-brand"><img src="assets/high_logo.png" alt="High OS"><b>HIGH OS</b></div><button type="button" id="mpBackLibrary" class="mp-icon-action" title="Voltar às missões — retorna para a biblioteca de mapas" aria-label="Voltar às missões">←</button><div class="mp-workspace-path"><b id="mpWorkspaceEvent">Evento</b><span>›</span><strong id="mpWorkspaceZone">Zona</strong></div><div class="mp-editor-actions"><button type="button" id="mpNewZone" class="mp-icon-action" title="Nova zona — cria outra zona dentro deste evento" aria-label="Nova zona">＋</button><button type="button" id="mpReplicateZone" class="mp-icon-action" title="Replicar — reaproveita a configuração desta zona em uma nova zona" aria-label="Replicar zona">⧉</button><button type="button" id="mpCloneZone" class="mp-icon-action" title="Clonar — cria uma cópia independente desta zona" aria-label="Clonar zona">⎘</button><button type="button" id="mpDeleteMission" class="mp-delete-action mp-icon-action" title="Excluir zona — remove esta zona do evento" aria-label="Excluir zona">⌫</button><button type="button" id="mpUndoEdit" class="mp-icon-action" title="Desfazer — volta a última alteração da edição" aria-label="Desfazer" style="display:none">↶</button><button type="button" id="mpRedoEdit" class="mp-icon-action" title="Refazer — reaplica a alteração desfeita" aria-label="Refazer" style="display:none">↷</button><button type="button" id="mpEditMission" class="mp-icon-action" title="Editar — habilita alterações nesta zona" aria-label="Editar zona">✎</button><button type="button" id="mpSaveMission" class="primary mp-icon-action" title="Salvar — grava as alterações desta zona" aria-label="Salvar alterações" style="display:none">✓</button><button type="button" id="mpCancelEdit" class="mp-icon-action" title="Cancelar — descarta a edição atual" aria-label="Cancelar edição" style="display:none">×</button></div><span id="mpCloudState" class="mp-cloud-state local">⚠ MODO LOCAL</span>`;
     shell.insertAdjacentElement('beforebegin',bar);
     qs('#mpBackLibrary')?.addEventListener('click',()=>{if(state.editing&&state.dirty&&!confirm('Existem alterações não salvas. Deseja voltar às missões?'))return;if(state.editing)cancelEdit();setWorkspace(false);renderCentralV954();});
   }
@@ -2724,6 +2724,40 @@ z=zones[0];if(!z)return false;
     let salva='zona';try{salva=localStorage.getItem('highos_mp_tab')||'zona';}catch(e){}
     setPlannerTab(PLANNER_TABS.some(t=>t.id===salva)?salva:'zona');
   }
+  const GAS_STEPS=[
+    {id:'zone',n:1,label:'Zona',sub:'Centro e tamanho'},
+    {id:'spawns',n:2,label:'Equipes',sub:'Spawns existentes'},
+    {id:'validation',n:3,label:'Validação',sub:'NC + TPCDS no jogo'},
+    {id:'safe',n:4,label:'Safe',sub:'Fases e rotas'},
+    {id:'simulation',n:5,label:'Simulação',sub:'Animação e tempo'},
+    {id:'request',n:6,label:'Solicitação',sub:'Texto do Discord'}
+  ];
+  function ensureGasStepper(){
+    const bar=qs('#mpWorkspaceBar');if(!bar||qs('#mpGasStepper'))return;
+    const stepper=document.createElement('nav');stepper.id='mpGasStepper';stepper.className='mp-gas-stepper';stepper.setAttribute('aria-label','Etapas da missão');
+    stepper.innerHTML=GAS_STEPS.map(s=>'<button type="button" data-gas-step="'+s.id+'"><i>'+s.n+'</i><span><b>'+s.label+'</b><small>'+s.sub+'</small></span></button>').join('');
+    bar.insertAdjacentElement('afterend',stepper);
+    qsa('[data-gas-step]',stepper).forEach(b=>b.onclick=()=>setGasStep(b.dataset.gasStep));
+  }
+  function setGasStep(step){
+    const page=qs('#page-planejador');if(!page)return;
+    const map={zone:'mission',spawns:'mission',validation:'tools',safe:'safe',simulation:'safe',request:'tools'};
+    page.dataset.gasStep=step;setGasOperationalView(map[step]||'safe');
+    if(step==='simulation'){setTimeout(()=>startSafePreview(),80);}
+    if(step==='request'){setTimeout(()=>qs('#mpGenerateRequest')?.scrollIntoView?.({behavior:'smooth',block:'center'}),80);}
+    if(step==='validation'){setTimeout(()=>qs('#mpValidateCds')?.focus?.(),80);}
+    renderGasStepper();
+  }
+  function renderGasStepper(){
+    const m=active(),page=qs('#page-planejador');if(!m||!page)return;
+    ensureGasStepper();const current=page.dataset.gasStep||'safe',pts=m.points||[],valid=pts.filter(isValidated).length;
+    qsa('[data-gas-step]',qs('#mpGasStepper')).forEach(b=>{
+      const id=b.dataset.gasStep,done=(id==='zone'&&validCoord(m.center?.x)&&validCoord(m.center?.y))||(id==='spawns'&&pts.length>0)||(id==='validation'&&pts.length>0&&valid===pts.length)||(id==='safe'&&hasDynamicSafe(m));
+      b.classList.toggle('active',id===current);b.classList.toggle('done',!!done);
+      const i=b.querySelector('i');if(i)i.textContent=done?'✓':GAS_STEPS.find(s=>s.id===id)?.n;
+    });
+  }
+
   function ensureGasOperationalUi(){
     const side=qs('.mission-planner-side');if(!side)return;
     let bar=qs('#mpGasOperationalBar');
@@ -2749,8 +2783,10 @@ z=zones[0];if(!z)return false;
     const page=qs('#page-planejador'),m=active();if(!page||!m)return;
     const gas=(m.category||'dominacao')==='gas';page.classList.toggle('mp-gas-operational',gas);
     if(!gas){delete page.dataset.gasView;return;}
-    ensureGasOperationalUi();
+    ensureGasOperationalUi();ensureGasStepper();
+    if(!page.dataset.gasStep)page.dataset.gasStep='safe';
     if(!page.dataset.gasView)setGasOperationalView('safe');else setGasOperationalView(page.dataset.gasView);
+    renderGasStepper();
   }
 
   function renderPlannerBadges(){
