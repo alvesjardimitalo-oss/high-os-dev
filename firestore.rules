@@ -1,7 +1,7 @@
 rules_version = '2';
 
 /* =============================================================
-   HIGH OS · REGRAS DE SEGURANCA DO FIRESTORE (V12.5)
+   HIGH OS · REGRAS DE SEGURANCA DO FIRESTORE (V12.7)
    -------------------------------------------------------------
    Ate a V9.3 nao existia arquivo de regras no repositorio: toda a
    autorizacao era feita apenas no navegador (isAdmin / canEditModule),
@@ -207,9 +207,33 @@ service cloud.firestore {
       allow read: if activeUser();
       allow write: if canEdit('spotify');
     }
+    // V12.7 - documento antigo: continua legivel como copia de seguranca,
+    // mas ninguem grava mais nele (as zonas agora ficam em missoes_zonas).
     match /highos/data/config/missoes_planejador {
       allow read: if canView('planejador');
+      allow write: if isAdmin();
+    }
+    // V12.7 - trava da migracao unica para o formato novo
+    match /highos/data/config/missoes_migracao {
+      allow read: if canView('planejador');
       allow write: if canEdit('planejador');
+    }
+    // V12.7 - uma zona por documento. "rev" so avanca de 1 em 1: quem esta
+    // com versao antiga nao consegue sobrescrever o trabalho de outra pessoa.
+    // Exclusao e um marcador (deleted:true); apagar de verdade so ADMIN.
+    match /highos/data/missoes_zonas/{zonaId} {
+      allow read: if canView('planejador');
+      allow create: if canEdit('planejador')
+                    && request.resource.data.rev == 1
+                    && request.resource.data.updatedBy == myEmail()
+                    && request.resource.data.json is string
+                    && request.resource.data.json.size() <= 900000;
+      allow update: if canEdit('planejador')
+                    && request.resource.data.rev == resource.data.rev + 1
+                    && request.resource.data.updatedBy == myEmail()
+                    && request.resource.data.json is string
+                    && request.resource.data.json.size() <= 900000;
+      allow delete: if isAdmin();
     }
     match /highos/data/config/{outro} {
       allow read: if activeUser();

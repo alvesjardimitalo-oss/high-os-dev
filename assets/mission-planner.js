@@ -1064,6 +1064,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
       // V12.7 - a primeira abertura de quem edita converte o formato antigo (uma vez só, para toda a equipe).
       if(res?.legacy&&cloud.canEdit()&&cloud.ensureMigrated){const mig=await cloud.ensureMigrated(state.missions);if(mig.migrated){res=await cloud.pull({force:true});setStatus(`Planejador convertido para o novo formato da nuvem: ${mig.count} zona(s).`,'ok');}}
       const merge=mergeMissions(Array.isArray(res?.entries)?res.entries:[]);
+      if(res){state.cloudMeta={updatedAtText:res.pulledAt||new Date().toISOString(),updatedBy:''};if(!(merge.added||merge.updated||merge.removed))render();}
       // Leitura pura: abrir/sincronizar nunca grava de volta no Firebase.
       // Escrita acontece somente no SALVAR explícito após alteração real.
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
@@ -2679,10 +2680,13 @@ z=zones[0];if(!z)return false;
   function resolveSyncConflict(id,choice){
     const idx=state.missions.findIndex(m=>m.id===id);if(idx<0)return;
     const local=state.missions[idx],remote=local?._syncConflict?.remote;if(!remote)return;
+    const remoteRev=local._syncConflict?.remoteRev;
     if(choice==='firebase'){
-      const chosen=JSON.parse(JSON.stringify(remote));delete chosen._syncConflict;chosen.updatedAt=nowIso();state.missions[idx]=chosen;
+      // V12.7 - adota a versão da nuvem como está (sem gerar nova versão)
+      const chosen=JSON.parse(JSON.stringify(remote));delete chosen._syncConflict;if(remoteRev!==undefined){chosen._rev=remoteRev;state.syncedHash[String(chosen.id)]=zoneHash(chosen);saveSyncMeta();}state.missions[idx]=chosen;
     }else{
-      delete local._syncConflict;local.updatedAt=nowIso();
+      // V12.7 - manter local: o próximo SALVAR sobrescreve a versão da nuvem conhecida
+      delete local._syncConflict;local.updatedAt=nowIso();if(remoteRev!==undefined)local._rev=remoteRev;
     }
     saveStore();render();setSaveState(choice==='firebase'?'Conflito resolvido • versão Firebase escolhida':'Conflito resolvido • versão local mantida');
   }
