@@ -1426,13 +1426,14 @@ iconAnchor:[12,
   function safeRouteAudit(m){
     const r=ensureSafeRoute(m),issues=[];if(!r)return issues;
     const initial=effectiveEventRadius(m);let prev=initial;
-    r.stages.forEach((st,i)=>{if(!safeStageValid(st))issues.push('SAFE '+(i+1)+' sem centro/raio válido.');if(Number(st.z)!==0)issues.push('SAFE '+(i+1)+' deve usar Z = 0 na referência visual.');if(Number(st.radius)>=prev)issues.push('Raio da SAFE '+(i+1)+' precisa ser menor que a etapa anterior.');if(Number(st.closeSeconds)<=0)issues.push('Tempo de fechamento da SAFE '+(i+1)+' inválido.');if(i<r.stages.length-1&&Number(st.moveSeconds)<=0)issues.push('Tempo de movimento após SAFE '+(i+1)+' inválido.');prev=Number(st.radius)||prev;});
+    const reach=safeRouteReachability(r);
+    r.stages.forEach((st,i)=>{const hasFixed=safeStageValid(st),hasViableOption=i>0&&!!reach[i]?.viable?.some(x=>x.index>=0);if(!hasFixed&&!hasViableOption)issues.push('SAFE '+(i+1)+' sem posição fixa ou possibilidade viável.');if(hasFixed&&Number(st.z)!==0)issues.push('SAFE '+(i+1)+' deve usar Z = 0 na referência visual.');if(Number(st.radius)>=prev)issues.push('Raio da SAFE '+(i+1)+' precisa ser menor que a etapa anterior.');if(Number(st.closeSeconds)<=0)issues.push('Tempo de fechamento da SAFE '+(i+1)+' inválido.');if(i<r.stages.length-1&&Number(st.moveSeconds)<=0)issues.push('Tempo de movimento após SAFE '+(i+1)+' inválido.');prev=Number(st.radius)||prev;});
     const initialStage={x:m.center?.x,y:m.center?.y,radius:initial};
     if(safeStageValid(r.stages[0])&&!safeCircleFits(initialStage,r.stages[0]))issues.push('SAFE 1 não cabe completamente dentro da Safe inicial.');
     for(let i=1;i<r.stages.length;i++)if(safeStageValid(r.stages[i-1])&&safeStageValid(r.stages[i])&&!safeCircleFits(r.stages[i-1],r.stages[i]))issues.push('SAFE '+(i+1)+' ultrapassa os limites da SAFE '+i+'.');
     for(let i=1;i<r.stages.length;i++){
       const audit=safeOptionAudit(r,i);audit.invalid.forEach(x=>issues.push('Opção '+(x.index+1)+' da SAFE '+(i+1)+': '+x.reason+'.'));
-      const reach=safeRouteReachability(r)[i];if(audit.valid.length&&!(reach?.viable?.length))issues.push('SAFE '+(i+1)+' possui opções locais, mas nenhuma mantém caminho até a SAFE final.');
+      const stageReach=reach[i];if(audit.valid.length&&!(stageReach?.viable?.length))issues.push('SAFE '+(i+1)+' possui opções locais, mas nenhuma mantém caminho até a SAFE final.');
     }
     return [...new Set(issues)];
   }
@@ -1543,7 +1544,7 @@ iconAnchor:[12,
       <div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div>
       <div id="mpSafeStages"></div>
       <div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap">
-        <button type="button" id="mpSafePlace1">POSICIONAR SAFE 1 NO MAPA</button>
+        <button type="button" id="mpSafePlace1">POSICIONAR SAFE SELECIONADA</button>
         <button type="button" id="mpSafeUseCenter">SAFE 1 = CENTRO ATUAL</button>
         <button type="button" id="mpSafeAuto">⚡ GERAR POSSIBILIDADES</button>
         <button type="button" id="mpSafeFocus">◎ CONFIGURAR SAFES SEM SPAWNS</button>
@@ -1551,7 +1552,7 @@ iconAnchor:[12,
         <button type="button" id="mpSafeStop">■ PARAR</button>
       </div>`;
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
-        qs('#mpSafePlace1')?.addEventListener('click',()=>beginSafePlacement(0));
+        qs('#mpSafePlace1')?.addEventListener('click',()=>beginSafePlacement(Math.max(0,Number(state.safeEditorStage)||0),false));
     qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=0;commit('Safe 1 vinculada ao centro da missão');});
     qs('#mpSafeAuto')?.addEventListener('click',generateSafeCandidates);
     qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));
@@ -1887,7 +1888,7 @@ iconAnchor:[12,
   function startSafePreview(){
     const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
     const audit=safeRouteAudit(m);
-    const blocking=audit.filter(x=>/sem centro\/raio válido|precisa ser menor|ultrapassa os limites|Tempo de fechamento|Tempo de movimento/.test(x));
+    const blocking=audit.filter(x=>/sem posição fixa ou possibilidade viável|precisa ser menor|ultrapassa os limites|Tempo de fechamento|Tempo de movimento/.test(x));
     if(blocking.length){alert('Não é possível simular enquanto a rota possui erro técnico:\n\n- '+blocking.join('\n- '));return;}
     const reach=safeRouteReachability(r),route=[{...r.stages[0]}];let randomized=false;
     for(let i=1;i<r.stages.length;i++){if(safeOptions(r,i).length&&!(reach[i]?.viable?.some(x=>x.index>=0))){alert('A SAFE '+(i+1)+' possui possibilidades, mas nenhuma mantém caminho até a SAFE final. Corrija a cadeia antes do preview.');return;}}
