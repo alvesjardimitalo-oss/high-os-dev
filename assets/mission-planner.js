@@ -1431,9 +1431,9 @@ iconAnchor:[12,
     let box=qs('#mpSafeRouteBox');if(box)return;
     const anchor=qs('#mpCoverageBox')||qs('#mpCenterValidation'),zonePanel=plannerPanel('zona');if(!anchor&&!zonePanel)return;
     box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
-    box.innerHTML='<h3>SAFE DINÂMICA V3</h3><div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeStageStrip" class="mp-actions" style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap"></div><div id="mpSafeStages"></div><div id="mpSafeValidator" class="mp-readout" style="margin-top:8px"></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" id="mpSafePreview" class="primary" title="Simular evento">▶</button><button type="button" id="mpSafePresent" title="Modo apresentação">⛶</button><button type="button" id="mpSafeFocus" title="Mostrar/ocultar spawns">◉</button><button type="button" id="mpRemoveSafeTop" title="Remover última SAFE">−</button></div>';
+    box.innerHTML='<h3>SAFE DINÂMICA V3</h3><div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeStageStrip" class="mp-actions" style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap"></div><div id="mpSafeStages"></div><div id="mpSafeValidator" class="mp-readout" style="margin-top:8px"></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" id="mpSafePreview" class="primary" title="Simular evento">▶</button><button type="button" id="mpSafePresent" title="Modo apresentação">⛶</button><button type="button" id="mpSafeRecord" title="Gravar simulação">●</button><button type="button" id="mpSafeFocus" title="Mostrar/ocultar spawns">◉</button><button type="button" id="mpRemoveSafeTop" title="Remover última SAFE">−</button></div>';
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
-    qs('#mpSafePreview')?.addEventListener('click',startSafePreview);qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
+    qs('#mpSafePreview')?.addEventListener('click',startSafePreview);qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);qs('#mpSafeRecord')?.addEventListener('click',toggleSafeRecording);qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
   }
   function safePlacementCheck(latlng){
     const idx=state.safePlacementStage,r=ensureSafeRoute(active());
@@ -1623,6 +1623,22 @@ iconAnchor:[12,
     let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},40);
   }
 
+  async function recordSafeDemonstration(){
+    const mapEl=state.map?.getContainer(),m=active(),r=ensureSafeRoute(m);if(!mapEl||!m||!r)return;
+    if(r.stages.filter(safeStageValid).length<2){alert('Posicione pelo menos S1 e S2 antes de gravar.');return;}
+    if(!navigator.mediaDevices?.getDisplayMedia||typeof MediaRecorder==='undefined'){alert('Este navegador não oferece gravação de tela compatível.');return;}
+    stopSafePreview();startSafePreview();
+    let stream;try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false,preferCurrentTab:true});}catch{return;}
+    const chunks=[],mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm',recorder=new MediaRecorder(stream,{mimeType:mime});
+    state.safeRecorder=recorder;state.safeRecordStream=stream;
+    recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
+    recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());state.safeRecorder=null;state.safeRecordStream=null;if(!chunks.length)return;const blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='high-os-safe-'+slugify(m.event||'evento')+'-'+Date.now()+'.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);const b=qs('#mpSafeRecord');if(b){b.textContent='●';b.title='Gravar simulação';}};
+    recorder.start(500);const b=qs('#mpSafeRecord');if(b){b.textContent='■';b.title='Parar e salvar gravação';}
+  }
+  function toggleSafeRecording(){
+    if(state.safeRecorder&&state.safeRecorder.state!=='inactive'){state.safeRecorder.stop();return;}
+    recordSafeDemonstration();
+  }
   function drawElevationKnowledge(m){
     if(!state.map||!state.showElevationKnowledge)return;
     const samples=elevationSamples();if(!samples.length)return;
