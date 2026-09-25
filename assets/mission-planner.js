@@ -1529,12 +1529,10 @@ iconAnchor:[12,
   }
   function safeBearingLabel(deg){const names=['N','NE','L','SE','S','SO','O','NO'];return names[Math.round(((deg%360)+360)%360/45)%8]+' '+Math.round(deg)+'°';}
   function safeWalkAnalysis(m){
-    const r=ensureSafeRoute(m);if(!r)return [];const playerSpeed=Math.max(1,Number(r.walkSpeed)||5.2),safeSpeed=playerSpeed*(Number(r.safetyMargin)||.85),out=[];
-    for(let i=0;i<r.stages.length-1;i++){const a=r.stages[i],b=r.stages[i+1],g=safeTransitionGeometry(a,b);if(!g)continue;
-      const recommended=Math.ceil(g.edgeTravel/safeSpeed),ratio=g.edgeSpeed/safeSpeed,status=ratio<=.8?'SEGURO':ratio<=1?'ATENÇÃO':'RISCO',canEscape=g.edgeSpeed<playerSpeed;
-      const maxShrinkForTime=Math.max(0,playerSpeed*g.seconds-g.centerDistance),minTargetRadius=Math.max(1,Math.ceil(Number(a.radius)-maxShrinkForTime));
-      const recommendedRadius=Math.min(Number(a.radius),Math.max(Number(b.radius),minTargetRadius));
-      out.push({from:'S'+(i+1),to:'S'+(i+2),...g,bearingLabel:safeBearingLabel(g.bearing),recommended,status,canEscape,playerSpeed,recommendedRadius,detail:'Centro '+Math.round(g.centerDistance)+'m + redução '+Math.round(g.shrink)+'m = avanço máximo '+Math.round(g.edgeTravel)+'m. Player '+playerSpeed.toFixed(2)+'m/s. Configurado '+g.seconds+'s; tempo seguro recomendado ≥ '+recommended+'s; raio de destino recomendado ≥ '+Math.round(recommendedRadius)+'m para manter este tempo.'});
+    const r=ensureSafeRoute(m);if(!r)return [];const playerSpeed=Math.max(1,Number(r.walkSpeed)||5.2),safeSpeed=playerSpeed*(Number(r.safetyMargin)||.85),stages=r.stages.filter(safeStageValid),initial=safeInitialStage(m),chain=safeStageValid(initial)?[initial,...stages]:stages,out=[];
+    for(let i=0;i<chain.length-1;i++){const a={...chain[i],moveSeconds:safeTransitionSeconds(chain[i],chain[i+1],i)},b=chain[i+1],g=safeTransitionGeometry(a,b);if(!g)continue;
+      const recommended=Math.ceil(g.edgeTravel/safeSpeed),ratio=g.edgeSpeed/safeSpeed,status=ratio<=.8?'SEGURO':ratio<=1?'ATENÇÃO':'RISCO',canEscape=g.edgeSpeed<=playerSpeed,maxShrinkForTime=Math.max(0,playerSpeed*g.seconds-g.centerDistance),minTargetRadius=Math.max(1,Math.ceil(Number(a.radius)-maxShrinkForTime)),recommendedRadius=Math.min(Number(a.radius),Math.max(Number(b.radius),minTargetRadius)),from=i===0?'INICIAL':'S'+i,to='S'+(i+1);
+      out.push({from,to,...g,bearingLabel:safeBearingLabel(g.bearing),recommended,status,canEscape,playerSpeed,recommendedRadius,detail:'Centro '+Math.round(g.centerDistance)+'m + redução '+Math.round(g.shrink)+'m = avanço máximo '+Math.round(g.edgeTravel)+'m. Player '+playerSpeed.toFixed(2)+'m/s. Configurado '+g.seconds+'s; tempo seguro recomendado ≥ '+recommended+'s; raio de destino recomendado ≥ '+Math.round(recommendedRadius)+'m.'});
     }return out;
   }
   
@@ -1650,15 +1648,15 @@ iconAnchor:[12,
 
   async function recordSafeDemonstration(){
     const mapEl=state.map?.getContainer(),m=active(),r=ensureSafeRoute(m);if(!mapEl||!m||!r)return;
-    if(r.stages.filter(safeStageValid).length<2){alert('Posicione pelo menos S1 e S2 antes de gravar.');return;}
+    if(r.stages.filter(safeStageValid).length<1){alert('Posicione pelo menos S1 antes de gravar.');return;}
     if(!navigator.mediaDevices?.getDisplayMedia||typeof MediaRecorder==='undefined'){alert('Este navegador não oferece gravação de tela compatível.');return;}
-    stopSafePreview();startSafePreview();
+    stopSafePreview();
     let stream;try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false,preferCurrentTab:true});}catch{return;}
     const chunks=[],mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm',recorder=new MediaRecorder(stream,{mimeType:mime});
     state.safeRecorder=recorder;state.safeRecordStream=stream;
     recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
     recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());state.safeRecorder=null;state.safeRecordStream=null;if(!chunks.length)return;const blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='high-os-safe-'+slugify(m.event||'evento')+'-'+Date.now()+'.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);const b=qs('#mpSafeRecord');if(b){b.textContent='●';b.title='Gravar simulação';}};
-    recorder.start(500);const b=qs('#mpSafeRecord');if(b){b.textContent='■';b.title='Parar e salvar gravação';}
+    recorder.start(500);startSafePreview();const b=qs('#mpSafeRecord');if(b){b.textContent='■';b.title='Parar e salvar gravação';}
   }
   function toggleSafeRecording(){
     if(state.safeRecorder&&state.safeRecorder.state!=='inactive'){state.safeRecorder.stop();return;}
