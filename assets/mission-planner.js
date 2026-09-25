@@ -899,8 +899,8 @@ corpo});
       if(!state.applyingCloud)localStorage.setItem(SAVED_AT,new Date().toISOString());
       pushBackup(state.missions);
     }catch(e){console.warn('Planejador: falha ao salvar',e);}
-    if(state.applyingCloud)return;
-    try{window.HighOSMissionCloud?.push?.(state.missions);}catch(e){console.warn('Planejador: falha ao enfileirar sincronizacao',e);}
+    // Persistência normal do Planejador é somente local.
+    // Firebase recebe escrita apenas no SALVAR explícito (saveMission) ou no botão manual de sincronização.
   }
   function applyCloudMissions(list){
     const r=mergeMissions(list);return !!(r.added||r.updated);
@@ -1313,7 +1313,7 @@ cayoPostal});
       if(!state.editing){if(qs('#mpClicked'))qs('#mpClicked').textContent='Modo visualização: clique em EDITAR EVENTO para alterar posições.';return;}
       const suggested=suggestedMapCoord(m,e.latlng);
       if(qs('#mpClicked'))qs('#mpClicked').innerHTML=`MAPA ${f(e.latlng.lng)}, ${f(e.latlng.lat)} → <b>CDS SUGERIDA ${f(suggested.x)}, ${f(suggested.y)}, ${suggested.elevation.count?f(suggested.z):'Z ?'}</b>${suggested.elevation.count?` • confiança Z ${suggested.elevation.confidence}% • ${suggested.elevation.count} ref.`:''}`;
-      if(state.mapMode==='safe-stage'||state.mapMode==='safe-option'){placeSafeOnMap(e.latlng);return;}
+      if(state.mapMode==='safe-stage'){placeSafeOnMap(e.latlng);return;}
       if(state.mapMode==='polygon'){if((m.category||'dominacao')!=='dominacao')return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:e.latlng.lng,y:e.latlng.lat,z:0,status:'planned',validatedAt:null,validationReason:'map-placement'});m.zoneMode='polygon';commit('Vértice '+String(m.zonePolygon.length).padStart(2,'0')+' marcado no mapa');return;}
       if(state.mapMode==='spawn'){m.points.push(normalizePoint({x:e.latlng.lng,y:e.latlng.lat,z:0,h:0,status:'planned'},m.points.length));commit('Ponto marcado no mapa');return;}
       if(state.mapMode!=='center')return;
