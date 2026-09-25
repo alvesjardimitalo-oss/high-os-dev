@@ -1618,9 +1618,10 @@ iconAnchor:[12,
     commit(`${asOption?'Possibilidade da SAFE':'Safe'} ${idx+1} marcada no mapa`);
     state.map?.panTo(latlng);renderSafeRouteUi();return true;
   }
+  function safeStageMinRadius(index){return Number(index)>=3?10:30;}
   function addDynamicSafeStage(){
     if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;
-    const prev=r.stages[r.stages.length-1],prevRadius=Number(prev?.radius)||100,radius=Math.max(30,Math.round(prevRadius*.6));
+    const nextIndex=r.stages.length,prev=r.stages[nextIndex-1],prevRadius=Number(prev?.radius)||100,minRadius=safeStageMinRadius(nextIndex),radius=Math.max(minRadius,Math.round(prevRadius*.6));
     if(radius>=prevRadius){setSaveState('Não há espaço de raio para adicionar outra SAFE. Reduza o raio da SAFE final atual primeiro.');return;}
     if(prev)prev.moveSeconds=Math.max(60,Number(prev.moveSeconds)||0);
     r.stages.push({x:null,y:null,z:null,radius,damage:Math.max(5,Number(prev?.damage)||5),closeSeconds:120,moveSeconds:0});state.safeEditorStage=r.stages.length-1;
@@ -1660,7 +1661,7 @@ iconAnchor:[12,
         <div class="mp-grid">
           <label>X<input data-safe="${i}" data-k="x" inputmode="decimal" value="${st.x??''}"></label>
           <label>Y<input data-safe="${i}" data-k="y" inputmode="decimal" value="${st.y??''}"></label>
-          <label>Raio final (m)<input data-safe="${i}" data-k="radius" type="number" min="30" value="${st.radius??''}"></label>
+          <label>Raio final (m)<input data-safe="${i}" data-k="radius" type="number" min="${safeStageMinRadius(i)}" value="${st.radius??''}"></label>
           <label>Dano<input data-safe="${i}" data-k="damage" type="number" min="0" value="${st.damage??''}"></label>
           <label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="1" value="${st.closeSeconds??''}"></label>
           ${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="1" value="${st.moveSeconds??''}"></label>`:''}
@@ -1679,7 +1680,7 @@ iconAnchor:[12,
     qsa('[data-safe-clear]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeClear);setSafeOptions(r,i,[]);commit('Possibilidades da SAFE '+(i+1)+' removidas');renderSafeRouteUi();renderMap();}));
     qsa('[data-safe-add-next]',host).forEach(btn=>btn.addEventListener('click',()=>addDynamicSafeStage()));
     qsa('[data-safe-option-remove]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeOptionRemove),n=Number(btn.dataset.index),opts=safeOptions(r,i,true);if(!opts[n])return;opts.splice(n,1);commit('Possibilidade inválida S'+(i+1)+'-'+(n+1)+' removida');renderSafeRouteUi();renderMap();}));
-    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(30,v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i<rr.stages.length-1){const nextOpts=safeOptions(rr,i+1);const bad=nextOpts.some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[i],{...rr.stages[i+1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE '+(i+2);}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
+    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const mm=active(),rr=ensureSafeRoute(mm),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v)){renderSafeRouteUi();return;}const snapshot=JSON.parse(JSON.stringify(rr.stages));rr.stages[i][k]=k==='radius'?Math.max(safeStageMinRadius(i),v):v;if((k==='x'||k==='y'||k==='radius')&&safeStageValid(rr.stages[i])){const parent=i===0?{x:mm.center?.x,y:mm.center?.y,z:0,radius:effectiveEventRadius(mm)}:rr.stages[i-1];let reason='';if(parent&&!safeCircleFits(parent,rr.stages[i]))reason='precisa caber completamente dentro da etapa anterior';else{const land=safeLandCheck(rr.stages[i]);if(!land.ok)reason=land.reason;}if(!reason&&i<rr.stages.length-1&&safeStageValid(rr.stages[i+1])&&!safeCircleFits(rr.stages[i],rr.stages[i+1]))reason='a alteração deixaria a SAFE '+(i+2)+' fora da SAFE '+(i+1);if(!reason&&i<rr.stages.length-1){const nextOpts=safeOptions(rr,i+1);const bad=nextOpts.some(p=>validCoord(p.x)&&validCoord(p.y)&&!safeCircleFits(rr.stages[i],{...rr.stages[i+1],x:p.x,y:p.y,z:0}));if(bad)reason='a alteração invalidaria opção já configurada da SAFE '+(i+2);}if(reason){rr.stages=snapshot;setSaveState('SAFE '+(i+1)+' rejeitada • '+reason);renderSafeRouteUi();renderMap();return;}}commit('Rota da Safe alterada');}));
     const ok=r.stages.filter(safeStageValid).length;
     const optionStages=[];
     for(let i=1;i<r.stages.length;i++){
@@ -1905,7 +1906,7 @@ iconAnchor:[12,
       phases.push({type:'close',label:'FECHANDO SAFE '+(i+1)+(i===route.length-1?' FINAL':''),a:st,from:i?route[i-1].radius:initial,to:st.radius,damage:Number(st.damage)||0,seconds:Number(st.closeSeconds)||120});
       if(i<route.length-1){
         const next=route[i+1];
-        phases.push({type:'move',label:'MOVENDO PARA SAFE '+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:Number(next.damage)||0,seconds:Number(st.moveSeconds)||60});
+        phases.push({type:'move',label:'MOVENDO PARA SAFE '+(i+2),a:st,b:next,from:st.radius,to:st.radius,damage:Number(st.damage)||0,seconds:Number(st.moveSeconds)||60});
       }
     });
     const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
