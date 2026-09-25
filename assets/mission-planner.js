@@ -2756,14 +2756,32 @@ z=zones[0];if(!z)return false;
      constante. Aqui os MESMOS cards sao reorganizados em 4 abas, sem
      recriar elemento nenhum (os listeners continuam valendo).
   --------------------------------------------------------------- */
+  /* V12.8 - navegação por etapas: cada etapa mostra só os cards dela.
+     A etapa Safe só aparece em missões de gás. */
   const PLANNER_TABS=[
-    {id:'zona',label:'1 · ZONA / SAFE'},
-    {id:'pontos',label:'2 · CDS / SPAWNS'},
-    {id:'validacao',label:'3 · VALIDAR'},
-    {id:'entrega',label:'4 · SIMULAR / SALVAR'}
+    {id:'zona',label:'Zona',hint:'Centro e área'},
+    {id:'pontos',label:'Spawns',hint:'Gerar e ajustar'},
+    {id:'validacao',label:'Validação',hint:'NC + TPCDS no jogo'},
+    {id:'safe',label:'Safe',hint:'Fases e simulação',gasOnly:true},
+    {id:'entrega',label:'Solicitação',hint:'Checar e enviar'}
   ];
+  const CARD_STEP_BY_ID={mpSafeRouteBox:'safe',mpProTools:'entrega',mpBackupCard:'entrega',mpDomPolygonBox:'zona'};
+  function isGasActive(){return (active()?.category||'dominacao')==='gas';}
+  function visibleSteps(){const gas=isGasActive();return PLANNER_TABS.filter(t=>!t.gasOnly||gas);}
+  function currentStep(){return qs('.mp-tab.active')?.dataset.tab||'zona';}
+  function updateStepUi(){
+    const vis=visibleSteps(),ids=vis.map(t=>t.id);
+    qsa('.mp-tab').forEach(b=>{const i=ids.indexOf(b.dataset.tab);b.hidden=i<0;const n=b.querySelector('.mp-step-num');if(n&&i>=0)n.textContent=String(i+1);});
+    let cur=currentStep();if(!ids.includes(cur)){setPlannerTab('zona');cur='zona';}
+    const i=ids.indexOf(cur),prev=qs('#mpStepPrev'),next=qs('#mpStepNext');
+    if(prev){prev.disabled=i<=0;}
+    if(next){next.disabled=i>=ids.length-1;next.textContent=i>=ids.length-1?'Última etapa':'Próxima etapa: '+vis[i+1].label;}
+  }
+  function goStep(delta){const ids=visibleSteps().map(t=>t.id),i=ids.indexOf(currentStep()),n=ids[i+delta];if(n){setPlannerTab(n);const side=qs('.mission-planner-side');if(side)side.scrollTop=0;const bar=qs('#mpTabBar');if(bar&&bar.getBoundingClientRect().top<90){bar.scrollIntoView({block:'start'});window.scrollBy(0,-90);}}}
   function cardTabKey(card){
+    if(card.id&&CARD_STEP_BY_ID[card.id])return CARD_STEP_BY_ID[card.id];
     const t=(card.querySelector('h3')?.textContent||'').toUpperCase();
+    if(t.includes('FERRAMENTAS')||t.includes('SEGURANÇA DAS'))return 'entrega';
     if(card.classList.contains('mp-validation-card')||t.includes('VALIDA'))return 'validacao';
     if(t.includes('EXPORT')||t.includes('SOLICITA')||t.includes('PRINT')||t.includes('SEGURANÇA'))return 'entrega';
     if(t.includes('PONTO')||t.includes('SPAWN')||t.includes('LOTE')||t.includes('IMPORT')||t.includes('STATUS'))return 'pontos';
@@ -2774,9 +2792,11 @@ z=zones[0];if(!z)return false;
     const side=qs('.mission-planner-side');if(!side||!qs('#mpTabBar'))return;
     Array.from(side.children).forEach(el=>{
       if(!el.classList||!el.classList.contains('mp-card'))return;
-      plannerPanel(el.dataset.forceTab||cardTabKey(el))?.appendChild(el);
+      const alvo=(el.id&&CARD_STEP_BY_ID[el.id])||el.dataset.forceTab||cardTabKey(el);
+      plannerPanel(alvo)?.appendChild(el);
     });
-    const safe=qs('#mpSafeRouteBox');if(safe&&!safe.closest('.mp-tabpanel[data-tab="zona"]'))plannerPanel('zona')?.appendChild(safe);
+    const safe=qs('#mpSafeRouteBox');if(safe&&!safe.closest('.mp-tabpanel[data-tab="safe"]'))plannerPanel('safe')?.appendChild(safe);
+    const pro=qs('#mpProTools');if(pro&&!pro.closest('.mp-tabpanel[data-tab="entrega"]'))plannerPanel('entrega')?.appendChild(pro);
   }
   function setPlannerTab(id){
     qsa('.mp-tab').forEach(b=>{const on=b.dataset.tab===id;b.classList.toggle('active',on);b.setAttribute('aria-selected',on?'true':'false');});
@@ -2784,6 +2804,7 @@ z=zones[0];if(!z)return false;
     const m=active(),gas=(m?.category||'dominacao')==='gas';
     qsa('.mp-tab').forEach(b=>{if(b.dataset.tab==='zona')b.title=gas?'Definir zona inicial e rota progressiva das SAFEs':'Definir geometria e limites da zona';});
     try{localStorage.setItem('highos_mp_tab',id);}catch(e){}
+    updateStepUi();
   }
   function fmtBackupData(iso){
     try{return new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}catch(e){return iso}
@@ -2857,15 +2878,22 @@ z=zones[0];if(!z)return false;
     PLANNER_TABS.forEach(t=>{
       const b=document.createElement('button');
       b.type='button';b.className='mp-tab';b.dataset.tab=t.id;b.setAttribute('role','tab');
-      b.innerHTML=`<span>${t.label}</span><i class="mp-tab-badge" data-badge="${t.id}"></i>`;
+      b.innerHTML=`<b class="mp-step-num"></b><span class="mp-step-txt"><span>${t.label}</span><small>${t.hint}</small></span><i class="mp-tab-badge" data-badge="${t.id}"></i>`;
       b.addEventListener('click',()=>setPlannerTab(t.id));
       bar.appendChild(b);
       const panel=document.createElement('div');panel.className='mp-tabpanel';panel.dataset.tab=t.id;
       panels[t.id]=panel;
     });
-    side.insertBefore(bar,side.firstChild);
+    // V12.8 - a barra de etapas fica acima do editor, na largura toda
+    const wb=qs('#mpWorkspaceBar'),shell=qs('.mission-planner-shell');
+    if(wb)wb.insertAdjacentElement('afterend',bar);else if(shell)shell.insertAdjacentElement('beforebegin',bar);else side.insertBefore(bar,side.firstChild);
     PLANNER_TABS.forEach(t=>side.appendChild(panels[t.id]));
     cards.forEach(card=>panels[cardTabKey(card)].appendChild(card));
+    const foot=document.createElement('div');foot.id='mpStepFooter';foot.className='mp-step-footer';
+    foot.innerHTML='<button type="button" id="mpStepPrev">Voltar</button><button type="button" id="mpStepNext" class="mp-step-next">Próxima etapa</button>';
+    side.appendChild(foot);
+    qs('#mpStepPrev')?.addEventListener('click',()=>goStep(-1));
+    qs('#mpStepNext')?.addEventListener('click',()=>goStep(1));
     let salva='zona';try{salva=localStorage.getItem('highos_mp_tab')||'zona';}catch(e){}
     setPlannerTab(PLANNER_TABS.some(t=>t.id===salva)?salva:'zona');
   }
@@ -2873,10 +2901,12 @@ z=zones[0];if(!z)return false;
     const m=active();if(!m)return;
     const pend=(m.points||[]).filter(p=>!isValidated(p)).length;
     const total=(m.points||[]).length;
+    updateStepUi();
     const set=(id,txt,warn)=>{const el=qs(`[data-badge="${id}"]`);if(!el)return;el.textContent=txt||'';el.classList.toggle('warn',!!warn);el.classList.toggle('hidden',!txt);};
     set('pontos',total?String(total):'',false);
     set('validacao',pend?String(pend):'✓',!!pend);
     set('zona','',false);
+    set('safe','',false);
     set('entrega','',false);
     const kpi=qs('#mpMapKpis');
     if(kpi)kpi.innerHTML=`<span><b>${total-pend}</b> validados</span><span class="${pend?'warn':''}"><b>${pend}</b> pendentes</span><span><b>${total}</b> pontos</span>`;
