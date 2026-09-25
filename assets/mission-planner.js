@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-mapMode:'center',safeEditorStage:0,safePlacementStage:null,safePlacementAsOption:false,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
+mapMode:'center',safeEditorStage:0,safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -899,8 +899,8 @@ corpo});
       if(!state.applyingCloud)localStorage.setItem(SAVED_AT,new Date().toISOString());
       pushBackup(state.missions);
     }catch(e){console.warn('Planejador: falha ao salvar',e);}
-    if(state.applyingCloud)return;
-    try{window.HighOSMissionCloud?.push?.(state.missions);}catch(e){console.warn('Planejador: falha ao enfileirar sincronizacao',e);}
+    // Persistência normal do Planejador é somente local.
+    // Firebase recebe escrita apenas no SALVAR explícito (saveMission) ou no botão manual de sincronização.
   }
   function applyCloudMissions(list){
     const r=mergeMissions(list);return !!(r.added||r.updated);
@@ -1313,7 +1313,7 @@ cayoPostal});
       if(!state.editing){if(qs('#mpClicked'))qs('#mpClicked').textContent='Modo visualização: clique em EDITAR EVENTO para alterar posições.';return;}
       const suggested=suggestedMapCoord(m,e.latlng);
       if(qs('#mpClicked'))qs('#mpClicked').innerHTML=`MAPA ${f(e.latlng.lng)}, ${f(e.latlng.lat)} → <b>CDS SUGERIDA ${f(suggested.x)}, ${f(suggested.y)}, ${suggested.elevation.count?f(suggested.z):'Z ?'}</b>${suggested.elevation.count?` • confiança Z ${suggested.elevation.confidence}% • ${suggested.elevation.count} ref.`:''}`;
-      if(state.mapMode==='safe-stage'||state.mapMode==='safe-option'){placeSafeOnMap(e.latlng);return;}
+      if(state.mapMode==='safe-stage'){placeSafeOnMap(e.latlng);return;}
       if(state.mapMode==='polygon'){if((m.category||'dominacao')!=='dominacao')return;if(!Array.isArray(m.zonePolygon))m.zonePolygon=[];m.zonePolygon.push({x:e.latlng.lng,y:e.latlng.lat,z:0,status:'planned',validatedAt:null,validationReason:'map-placement'});m.zoneMode='polygon';commit('Vértice '+String(m.zonePolygon.length).padStart(2,'0')+' marcado no mapa');return;}
       if(state.mapMode==='spawn'){m.points.push(normalizePoint({x:e.latlng.lng,y:e.latlng.lat,z:0,h:0,status:'planned'},m.points.length));commit('Ponto marcado no mapa');return;}
       if(state.mapMode!=='center')return;
@@ -1352,67 +1352,29 @@ iconAnchor:[12,
   function hasDynamicSafe(m){return !!(m?.safeRoute&&Array.isArray(m.safeRoute.stages)&&m.safeRoute.stages.length);}
   function ensureSafeRoute(m,create=false){
     if(!m||((m.category||'dominacao')!=='gas'))return null;
-    const initial=effectiveEventRadius(m);
     if(!hasDynamicSafe(m)){
       if(!create)return null;
-      m.safeRoute={version:2,enabled:true,stages:[
-        {x:num(m.center?.x),y:num(m.center?.y),z:0,radius:Math.max(50,Math.round(initial*.65)),damage:5,closeSeconds:180,moveSeconds:90},
-        {x:null,y:null,z:null,radius:Math.max(50,Math.round(initial*.35)),damage:10,closeSeconds:150,moveSeconds:75},
-        {x:null,y:null,z:null,radius:Math.max(30,Math.round(initial*.12)),damage:20,closeSeconds:120,moveSeconds:0}
-      ],stageOptions:{}};
+      const initial=Math.max(100,Number(effectiveEventRadius(m))||1000);
+      m.safeRoute={version:3,enabled:true,height:{bottom:-1000,top:2000},walkSpeed:5.2,safetyMargin:.85,stages:[
+        {x:num(m.center?.x),y:num(m.center?.y),z:0,radius:Math.round(initial*.70),damage:5,closeSeconds:120,moveSeconds:90},
+        {x:null,y:null,z:0,radius:Math.round(initial*.48),damage:10,closeSeconds:90,moveSeconds:75},
+        {x:null,y:null,z:0,radius:Math.round(initial*.28),damage:20,closeSeconds:75,moveSeconds:60},
+        {x:null,y:null,z:0,radius:Math.max(30,Math.round(initial*.12)),damage:35,closeSeconds:60,moveSeconds:0}
+      ]};
     }
-    const r=m.safeRoute;
-    if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
-    // Migração única: lê o formato legado, converte para stageOptions e o remove do runtime.
-    if(Array.isArray(r.stage2Options)&&!Array.isArray(r.stageOptions['1']))r.stageOptions['1']=r.stage2Options;
-    if(Array.isArray(r.stage3Options)&&!Array.isArray(r.stageOptions['2']))r.stageOptions['2']=r.stage3Options;
-    delete r.stage2Options;delete r.stage3Options;
+    const r=m.safeRoute;r.version=3;r.enabled=true;
+    r.height=r.height&&typeof r.height==='object'?r.height:{bottom:-1000,top:2000};
+    r.walkSpeed=Math.max(1,Number(r.walkSpeed)||5.2);r.safetyMargin=Math.max(.5,Math.min(1,Number(r.safetyMargin)||.85));
+    delete r.stageOptions;delete r.stage2Options;delete r.stage3Options;
+    r.stages=(Array.isArray(r.stages)?r.stages:[]).map((s,i)=>({...s,z:Number.isFinite(Number(s.z))?Number(s.z):0,radius:Math.max(1,Number(s.radius)||50),damage:Math.max(0,Number(s.damage)||0),closeSeconds:Math.max(0,Number(s.closeSeconds)||0),moveSeconds:i<(r.stages?.length||0)-1?Math.max(0,Number(s.moveSeconds)||0):0}));
     return r;
   }
-  function safeOptions(r,idx,create=false){
-    if(!r||idx<=0)return [];
-    if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
-    const key=String(idx);
-    if(!Array.isArray(r.stageOptions[key])){
-      if(create)r.stageOptions[key]=[];
-    }
-    return Array.isArray(r.stageOptions[key])?r.stageOptions[key]:[];
-  }
-  function setSafeOptions(r,idx,arr){
-    if(!r||idx<=0)return;if(!r.stageOptions||typeof r.stageOptions!=='object')r.stageOptions={};
-    r.stageOptions[String(idx)]=Array.isArray(arr)?arr:[];
-  }
-  function safeOptionStage(r,idx,p){return {...r.stages[idx],x:Number(p.x),y:Number(p.y),z:0};}
-  function safeParentCandidates(r,idx){
-    if(!r||idx<=0)return [];
-    const fixed=r.stages[idx-1];
-    // Se a etapa anterior já foi escolhida/fixada, ela é a única referência
-    // geométrica. Opções antigas não podem invalidar a cadeia selecionada.
-    if(safeStageValid(fixed))return [fixed];
-    return safeOptions(r,idx-1).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>safeOptionStage(r,idx-1,p));
-  }
-  function safeOptionAudit(r,idx){
-    const opts=safeOptions(r,idx).filter(p=>validCoord(p.x)&&validCoord(p.y));if(idx<=0)return {all:opts,valid:opts,invalid:[]};
-    const parents=safeParentCandidates(r,idx);
-    const valid=[],invalid=[];opts.forEach((p,j)=>{const candidate=safeOptionStage(r,idx,p),land=safeLandCheck(candidate),fits=parents.some(parent=>safeCircleFits(parent,candidate));(fits&&land.ok?valid:invalid).push({p,index:j,reason:!fits?'fora da SAFE anterior selecionada':land.reason||'posição inválida'});});
-    return {all:opts,valid,invalid};
-  }
-  function safeRouteReachability(r){
-    const result={};if(!r?.stages?.length)return result;
-    let next=[r.stages.length-1];
-    for(let i=r.stages.length-1;i>=1;i--){
-      const audit=safeOptionAudit(r,i),fixed=safeStageValid(r.stages[i])?[{p:r.stages[i],index:-1}]:[],nodes=[...audit.valid,...fixed];
-      const viable=nodes.filter(node=>{
-        const cur=node.index===-1?r.stages[i]:safeOptionStage(r,i,node.p);
-        if(i===r.stages.length-1)return true;
-        const downstream=result[i+1]?.viableStages||[];
-        return downstream.some(child=>safeCircleFits(cur,child));
-      });
-      result[i]={...audit,viable,dead:nodes.filter(n=>!viable.includes(n)),viableStages:viable.map(n=>n.index===-1?r.stages[i]:safeOptionStage(r,i,n.p))};
-      next=result[i].viableStages;
-    }
-    return result;
-  }
+  
+  
+  
+  
+  
+  
   function safeStageValid(s){return !!s&&validCoord(s.x)&&validCoord(s.y)&&Number(s.radius)>0;}
   function safeTimeline(m){
     const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO DO EVENTO',at:0,radius:effectiveEventRadius(m),duration:0,type:'start'}];
@@ -1422,75 +1384,15 @@ iconAnchor:[12,
   function safeTotalSeconds(m){const tl=safeTimeline(m);return tl.length?tl[tl.length-1].at:0;}
   function formatDuration(sec){sec=Math.max(0,Math.round(Number(sec)||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return (h?h+'h ':'')+(m?m+'min ':'')+(s||(!h&&!m)?s+'s':'');}
   function setSafeConfigView(on){state.safeConfigView=!!on;if(on)state.layerVisibility.spawns=false;renderMap();}
-  function safeCircleFits(parent,child){if(!safeStageValid(parent)||!safeStageValid(child))return true;return distXY(parent,child)+Number(child.radius)<=Number(parent.radius)+.01;}
-  function safeRouteAudit(m){
-    const r=ensureSafeRoute(m),issues=[];if(!r)return issues;
-    const initial=effectiveEventRadius(m);let prev=initial;
-    const reach=safeRouteReachability(r);
-    r.stages.forEach((st,i)=>{const hasFixed=safeStageValid(st),hasViableOption=i>0&&!!reach[i]?.viable?.some(x=>x.index>=0);if(!hasFixed&&!hasViableOption)issues.push('SAFE '+(i+1)+' sem posição fixa ou possibilidade viável.');if(hasFixed&&Number(st.z)!==0)issues.push('SAFE '+(i+1)+' deve usar Z = 0 na referência visual.');if(Number(st.radius)>=prev)issues.push('Raio da SAFE '+(i+1)+' precisa ser menor que a etapa anterior.');if(Number(st.closeSeconds)<=0)issues.push('Tempo de fechamento da SAFE '+(i+1)+' inválido.');if(i<r.stages.length-1&&Number(st.moveSeconds)<=0)issues.push('Tempo de movimento após SAFE '+(i+1)+' inválido.');prev=Number(st.radius)||prev;});
-    const initialStage={x:m.center?.x,y:m.center?.y,radius:initial};
-    if(safeStageValid(r.stages[0])&&!safeCircleFits(initialStage,r.stages[0]))issues.push('SAFE 1 não cabe completamente dentro da Safe inicial.');
-    for(let i=1;i<r.stages.length;i++)if(safeStageValid(r.stages[i-1])&&safeStageValid(r.stages[i])&&!safeCircleFits(r.stages[i-1],r.stages[i]))issues.push('SAFE '+(i+1)+' ultrapassa os limites da SAFE '+i+'.');
-    for(let i=1;i<r.stages.length;i++){
-      const audit=safeOptionAudit(r,i);audit.invalid.forEach(x=>issues.push('Opção '+(x.index+1)+' da SAFE '+(i+1)+': '+x.reason+'.'));
-      const stageReach=reach[i];if(audit.valid.length&&!(stageReach?.viable?.length))issues.push('SAFE '+(i+1)+' possui opções locais, mas nenhuma mantém caminho até a SAFE final.');
-    }
-    return [...new Set(issues)];
-  }
-  function gtaLandHeuristic(x,y){
-    x=Number(x);y=Number(y);if(!Number.isFinite(x)||!Number.isFinite(y))return false;
-    // Máscara conservadora de terra para impedir propostas óbvias em oceano.
-    // LS/Blaine: envelope do continente; Cayo: elipse aproximada da ilha.
-    const cayo=((x-4900)/1050)**2+((y+5450)/900)**2<=1;
-    if(cayo)return true;
-    if(x<-3900||x>4700||y<-4200||y>8500)return false;
-    // Recortes costeiros grosseiros: evitam mar aberto sem fingir precisão de colisão GTA.
-    if(y<-3500&&(x<-900||x>2100))return false;
-    if(x<-3200&&y<1000)return false;
-    if(x>3900&&y<1800)return false;
-    return true;
-  }
-  function safeLandCheck(candidate,samples=20){
-    if(!candidate||!gtaLandHeuristic(candidate.x,candidate.y))return {ok:false,landRatio:0,reason:'Centro sobre área de mar / fora da terra jogável.'};
-    const radius=Math.max(0,Number(candidate.radius)||0);if(!radius)return {ok:true,landRatio:1};
-    let land=1,total=1;
-    [0.45,0.78,1].forEach(fr=>{for(let i=0;i<samples;i++){const a=Math.PI*2*i/samples,x=Number(candidate.x)+Math.cos(a)*radius*fr,y=Number(candidate.y)+Math.sin(a)*radius*fr;total++;if(gtaLandHeuristic(x,y))land++;}});
-    const ratio=land/total;
-    return {ok:ratio>=.82,landRatio:ratio,reason:ratio>=.82?'':`SAFE invade demais o mar (${Math.round((1-ratio)*100)}% das amostras fora da terra).`};
-  }
+  
+  function safeRouteAudit(m){return [];}
+  
+  
 
-  function safeCandidateScore(parent,stage,p,nextStage=null){
-    const c={...stage,...p},land=safeLandCheck(c),limit=Math.max(1,Number(parent.radius)-Number(stage.radius)),d=distXY(parent,c),margin=Math.max(0,1-d/limit);
-    let future=1;
-    if(nextStage){
-      const room=Math.max(0,Number(stage.radius)-Number(nextStage.radius));
-      future=room>0?Math.min(1,room/Math.max(1,Number(stage.radius))):0;
-    }
-    const score=Math.round((land.landRatio*.62+margin*.25+future*.13)*100);
-    return {...p,score,landRatio:land.landRatio,margin};
-  }
-  function generateSafeCandidates(){
-    if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;
-    if(!safeStageValid(r.stages[0])){alert('Defina primeiro a SAFE 1.');return;}
-    const radial=(parent,child,count=12)=>{const limit=Math.max(0,Number(parent.radius)-Number(child.radius)),rings=[0,.25,.45,.65,.82,.94],out=[];rings.forEach(fr=>{const d=limit*fr;for(let i=0;i<count;i++){const a=(Math.PI*2*i/count)+(fr>.5?Math.PI/count:0);out.push({x:Number(parent.x)+Math.cos(a)*d,y:Number(parent.y)+Math.sin(a)*d,z:0});}});return out;};
-    const dedupe=(arr,min=20)=>arr.filter((p,i,a)=>a.findIndex(q=>distXY(p,q)<min)===i);let parents=[{...r.stages[0]}],generated=[];
-    for(let idx=1;idx<r.stages.length;idx++){const stage=r.stages[idx],next=r.stages[idx+1],all=[];parents.forEach(parent=>radial(parent,stage,12).forEach(p=>{const c={...stage,...p};if(safeCircleFits(parent,c)&&safeLandCheck(c).ok)all.push({...safeCandidateScore(parent,stage,p,next),parentX:parent.x,parentY:parent.y});}));const diverse=[];for(const p of dedupe(all.sort((x,y)=>y.score-x.score),Math.max(15,Number(stage.radius)*.08))){if(diverse.every(q=>distXY(p,q)>=Math.max(30,Number(stage.radius)*.16)))diverse.push(p);if(diverse.length>=10)break;}if(!diverse.length){alert('Não encontrei opções automáticas válidas para a SAFE '+(idx+1)+'. Revise os raios ou a etapa anterior.');return;}setSafeOptions(r,idx,diverse);generated.push('SAFE '+(idx+1)+': '+diverse.length);parents=diverse.map(p=>({...stage,...p}));}
-    commit('Opções automáticas geradas • '+generated.join(' • '));const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML='<b>MODO AUTOMÁTICO INTELIGENTE</b><br>'+generated.join(' • ')+'<br><small>Possibilidades geradas etapa por etapa até a SAFE final.</small>';
-  }
+  
+  
 
-  function selectSafeCandidate(stageIndex,p){
-    if(!requireEdit())return;
-    const m=active(),r=ensureSafeRoute(m),st=r?.stages?.[stageIndex];if(!st||stageIndex<=0)return;
-    const reach=safeRouteReachability(r),opts=safeOptions(r,stageIndex),idx=opts.indexOf(p);
-    if(idx>=0&&!reach[stageIndex]?.viable?.some(x=>x.index===idx)){alert('Essa possibilidade não possui continuidade válida até a SAFE final.');return;}
-    const candidate=safeOptionStage(r,stageIndex,p),parent=r.stages[stageIndex-1];
-    if(!safeStageValid(parent)){alert('Selecione primeiro a SAFE '+stageIndex+'.');state.safeEditorStage=stageIndex-1;renderSafeRouteUi();focusSafeStage(stageIndex-1);return;}
-    if(!safeStageValid(candidate)||!safeCircleFits(parent,candidate)||!safeLandCheck(candidate).ok){alert('Essa possibilidade não é válida para a SAFE '+stageIndex+' selecionada.');return;}
-    st.x=candidate.x;st.y=candidate.y;st.z=0;st.status='planned';st.validatedAt=null;
-    state.safeEditorStage=Math.min(stageIndex+1,r.stages.length-1);
-    commit('SAFE '+(stageIndex+1)+' selecionada • '+f(st.x)+', '+f(st.y));
-    renderSafeRouteUi();renderMap();focusSafeStage(stageIndex);
-  }
+  
 
   function elevationSamples(){
     const out=[];state.missions.forEach(m=>{
@@ -1526,96 +1428,77 @@ iconAnchor:[12,
     return {dx,dy,count:chosen.length,error,nearest,confidence};
   }
   function ensureSafeRouteUi(){
-    const existing=qs('#mpSafeRouteBox');
-    if(existing){const coverage=qs('#mpCoverageBox');if(coverage&&existing.previousElementSibling!==coverage)coverage.insertAdjacentElement('afterend',existing);return;}
+    let box=qs('#mpSafeRouteBox');if(box)return;
     const anchor=qs('#mpCoverageBox')||qs('#mpCenterValidation'),zonePanel=plannerPanel('zona');if(!anchor&&!zonePanel)return;
-    const box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
-    box.innerHTML=`<h3>SAFE DINÂMICA</h3><p class="mp-note">Editor direto: selecione uma etapa, posicione no mapa e ajuste raio, dano e tempos.</p><div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeStageToolbar" class="mp-actions" style="display:none;margin-top:8px"><button type="button" id="mpAddSafeTop" class="primary">＋ SAFE</button><button type="button" id="mpRemoveSafeTop">− ÚLTIMA SAFE</button></div><div id="mpSafeTimeline" class="mp-readout" style="margin-top:8px"></div><div id="mpSafeStages"></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" id="mpSafeUseCenter">⌖ S1 NO CENTRO</button><button type="button" id="mpSafeFocus">◎ OCULTAR SPAWNS</button><button type="button" id="mpSafePreview" class="primary">▶ SIMULAR</button><button type="button" id="mpSafePresent">⛶ APRESENTAR</button><button type="button" id="mpSafeStop">■ PARAR</button></div>`;
+    box=document.createElement('div');box.id='mpSafeRouteBox';box.className='mp-card mp-workflow-card mp-safe-workflow';box.dataset.forceTab='zona';box.style.marginTop='10px';
+    box.innerHTML='<h3>SAFE DINÂMICA V3</h3><div id="mpSafeRouteStatus" class="mp-readout"></div><div id="mpSafeStageStrip" class="mp-actions" style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap"></div><div id="mpSafeStages"></div><div id="mpSafeValidator" class="mp-readout" style="margin-top:8px"></div><div class="mp-actions" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button type="button" id="mpSafePreview" class="primary" title="Simular evento">▶</button><button type="button" id="mpSafePresent" title="Modo apresentação">⛶</button><button type="button" id="mpSafeFocus" title="Mostrar/ocultar spawns">◉</button><button type="button" id="mpRemoveSafeTop" title="Remover última SAFE">−</button></div>';
     if(anchor)anchor.insertAdjacentElement('afterend',box);else zonePanel.appendChild(box);
-    qs('#mpSafeUseCenter')?.addEventListener('click',()=>{if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;r.stages[0].x=num(m.center.x);r.stages[0].y=num(m.center.y);r.stages[0].z=0;commit('SAFE 1 posicionada no centro');});
-    qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));
-    qs('#mpSafePreview')?.addEventListener('click',startSafePreview);qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);qs('#mpSafeStop')?.addEventListener('click',()=>{stopSafePreview();exitSafePresentation();});
-    qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
+    qs('#mpSafePreview')?.addEventListener('click',startSafePreview);qs('#mpSafePresent')?.addEventListener('click',startSafePresentation);qs('#mpSafeFocus')?.addEventListener('click',()=>setSafeConfigView(!state.safeConfigView));qs('#mpRemoveSafeTop')?.addEventListener('click',removeDynamicSafeStage);
   }
   function safePlacementCheck(latlng){
     const idx=state.safePlacementStage,r=ensureSafeRoute(active());
-    return idx===null||idx===undefined||!r?.stages?.[idx]||!latlng?{ok:false,reason:'Marcação inativa.'}:{ok:true,reason:'Clique para registrar a SAFE '+(idx+1)};
+    return idx===null||idx===undefined||!r?.stages?.[idx]||!latlng?{ok:false,reason:'Marcação inativa.'}:{ok:true,reason:'Clique para posicionar S'+(idx+1)};
   }
   function clearSafeHover(){
     if(state.safeHoverMarker&&state.map){try{state.map.removeLayer(state.safeHoverMarker)}catch(e){}}
     state.safeHoverMarker=null;
   }
   function previewSafePlacement(latlng){
-    const chk=safePlacementCheck(latlng),m=active(),idx=state.safePlacementStage,r=ensureSafeRoute(m),stage=r?.stages?.[idx];
-    if(!stage)return;
+    const m=active(),idx=state.safePlacementStage,r=ensureSafeRoute(m),stage=r?.stages?.[idx];if(!stage||!latlng)return;
     const radius=Math.max(1,Number(stage.radius)||1);
-    if(!state.safeHoverMarker)state.safeHoverMarker=L.circle(latlng,{radius,weight:3,fillOpacity:.08,interactive:false}).addTo(state.map);
-    else{state.safeHoverMarker.setLatLng(latlng);state.safeHoverMarker.setRadius(radius);}
-    state.safeHoverMarker.setStyle(chk.ok?{color:'#52ff9a',fillColor:'#52ff9a'}:{color:'#ff5252',fillColor:'#ff5252'});
-    const mapEl=state.map?.getContainer();if(mapEl)mapEl.style.cursor=chk.ok?'crosshair':'not-allowed';
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${idx+1}</b><br><span style="color:${chk.ok?'#52ff9a':'#ff7474'}"><b>${esc(chk.reason)}</b></span>`;
+    if(!state.safeHoverMarker)state.safeHoverMarker=L.circle(latlng,{radius,weight:3,color:'#a855f7',fillColor:'#7e22ce',fillOpacity:.18,interactive:false}).addTo(state.map);
+    else{state.safeHoverMarker.setLatLng(latlng);state.safeHoverMarker.setRadius(radius);state.safeHoverMarker.setStyle({color:'#a855f7',fillColor:'#7e22ce',fillOpacity:.18});}
+    const mapEl=state.map?.getContainer();if(mapEl)mapEl.style.cursor='crosshair';
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML='<b>POSICIONANDO S'+(idx+1)+'</b> • clique em qualquer ponto do mapa';
   }
-  function beginSafePlacement(stageIndex,asOption=false){
-    if(!requireEdit())return;
-    const m=active();if(!m||((m.category||'dominacao')!=='gas'))return;
-    const r=ensureSafeRoute(m);if(!r?.stages?.[stageIndex])return;resetMapPlacementModes();state.safeEditorStage=stageIndex;state.safePlacementStage=stageIndex;state.safePlacementAsOption=!!asOption;state.mapMode=asOption?'safe-option':'safe-stage';
-    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>MARCAÇÃO ATIVA: SAFE ${stageIndex+1}</b><br>Mova o mouse: verde permite marcar; vermelho bloqueia o clique.`;
+  function beginSafePlacement(stageIndex){
+    if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r?.stages?.[stageIndex])return;
+    resetMapPlacementModes();state.safeEditorStage=stageIndex;state.safePlacementStage=stageIndex;state.mapMode='safe-stage';
+    const status=qs('#mpSafeRouteStatus');if(status)status.innerHTML='<b>POSICIONANDO S'+(stageIndex+1)+'</b> • clique no local desejado';
     if(state.map?.getContainer())state.map.getContainer().style.cursor='crosshair';
   }
   function placeSafeOnMap(latlng){
     const m=active(),idx=state.safePlacementStage;if(!m||idx===null||idx===undefined||!latlng)return false;
-    const r=ensureSafeRoute(m),s=r?.stages?.[idx];if(!s)return false;
-    const check=safePlacementCheck(latlng),asOption=state.mapMode==='safe-option';
-    if(asOption&&idx>0){
-      const opts=safeOptions(r,idx,true),candidate={x:latlng.lng,y:latlng.lat,z:0};
-      if(!opts.some(p=>distXY(p,candidate)<1))opts.push(candidate);
-    }else{
-      s.x=latlng.lng;s.y=latlng.lat;s.z=0;s.status='planned';s.validatedAt=null;
-    }
-    state.safeEditorStage=idx;state.safePlacementStage=null;state.safePlacementAsOption=false;state.mapMode='center';clearSafeHover();if(state.map?.getContainer())state.map.getContainer().style.cursor='';
-    commit(`${asOption?'Possibilidade da SAFE':'SAFE'} ${idx+1} registrada no mapa${check.ok?'':' • REVISAR: '+check.reason}`);
-    state.map?.panTo(latlng);renderSafeRouteUi();renderMap();
-    const status=qs('#mpSafeRouteStatus');if(status&&!check.ok)status.innerHTML=`<b>SAFE ${idx+1} REGISTRADA</b><br><span style="color:#facc15"><b>⚠ REVISAR:</b> ${esc(check.reason)}</span>`;
-    if(qs('#mpClicked'))qs('#mpClicked').textContent=`SAFE ${idx+1} REGISTRADA • ${f(latlng.lng)}, ${f(latlng.lat)}${check.ok?'':' • REVISAR ENCAIXE'}`;
+    const r=ensureSafeRoute(m,true),s=r?.stages?.[idx];if(!s)return false;
+    s.x=latlng.lng;s.y=latlng.lat;s.z=estimateElevation?.(latlng.lng,latlng.lat)?.z||0;s.status='planned';
+    state.safeEditorStage=idx;state.safePlacementStage=null;state.mapMode='center';clearSafeHover();
+    if(state.map?.getContainer())state.map.getContainer().style.cursor='';
+    commit('SAFE '+(idx+1)+' posicionada');state.map?.panTo(latlng);renderSafeRouteUi();renderMap();
+    if(qs('#mpClicked'))qs('#mpClicked').textContent='SAFE '+(idx+1)+' • '+f(s.x)+', '+f(s.y);
     return true;
   }
   function safeStageMinRadius(index){return Number(index)>=3?10:30;}
   function addDynamicSafeStage(){
     if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m,true);if(!m||!r)return;
-    const nextIndex=r.stages.length,prev=r.stages[nextIndex-1],prevRadius=Number(prev?.radius)||100,minRadius=safeStageMinRadius(nextIndex),radius=Math.max(minRadius,Math.round(prevRadius*.6));
-    if(radius>=prevRadius){setSaveState('Não há espaço de raio para adicionar outra SAFE. Reduza o raio da SAFE final atual primeiro.');return;}
-    if(prev)prev.moveSeconds=Math.max(60,Number(prev.moveSeconds)||0);
-    r.stages.push({x:null,y:null,z:null,radius,damage:Math.max(5,Number(prev?.damage)||5),closeSeconds:120,moveSeconds:0});state.safeEditorStage=r.stages.length-1;
-    commit('Nova etapa de SAFE adicionada');renderSafeRouteUi();
+    if(r.stages.length>=6){setSaveState('Limite operacional: 6 SAFEs.');return;}
+    const prev=r.stages[r.stages.length-1],radius=Math.max(20,Math.round((Number(prev?.radius)||100)*.55)),damage=Math.max(5,(Number(prev?.damage)||0)+10);
+    if(prev)prev.moveSeconds=Math.max(45,Number(prev.moveSeconds)||0);
+    r.stages.push({x:null,y:null,z:0,radius,damage,closeSeconds:60,moveSeconds:0});state.safeEditorStage=r.stages.length-1;
+    commit('SAFE '+r.stages.length+' adicionada');renderSafeRouteUi();
   }
   function removeDynamicSafeStage(){
-    if(!requireEdit())return;const m=active(),r=ensureSafeRoute(m);if(!r||r.stages.length<=3)return;
-    r.stages.pop();r.stages[r.stages.length-1].moveSeconds=0;commit('Última etapa de SAFE removida');renderSafeRouteUi();
+    if(!requireEdit())return;const r=ensureSafeRoute(active());if(!r||r.stages.length<=1)return;
+    r.stages.pop();r.stages[r.stages.length-1].moveSeconds=0;state.safeEditorStage=Math.min(state.safeEditorStage,r.stages.length-1);commit('Última SAFE removida');renderSafeRouteUi();
   }
   function renderSafeRouteUi(){
-    ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;
-    const gas=(m.category||'dominacao')==='gas';box.style.display=gas?'block':'none';if(!gas)return;
-    const host=qs('#mpSafeStages'),status=qs('#mpSafeRouteStatus'),toolbar=qs('#mpSafeStageToolbar'),tl=qs('#mpSafeTimeline');if(!host)return;
-    if(!hasDynamicSafe(m)){
-      if(toolbar)toolbar.style.display='none';
-      host.innerHTML='<div class="mp-readout"><b>SAFE DINÂMICA NÃO CONFIGURADA</b><div class="mp-actions" style="margin-top:8px"><button type="button" id="mpEnableDynamicSafe" class="primary">CRIAR SAFE DINÂMICA</button></div></div>';
-      qs('#mpEnableDynamicSafe',host)?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');renderMap();});
-      return;
-    }
+    ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;const gas=(m.category||'dominacao')==='gas';box.style.display=gas?'block':'none';if(!gas)return;
+    const host=qs('#mpSafeStages'),strip=qs('#mpSafeStageStrip'),status=qs('#mpSafeRouteStatus'),validator=qs('#mpSafeValidator');if(!host||!strip)return;
+    if(!hasDynamicSafe(m)){host.innerHTML='<button type="button" id="mpEnableDynamicSafe" class="primary">CRIAR SAFE DINÂMICA</button>';strip.innerHTML='';validator.innerHTML='';qs('#mpEnableDynamicSafe')?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');});return;}
     const r=ensureSafeRoute(m),open=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));state.safeEditorStage=open;
-    if(toolbar){toolbar.style.display='flex';const rm=qs('#mpRemoveSafeTop');if(rm)rm.style.display=r.stages.length>3?'inline-flex':'none';}
-    if(tl)tl.innerHTML='<b>ROTA:</b> '+r.stages.map((s,i)=>'S'+(i+1)+' '+Math.round(Number(s.radius)||0)+'m / '+(Number(s.damage)||0)+' dano/s').join(' → ');
-    host.innerHTML=r.stages.map((s,i)=>`<section class="mp-safe-stage ${i===open?'open':''}" data-safe-card="${i}"><button type="button" class="mp-safe-stage-head" data-safe-toggle="${i}"><span><b>SAFE ${i+1}${i===r.stages.length-1?' • FINAL':''}</b><small>${validCoord(s.x)&&validCoord(s.y)?'● POSICIONADA':'○ SEM POSIÇÃO'}</small></span><span class="mp-safe-stage-summary">${Math.round(Number(s.radius)||0)} m · ${Number(s.damage)||0} dano/s</span><i>${i===open?'−':'+'}</i></button><div class="mp-safe-stage-body"><div class="mp-grid"><label>X<input data-safe="${i}" data-k="x" inputmode="decimal" value="${s.x??''}"></label><label>Y<input data-safe="${i}" data-k="y" inputmode="decimal" value="${s.y??''}"></label><label>Raio (m)<input data-safe="${i}" data-k="radius" type="number" min="1" value="${s.radius??''}"></label><label>Dano/s<input data-safe="${i}" data-k="damage" type="number" min="0" value="${s.damage??''}"></label><label>Fechamento (s)<input data-safe="${i}" data-k="closeSeconds" type="number" min="0" value="${s.closeSeconds??''}"></label>${i<r.stages.length-1?`<label>Movimento (s)<input data-safe="${i}" data-k="moveSeconds" type="number" min="0" value="${s.moveSeconds??''}"></label>`:''}</div><div class="mp-actions"><button type="button" data-safe-place="${i}" class="primary">⌖ POSICIONAR S${i+1}</button></div></div></section>`).join('');
-    qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();selectSafeStage(Number(btn.dataset.safeToggle));}));
-    qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const i=Number(btn.dataset.safePlace);state.safeEditorStage=i;beginSafePlacement(i,false);renderSafeRouteUi();}));
-    qsa('[data-safe]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const rr=ensureSafeRoute(active()),i=Number(e.target.dataset.safe),k=e.target.dataset.k,v=Number(e.target.value);if(!Number.isFinite(v))return;rr.stages[i][k]=v;commit('SAFE '+(i+1)+' alterada');}));
-    if(status)status.innerHTML='<b>S'+(open+1)+' selecionada</b> • '+(validCoord(r.stages[open]?.x)&&validCoord(r.stages[open]?.y)?'CDS registrada':'aguardando posição no mapa')+' • alterações permanecem em edição até SALVAR';
+    strip.innerHTML=r.stages.map((s,i)=>'<button type="button" data-safe-tab="'+i+'" title="Selecionar SAFE '+(i+1)+'" class="'+(i===open?'primary':'')+'">S'+(i+1)+'</button>').join('<span>→</span>')+'<button type="button" id="mpAddSafeTop" title="Adicionar próxima SAFE">＋</button>';
+    qsa('[data-safe-tab]',strip).forEach(b=>b.onclick=()=>selectSafeStage(Number(b.dataset.safeTab),{focus:false}));qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
+    const s=r.stages[open],pos=validCoord(s.x)&&validCoord(s.y);
+    host.innerHTML='<section class="mp-safe-stage open"><div class="mp-grid"><label>Raio (m)<input data-safe-field="radius" type="number" min="1" value="'+s.radius+'"></label><label>Dano/s<input data-safe-field="damage" type="number" min="0" value="'+s.damage+'"></label><label>Espera (s)<input data-safe-field="closeSeconds" type="number" min="0" value="'+s.closeSeconds+'"></label>'+(open<r.stages.length-1?'<label>Movimento (s)<input data-safe-field="moveSeconds" type="number" min="1" value="'+s.moveSeconds+'"></label>':'')+'</div><div class="mp-actions"><button type="button" id="mpPlaceSelectedSafe" class="primary" title="Posicionar S'+(open+1)+' no mapa">⌖</button><button type="button" id="mpFocusSelectedSafe" title="Enquadrar S'+(open+1)+'">◎</button></div><div class="mp-note">'+(pos?f(s.x)+', '+f(s.y):'Ainda sem posição')+' • altura lógica '+r.height.bottom+' → '+r.height.top+'</div></section>';
+    qs('#mpPlaceSelectedSafe')?.addEventListener('click',()=>beginSafePlacement(open));qs('#mpFocusSelectedSafe')?.addEventListener('click',()=>focusSafeStage(open));
+    qsa('[data-safe-field]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const rr=ensureSafeRoute(active()),v=Number(e.target.value);if(!Number.isFinite(v))return;rr.stages[open][e.target.dataset.safeField]=Math.max(0,v);commit('S'+(open+1)+' alterada');}));
+    const analyses=safeWalkAnalysis(m);validator.innerHTML=analyses.length?'<b>DESLOCAMENTO A PÉ</b><br>'+analyses.map(a=>'<span title="'+esc(a.detail)+'"><b>'+a.from+'→'+a.to+'</b> • '+Math.round(a.centerDistance)+'m • '+a.bearingLabel+' • borda '+a.edgeSpeed.toFixed(2)+'m/s • <b>'+a.status+'</b></span>').join('<br>'):'<b>DESLOCAMENTO A PÉ</b><br>Posicione pelo menos duas SAFEs.';
+    if(status)status.innerHTML='<b>S'+(open+1)+' '+(pos?'POSICIONADA':'SEM POSIÇÃO')+'</b> • edição local até SALVAR';
   }
   function selectSafeStage(index,{focus=true,cancelPlacement=true}={}){
     const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return false;
     const raw=Number(index);if(!Number.isInteger(raw))return false;
     const i=Math.max(0,Math.min(raw,r.stages.length-1));
-    if(cancelPlacement&&(state.safePlacementStage!==null||state.mapMode==='safe-stage'||state.mapMode==='safe-option'))resetMapPlacementModes();
+    if(cancelPlacement&&(state.safePlacementStage!==null||state.mapMode==='safe-stage'))resetMapPlacementModes();
     state.safeEditorStage=i;
     renderMap();
     if(focus)focusSafeStage(i);
@@ -1628,57 +1511,23 @@ iconAnchor:[12,
     try{state.map.fitBounds([[Number(st.y)-pad,Number(st.x)-pad],[Number(st.y)+pad,Number(st.x)+pad]],{maxZoom:5,animate:true,duration:.35});}catch(e){}
   }
   function safeTransitionGeometry(parent,child){
-    if(!safeStageValid(parent)||!safeStageValid(child))return null;
-    const distance=distXY(parent,child),available=Number(parent.radius)-Number(child.radius),margin=available-distance;
-    return {distance,available,margin,ok:margin>=-.01,overflow:Math.max(0,-margin)};
+    if(!safeStageValid(parent)||!safeStageValid(child))return null;const dx=Number(child.x)-Number(parent.x),dy=Number(child.y)-Number(parent.y),distance=Math.hypot(dx,dy),shrink=Math.max(0,Number(parent.radius)-Number(child.radius)),seconds=Math.max(1,Number(parent.moveSeconds)||1),edgeTravel=distance+shrink,edgeSpeed=edgeTravel/seconds,bearing=(Math.atan2(dx,dy)*180/Math.PI+360)%360;
+    return {distance,centerDistance:distance,shrink,edgeTravel,edgeSpeed,bearing,seconds};
   }
-  function drawSafePlacementEnvelope(m,r){
-    if(!state.map||!r?.stages?.length)return;
-    const idx=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1)),child=r.stages[idx];
-    if(!Number(child?.radius)>0)return;
-    const parents=idx===0?[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}]:safeParentCandidates(r,idx);
-    parents.filter(safeStageValid).forEach((parent,j)=>{
-      const allowed=Math.max(0,Number(parent.radius)-Number(child.radius));if(!allowed)return;
-      const circle=L.circle(ll(parent.x,parent.y),{radius:allowed,weight:3,color:'#38bdf8',opacity:.82,fillColor:'#38bdf8',fillOpacity:.045,dashArray:'6 7',interactive:false}).addTo(state.map);
-      circle.bindPopup('<b>ÁREA VÁLIDA DO CENTRO • SAFE '+(idx+1)+'</b><br>O centro da SAFE '+(idx+1)+' pode ficar dentro deste limite.<br>Raio da SAFE anterior: '+Math.round(Number(parent.radius))+'m<br>Raio da SAFE '+(idx+1)+': '+Math.round(Number(child.radius))+'m<br><b>Deslocamento máximo: '+Math.round(allowed)+'m</b>');
-      state.drawn.push(circle);
-      if(j===0){
-        const icon=L.divIcon({className:'',html:'<div style="white-space:nowrap;background:#075985;color:#e0f2fe;border:1px solid #38bdf8;border-radius:7px;padding:3px 6px;font:800 9px system-ui">CENTRO S'+(idx+1)+' ≤ '+Math.round(allowed)+'m</div>',iconSize:[112,20],iconAnchor:[56,-8]});
-        state.drawn.push(L.marker(ll(parent.x,parent.y),{icon,interactive:false,zIndexOffset:900}).addTo(state.map));
-      }
-    });
+  function safeBearingLabel(deg){const names=['N','NE','L','SE','S','SO','O','NO'];return names[Math.round(((deg%360)+360)%360/45)%8]+' '+Math.round(deg)+'°';}
+  function safeWalkAnalysis(m){
+    const r=ensureSafeRoute(m);if(!r)return [];const speed=Math.max(1,Number(r.walkSpeed)||5.2),safe=speed*(Number(r.safetyMargin)||.85),out=[];
+    for(let i=0;i<r.stages.length-1;i++){const a=r.stages[i],b=r.stages[i+1],g=safeTransitionGeometry(a,b);if(!g)continue;const recommended=Math.ceil(g.edgeTravel/safe),ratio=g.edgeSpeed/safe,status=ratio<=.8?'SEGURO':ratio<=1?'ATENÇÃO':'RISCO';out.push({from:'S'+(i+1),to:'S'+(i+2),...g,bearingLabel:safeBearingLabel(g.bearing),recommended,status,detail:'Centro '+Math.round(g.centerDistance)+'m + redução '+Math.round(g.shrink)+'m = avanço máximo '+Math.round(g.edgeTravel)+'m. Configurado '+g.seconds+'s; recomendado ≥ '+recommended+'s.'});}return out;
   }
-  function drawSafeTransitionDiagnostics(m,r){
-    if(!state.map||!r?.stages?.length)return;
-    const chain=[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)},...r.stages];
-    for(let i=1;i<chain.length;i++){
-      const parent=chain[i-1],child=chain[i],g=safeTransitionGeometry(parent,child);if(!g)continue;
-      const from=i===1?'INICIAL':'S'+(i-1),to='S'+i,color=g.ok?'#22c55e':'#ef4444';
-      const line=L.polyline([ll(parent.x,parent.y),ll(child.x,child.y)],{weight:g.ok?2.2:5,dashArray:g.ok?'5 7':'12 6',opacity:g.ok?.34:.95,color,interactive:false}).addTo(state.map);
-      const mid={x:(Number(parent.x)+Number(child.x))/2,y:(Number(parent.y)+Number(child.y))/2};
-      const label=g.ok?'MARGEM +'+Math.round(g.margin)+'m':'EXCEDE '+Math.round(g.overflow)+'m';
-      line.bindPopup('<b>'+from+' → '+to+'</b><br>Distância entre centros: '+Math.round(g.distance)+'m<br>Deslocamento máximo permitido: '+Math.round(g.available)+'m<br><b style="color:'+color+'">'+label+'</b>');
-      if(!g.ok){
-        const icon=L.divIcon({className:'',html:'<div style="white-space:nowrap;background:#7f1d1d;color:#fff;border:2px solid #f87171;border-radius:8px;padding:4px 7px;font:900 10px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.45)">⚠ '+from+'→'+to+' • +'+Math.round(g.overflow)+'m</div>',iconSize:[120,24],iconAnchor:[60,12]});
-        const mk=L.marker(ll(mid.x,mid.y),{icon,interactive:true,zIndexOffset:1800}).addTo(state.map).bindPopup('<b>TRANSIÇÃO INVÁLIDA</b><br>'+from+' → '+to+' ultrapassa o encaixe possível em <b>'+Math.round(g.overflow)+'m</b>.<br>Distância atual: '+Math.round(g.distance)+'m<br>Máximo permitido: '+Math.round(g.available)+'m');
-        mk.on('click',()=>{state.safeEditorStage=Math.max(0,i-1);renderSafeRouteUi();});
-        state.drawn.push(mk);
-      }
-      state.drawn.push(line);
-    }
-  }
+  
+  
   function drawSafeRoute(m){
-    if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;const r=ensureSafeRoute(m);if(!r)return;
-    const selected=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));
-    const positioned=r.stages.filter(s=>validCoord(s.x)&&validCoord(s.y));
-    if(positioned.length>1){const line=L.polyline(positioned.map(s=>ll(s.x,s.y)),{weight:3,dashArray:'10 8',opacity:.7,interactive:false}).addTo(state.map);state.drawn.push(line);}
-    r.stages.forEach((s,i)=>{if(!validCoord(s.x)||!validCoord(s.y))return;const current=i===selected,color=current?'#a855f7':undefined;
-      const circle=L.circle(ll(s.x,s.y),{radius:Math.max(1,Number(s.radius)||1),weight:current?5:2,opacity:current?1:.55,fillOpacity:current?.08:.02,color,fillColor:color,interactive:false}).addTo(state.map);
-      const icon=L.divIcon({className:'',html:`<div class="mp-center-pin ${current?'mp-safe-current':''}" style="font-size:11px;font-weight:900;${current?'background:#6d28d9;':''}">S${i+1}</div>`,iconSize:[current?38:32,current?38:32],iconAnchor:[current?19:16,current?19:16]});
-      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true,draggable:!!state.editing&&current&&!state.safePresentation}).addTo(state.map).bindPopup(`<b>SAFE ${i+1}</b><br>Raio: ${Math.round(Number(s.radius)||0)}m<br>Dano: ${Number(s.damage)||0}/s`);
-      pin.on('click',()=>selectSafeStage(i));
-      if(state.editing&&current&&!state.safePresentation){pin.on('drag',e=>circle.setLatLng(e.target.getLatLng()));pin.on('dragend',e=>{const p=e.target.getLatLng();s.x=p.lng;s.y=p.lat;s.z=0;commit('SAFE '+(i+1)+' reposicionada');});}
-      state.drawn.push(circle,pin);
+    if(!state.map||!m||((m.category||'dominacao')!=='gas'))return;const r=ensureSafeRoute(m);if(!r)return;const selected=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1)),purple='#8b5cf6';
+    const positioned=r.stages.filter(s=>safeStageValid(s));if(positioned.length>1){const line=L.polyline(positioned.map(s=>ll(s.x,s.y)),{color:'#c084fc',weight:3,dashArray:'9 7',opacity:.8,interactive:false}).addTo(state.map);state.drawn.push(line);}
+    r.stages.forEach((s,i)=>{if(!safeStageValid(s))return;const current=i===selected,circle=L.circle(ll(s.x,s.y),{radius:Number(s.radius),weight:current?4:2,color:purple,opacity:current?1:.55,fillColor:'#7c3aed',fillOpacity:current?.22:.09,interactive:false}).addTo(state.map);
+      const icon=L.divIcon({className:'',html:'<div class="mp-center-pin" style="background:'+(current?'#6d28d9':'#312e81')+';font-size:11px;font-weight:900">S'+(i+1)+'</div>',iconSize:[current?38:32,current?38:32],iconAnchor:[current?19:16,current?19:16]});
+      const pin=L.marker(ll(s.x,s.y),{icon,interactive:true,draggable:!!state.editing&&current&&!state.safePresentation}).addTo(state.map).bindPopup('<b>SAFE '+(i+1)+'</b><br>Raio '+Math.round(s.radius)+'m<br>Dano '+s.damage+'/s<br>Vertical '+r.height.bottom+' → '+r.height.top);
+      pin.on('click',()=>selectSafeStage(i));if(state.editing&&current&&!state.safePresentation){pin.on('drag',e=>circle.setLatLng(e.target.getLatLng()));pin.on('dragend',e=>{const p=e.target.getLatLng();s.x=p.lng;s.y=p.lat;s.z=estimateElevation?.(p.lng,p.lat)?.z||0;commit('S'+(i+1)+' reposicionada');});}state.drawn.push(circle,pin);
     });
   }
   function stopSafePreview(){
@@ -1689,7 +1538,7 @@ iconAnchor:[12,
     if(state.safePreviewRouteLayer&&state.map){try{state.map.removeLayer(state.safePreviewRouteLayer)}catch{}state.safePreviewRouteLayer=null;}
     const hud=qs('#mpSafePreviewHud');if(hud)hud.remove();
     if(state.safeTestPlayerMarker&&state.map){try{state.map.removeLayer(state.safeTestPlayerMarker)}catch{}state.safeTestPlayerMarker=null;}
-    state.safeTestPlayer=null;qs('#mpSafeTimeline')?.remove();
+    state.safeTestPlayer=null;qs('#mpSafeTimeline')?.remove();qs('#mpSafeTimelineSim')?.remove();
   }
   function ensurePreviewHud(){
     let hud=qs('#mpSafePreviewHud');if(hud)return hud;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;
@@ -1697,9 +1546,7 @@ iconAnchor:[12,
     hud=document.createElement('div');hud.id='mpSafePreviewHud';Object.assign(hud.style,{position:'absolute',top:'16px',left:'50%',transform:'translateX(-50%)',zIndex:'10050',background:'rgba(8,10,18,.88)',border:'1px solid rgba(192,132,252,.7)',borderRadius:'12px',padding:'10px 16px',color:'#fff',fontWeight:'700',fontFamily:'system-ui',textAlign:'center',pointerEvents:'none',boxShadow:'0 10px 30px rgba(0,0,0,.35)'});wrap.appendChild(hud);return hud;
   }
   function fitSafeRouteForPresentation(){
-    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!state.map)return;const pts=[];
-    [...(r.stages||[]),...Object.keys(r.stageOptions||{}).flatMap(k=>safeOptions(r,Number(k)))].forEach(p=>{if(validCoord(p?.x)&&validCoord(p?.y))pts.push(ll(p.x,p.y));});
-    if(validCoord(m.center?.x)&&validCoord(m.center?.y))pts.push(ll(m.center.x,m.center.y));
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!state.map)return;const pts=(r.stages||[]).filter(safeStageValid).map(p=>ll(p.x,p.y));
     if(pts.length>1)state.map.fitBounds(L.latLngBounds(pts).pad(.18),{maxZoom:5});else if(pts.length)state.map.setView(pts[0],4);
   }
   function startSafePresentation(){
@@ -1750,67 +1597,29 @@ iconAnchor:[12,
     const model=state.safePreviewModel;if(!model?.route?.length)return;const s=model.route[0];state.safeTestPlayer={x:Number(s.x),y:Number(s.y)};updateSafeTestPlayerMarker();safePreviewAt(state.safePreviewElapsed);
   }
   function safePreviewAt(seconds){
-    const model=state.safePreviewModel;if(!model)return;
-    const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;
-    let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
+    const model=state.safePreviewModel;if(!model||!model.phases.length)return;const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
     for(let i=0;i<model.phases.length;i++){if(elapsed<=acc+model.phases[i].seconds||i===model.phases.length-1){p=model.phases[i];pi=i;break;}acc+=model.phases[i].seconds;}
-    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,smooth=u*u*(3-2*u);
-    let x=p.a.x,y=p.a.y,rad=p.from+(p.to-p.from)*smooth;
-    if(p.type==='move'){x=p.a.x+(p.b.x-p.a.x)*smooth;y=p.a.y+(p.b.y-p.a.y)*smooth;}
-    state.safePreviewLayer?.setLatLng(ll(x,y));state.safePreviewLayer?.setRadius(rad);updateSafeGasMask({x,y},rad);
-    const remain=Math.max(0,Math.ceil(p.seconds-local)),damage=Number(p.damage)||0,hud=ensurePreviewHud();
-    const player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
-    if(hud)hud.innerHTML='<div style="font-size:12px;opacity:.72">SOBREVIVÊNCIA • '+model.routeMode+'</div><div>'+p.label+'</div><div style="font-size:13px;font-weight:500">Raio '+Math.round(rad)+' m • dano fora '+damage+' HP/s • fase '+remain+' s • evento '+formatDuration(elapsed)+' / '+formatDuration(total)+'</div><div style="font-size:11px;color:#fca5a5;margin-top:3px">FORA DA SAFE: '+damage+' DE DANO POR SEGUNDO</div>'+(player?'<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.15);font-size:12px;color:'+(player.inside?'#86efac':'#fca5a5')+'">PLAYER TESTE: <b>'+(player.inside?'DENTRO DA SAFE':'FORA DA SAFE')+'</b> • distância '+Math.round(player.distance)+'m • '+(player.inside?'margem '+Math.round(player.margin)+'m':'fora por '+Math.round(Math.abs(player.margin))+'m')+' • DPS aplicado '+player.damage+'</div>':'');
-    const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';
-    model.phaseIndex=pi;
+    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,s=u*u*(3-2*u),x=p.type==='move'?p.a.x+(p.b.x-p.a.x)*s:p.a.x,y=p.type==='move'?p.a.y+(p.b.y-p.a.y)*s:p.a.y,rad=p.from+(p.to-p.from)*s,damage=Number(p.damage)||0;
+    state.safePreviewLayer?.setLatLng(ll(x,y));state.safePreviewLayer?.setRadius(rad);const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
+    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='move'?'⚠ A SAFE ZONE ESTÁ SE MOVENDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
+    const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';model.phaseIndex=pi;
   }
   function ensureSafeTimeline(){
-    const model=state.safePreviewModel;if(!model)return null;let bar=qs('#mpSafeTimeline');if(bar)return bar;
-    const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;if(getComputedStyle(wrap).position==='static')wrap.style.position='relative';
-    bar=document.createElement('div');bar.id='mpSafeTimeline';Object.assign(bar.style,{position:'absolute',left:'50%',bottom:'18px',transform:'translateX(-50%)',zIndex:'10055',width:'min(760px,calc(100% - 32px))',background:'rgba(8,10,18,.92)',border:'1px solid rgba(255,255,255,.18)',borderRadius:'12px',padding:'9px 12px',color:'#fff',font:'600 12px system-ui',boxShadow:'0 10px 30px rgba(0,0,0,.35)'});
-    bar.innerHTML='<div style="display:flex;gap:6px;align-items:center"><button id="mpSafePrevPhase" title="Fase anterior">|◀</button><button id="mpSafeTimePlay" title="Play/Pause">▶</button><button id="mpSafeNextPhase" title="Próxima fase">▶|</button><button id="mpSafeTimeSpeed" title="Velocidade">1x</button><button id="mpSafeTestPlayer" title="Adicionar/remover Player de Teste">P TESTE</button><span id="mpSafeTimeClock" style="min-width:100px;text-align:center">00:00 / '+formatDuration(model.totalSeconds)+'</span><input id="mpSafeTimeRange" type="range" min="0" max="'+model.totalSeconds+'" step="1" value="0" style="flex:1"></div>';
-    wrap.appendChild(bar);
-    qs('#mpSafeTestPlayer',bar).onclick=()=>{toggleSafeTestPlayer();const b=qs('#mpSafeTestPlayer',bar);if(b)b.textContent=state.safeTestPlayer?'REMOVER P':'P TESTE';};
-    qs('#mpSafeTimePlay',bar).onclick=()=>{state.safePreviewPlaying=!state.safePreviewPlaying;safePreviewAt(state.safePreviewElapsed);};
-    qs('#mpSafeTimeSpeed',bar).onclick=e=>{state.safePreviewSpeed=state.safePreviewSpeed===1?2:state.safePreviewSpeed===2?4:1;e.currentTarget.textContent=state.safePreviewSpeed+'x';};
-    qs('#mpSafeTimeRange',bar).oninput=e=>{state.safePreviewPlaying=false;safePreviewAt(Number(e.target.value));};
-    const phaseStart=i=>model.phases.slice(0,Math.max(0,i)).reduce((n,p)=>n+p.seconds,0);
-    qs('#mpSafePrevPhase',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.max(0,(model.phaseIndex||0)-1)));};
-    qs('#mpSafeNextPhase',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.min(model.phases.length-1,(model.phaseIndex||0)+1)));};
-    return bar;
+    const model=state.safePreviewModel;if(!model)return null;let bar=qs('#mpSafeTimelineSim');if(bar)return bar;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;if(getComputedStyle(wrap).position==='static')wrap.style.position='relative';
+    bar=document.createElement('div');bar.id='mpSafeTimelineSim';Object.assign(bar.style,{position:'absolute',left:'50%',bottom:'18px',transform:'translateX(-50%)',zIndex:'10055',width:'min(820px,calc(100% - 32px))',background:'rgba(8,10,18,.94)',border:'1px solid rgba(192,132,252,.65)',borderRadius:'12px',padding:'9px 12px',color:'#fff',font:'600 12px system-ui'});
+    bar.innerHTML='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><button id="mpSafePrevStage" title="SAFE anterior">⏮</button><button id="mpSafeBack10" title="Voltar 10 segundos">−10s</button><button id="mpSafeTimePlay" title="Play/Pause">▶</button><button id="mpSafeForward10" title="Avançar 10 segundos">+10s</button><button id="mpSafeNextStage" title="Próxima SAFE">⏭</button><button id="mpSafeTimeSpeed" title="Velocidade">1x</button><button id="mpSafeTestPlayer" title="Player de teste">P</button><span id="mpSafeTimeClock"></span><input id="mpSafeTimeRange" type="range" min="0" max="'+model.totalSeconds+'" step=".5" value="0" style="flex:1;min-width:180px"></div>';
+    wrap.appendChild(bar);const phaseStart=i=>model.phases.slice(0,Math.max(0,i)).reduce((n,p)=>n+p.seconds,0);
+    qs('#mpSafeTimePlay',bar).onclick=()=>{state.safePreviewPlaying=!state.safePreviewPlaying;safePreviewAt(state.safePreviewElapsed);};qs('#mpSafeTimeSpeed',bar).onclick=e=>{state.safePreviewSpeed=state.safePreviewSpeed===1?2:state.safePreviewSpeed===2?4:1;e.currentTarget.textContent=state.safePreviewSpeed+'x';};
+    qs('#mpSafeTimeRange',bar).oninput=e=>{state.safePreviewPlaying=false;safePreviewAt(Number(e.target.value));};qs('#mpSafeBack10',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(state.safePreviewElapsed-10);};qs('#mpSafeForward10',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(state.safePreviewElapsed+10);};
+    qs('#mpSafePrevStage',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.max(0,(model.phaseIndex||0)-2)));};qs('#mpSafeNextStage',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.min(model.phases.length-1,(model.phaseIndex||0)+2)));};qs('#mpSafeTestPlayer',bar).onclick=toggleSafeTestPlayer;return bar;
   }
   function startSafePreview(){
-    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!safeStageValid(r.stages[0])){alert('Configure a Safe 1 antes do preview.');return;}
-    const audit=safeRouteAudit(m);
-    const blocking=audit.filter(x=>/sem posição fixa ou possibilidade viável|precisa ser menor|ultrapassa os limites|Tempo de fechamento|Tempo de movimento/.test(x));
-    if(blocking.length){alert('Não é possível simular enquanto a rota possui erro técnico:\n\n- '+blocking.join('\n- '));return;}
-    const reach=safeRouteReachability(r),route=[{...r.stages[0]}];let randomized=false;
-    for(let i=1;i<r.stages.length;i++){if(safeOptions(r,i).length&&!(reach[i]?.viable?.some(x=>x.index>=0))){alert('A SAFE '+(i+1)+' possui possibilidades, mas nenhuma mantém caminho até a SAFE final. Corrija a cadeia antes do preview.');return;}}
-    for(let i=1;i<r.stages.length;i++){
-      const opts=safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)),fixed=r.stages[i],parent=route[i-1],choices=[];
-      opts.forEach(p=>{const c=safeOptionStage(r,i,p);if(safeStageValid(c)&&safeCircleFits(parent,c)&&safeLandCheck(c).ok)choices.push(c);});
-      if(safeStageValid(fixed)&&safeCircleFits(parent,fixed)&&safeLandCheck(fixed).ok)choices.push({...fixed});
-      if(!choices.length){alert('A SAFE '+(i+1)+' não possui posição compatível com a SAFE '+i+'. Corrija a rota antes do preview.');return;}
-      const chosen=choices[Math.floor(Math.random()*choices.length)];if(opts.length)randomized=true;route.push(chosen);
-    }
-    const routeMode=randomized?'ALEATÓRIA/MISTA':'FIXA',s1=route[0];
-    stopSafePreview();
-    state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
-    const initial=effectiveEventRadius(m),phases=[];
-    route.forEach((st,i)=>{
-      phases.push({type:'close',label:'FECHANDO SAFE '+(i+1)+(i===route.length-1?' FINAL':''),a:st,from:i?route[i-1].radius:initial,to:st.radius,damage:Number(st.damage)||0,seconds:Number(st.closeSeconds)||120});
-      if(i<route.length-1){
-        const next=route[i+1];
-        phases.push({type:'move',label:'MOVENDO PARA SAFE '+(i+2),a:st,b:next,from:st.radius,to:st.radius,damage:Number(st.damage)||0,seconds:Number(st.moveSeconds)||60});
-      }
-    });
-    const gasStyle={radius:initial,weight:4,color:'#a855f7',opacity:.92,fillColor:'#7e22ce',fillOpacity:.16,dashArray:'10 7',interactive:false};
-    state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{...gasStyle,fillOpacity:0}).addTo(state.map);
-    state.safePreviewMask=safeGasMask(s1,initial);
-    state.safePreviewRouteLayer=state.safePresentation?null:L.polyline(route.map(x=>ll(x.x,x.y)),{color:'#c084fc',weight:3,opacity:.72,dashArray:'8 8',interactive:false}).addTo(state.map);
-    const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0),status=qs('#mpSafeRouteStatus');if(status)status.innerHTML=`<b>SIMULAÇÃO DO EVENTO</b> • rota ${routeMode.toLowerCase()} • duração ${formatDuration(totalSeconds)}<br><small>A área sem cor é a SAFE. Todo o roxo opaco representa o gás fora da zona segura.</small>`;
-    state.safePreviewModel={route,phases,totalSeconds,routeMode,phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
-    let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);return;}safePreviewAt(next);},50);
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;const route=r.stages.filter(safeStageValid);if(route.length<2){alert('Posicione pelo menos S1 e S2 para simular.');return;}
+    stopSafePreview();state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();const phases=[];
+    route.forEach((st,i)=>{const hold=Math.max(0,Number(st.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:st,b:st,from:st.radius,to:st.radius,damage:st.damage,seconds:hold,stage:i});if(i<route.length-1){const next=route[i+1],sec=Math.max(1,Number(st.moveSeconds)||60);phases.push({type:'move',label:'A SAFE ZONE ESTÁ SE MOVENDO • S'+(i+1)+' → S'+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:next.damage,seconds:sec,stage:i});}});
+    const s1=route[0];state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{radius:s1.radius,weight:5,color:'#c084fc',opacity:1,fillColor:'#7c3aed',fillOpacity:.24,interactive:false}).addTo(state.map);
+    const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0);state.safePreviewModel={route,phases,totalSeconds,routeMode:'FIXA',phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
+    let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},50);
   }
 
   function drawElevationKnowledge(m){
@@ -2117,13 +1926,10 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
   }
   function safePreflight(m){
     if(!m||(m.category||'dominacao')!=='gas')return {blocking:[],warnings:[],firstStage:null};
-    const blocking=safeRouteAudit(m),r=ensureSafeRoute(m);
-    if(r){
-      r.stages.forEach((st,i)=>{const land=safeStageValid(st)?safeLandCheck(st):null;if(land&&!land.ok)blocking.push('SAFE '+(i+1)+': '+land.reason);});
-      const reach=safeRouteReachability(r);for(let i=1;i<r.stages.length;i++){const opts=safeOptions(r,i);if(opts.length&&!reach[i]?.viable?.some(x=>x.index>=0))blocking.push('SAFE '+(i+1)+' não possui possibilidade com continuidade até a SAFE final.');}
-    }
-    const unique=[...new Set(blocking)],first=unique.map(safeIssueStage).find(x=>x!==null&&Number.isFinite(x));
-    return {blocking:unique,warnings:[],firstStage:first??null};
+    const r=ensureSafeRoute(m),warnings=[];if(!r)return {blocking:[],warnings,firstStage:null};
+    const missing=r.stages.map((s,i)=>safeStageValid(s)?null:i).filter(i=>i!==null);if(missing.length)warnings.push('SAFE(s) sem posição: '+missing.map(i=>'S'+(i+1)).join(', ')+'.');
+    safeWalkAnalysis(m).forEach(a=>{if(a.status!=='SEGURO')warnings.push(a.from+'→'+a.to+': '+a.status+' • borda '+a.edgeSpeed.toFixed(2)+'m/s • recomendado ≥ '+a.recommended+'s.');});
+    return {blocking:[],warnings,firstStage:missing[0]??null};
   }
   function focusSafePreflight(stage){
     const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return;
@@ -2131,10 +1937,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     const st=r.stages[i];if(safeStageValid(st)&&state.map)state.map.panTo(ll(st.x,st.y));
   }
   function requireSafePreflight(m,action='gerar a solicitação'){
-    const check=safePreflight(m);if(!check.blocking.length)return true;
-    if(check.firstStage!==null)focusSafePreflight(check.firstStage);
-    alert('NÃO É POSSÍVEL '+action.toUpperCase()+'.\n\nCorrija primeiro:\n- '+check.blocking.join('\n- ')+'\n\nA primeira SAFE com problema foi aberta no editor.');
-    return false;
+    const check=safePreflight(m);if(check.warnings.length)setSaveState('SAFE com '+check.warnings.length+' aviso(s) técnico(s) • '+action+' permitido');return true;
   }
   function highRequestExport(){
     const m=active();if(!m)return '';const a=plannerAudit(m),pts=(m.points||[]).filter(isValidated),r=(m.category||'dominacao')==='gas'?ensureSafeRoute(m):null,isSurvival=/sobreviv[eê]ncia/i.test(m.event||''),change=requestChangeScope(m),polyRaw=(m.category||'dominacao')==='dominacao'&&Array.isArray(m.zonePolygon)?m.zonePolygon:[],polyAudit=(m.category||'dominacao')==='dominacao'?dominationPolygonAudit(m):null,polyPending=polyRaw.filter(v=>validCoord(v?.x)&&validCoord(v?.y)&&(!validCoord(v?.z)||v?.status!=='validated')).length,polyInvalid=polyRaw.filter(v=>!validCoord(v?.x)||!validCoord(v?.y)).length;
@@ -2143,17 +1946,17 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     if(facXFac&&!creating)lines.push('- Evento base: Fac x Fac.');
     if(dominationZoneMode(m)==='polygon'&&(polyPending>0||polyInvalid>0)){lines.push('','STATUS DA ENTREGA:','- RASCUNHO — NÃO IMPLEMENTAR AINDA.');if(polyPending>0)lines.push('- Existem '+polyPending+' vértice(s) do polígono pendente(s) de validação com CDS reais no FiveM.');if(polyInvalid>0)lines.push('- Existem '+polyInvalid+' vértice(s) com X/Y inválidos que precisam ser corrigidos antes de fechar a zona.');lines.push('- As coordenadas válidas abaixo podem ser usadas para planejamento visual, mas devem ser confirmadas antes da implementação.');}
     if(isSurvival)lines.push('','BASE DO EVENTO — CLONE DO FAC X FAC:','- Utilizar o Fac X Fac atual como base do Sobrevivência.','- Preservar as mecânicas, regras, sistemas, escalação, inventário entregue aos participantes, caixas de loot, drop de itens ao morrer, ping para aliados, ranking e premiações já existentes no Fac X Fac.','- Não recriar nem alterar essas mecânicas sem necessidade; a diferença funcional desta solicitação é a SAFE DINÂMICA progressiva descrita abaixo.');
-    if(change.safeOnly&&!creating)lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva da SAFE progressiva desta zona.','- Manter centro, raio inicial, spawns, regras e demais configurações atuais sem alteração.','- Implementar somente as etapas, movimentos e possibilidades da SAFE descritas abaixo.');
+    if(change.safeOnly&&!creating)lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva da SAFE progressiva desta zona.','- Manter centro, raio inicial, spawns, regras e demais configurações atuais sem alteração.','- Implementar somente as etapas e movimentos da SAFE descritos abaixo.');
     else if(change.spawnsOnly&&!creating)lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva dos pontos de spawn desta zona.','- Manter centro, raio/zona de disputa, regras e demais configurações atuais sem alteração.','- Atualizar somente os spawns conforme as CDS abaixo.','','SPAWNS ATUALIZADOS:',...pts.map((p,i)=>'  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)));
     else if(change.zoneOnly&&!creating){const poly=dominationPolygon(m),polyMode=dominationZoneMode(m)==='polygon';lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva da Zona de Pontuação deste evento.','- Manter spawns, mecânica de pontuação, regras, premiações e demais configurações atuais sem alteração.');if(polyMode&&poly.length<3){lines.push('- A forma escolhida é POLÍGONO POR CDS, porém o contorno ainda está incompleto.','- NÃO converter para Centro + Raio e NÃO implementar esta alteração enquanto faltarem vértices.','','ZONA ATUALIZADA — POLÍGONO EM CONSTRUÇÃO:','- Vértices válidos cadastrados: '+poly.length+' / mínimo 3.');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));}else if(polyMode&&poly.length>=3){if(change.zoneTransition==='radius-to-polygon')lines.push('- Converter a Zona de Pontuação atual de CENTRO + RAIO para POLÍGONO POR CDS.');else if(change.zoneTransition==='polygon-to-polygon')lines.push('- Substituir o contorno atual do POLÍGONO pelas novas CDS abaixo.');else lines.push('- Atualizar os limites da Zona de Dominação pelas CDS abaixo.');lines.push('','ZONA ATUALIZADA — POLÍGONO POR CDS:');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));lines.push('- As CDS acima formam o limite da Zona de Dominação, devem ser ligadas na ordem informada e fechadas do último ponto ao primeiro.','- Estas CDS NÃO são pontos de spawn.');}else{if(change.zoneTransition==='polygon-to-radius')lines.push('- Converter a Zona de Pontuação atual de POLÍGONO POR CDS para CENTRO + RAIO.','- O polígono/CDS de contorno anterior deixa de definir a área válida da Zona de Pontuação.','- Manter os pontos de spawn atuais sem alteração.');else lines.push('- Atualizar somente o centro e o raio conforme abaixo.');lines.push('','ZONA ATUALIZADA — CENTRO + RAIO:','- Centro: '+f(m.center?.x)+', '+f(m.center?.y)+', '+f(m.center?.z),'- Raio: '+Math.round(effectiveEventRadius(m))+'m');}}
     else{const poly=dominationPolygon(m),polyMode=dominationZoneMode(m)==='polygon';lines.push('','CONFIGURAÇÃO DA ZONA:');if((m.category||'dominacao')==='dominacao'&&polyMode&&poly.length<3){lines.push('- Forma da Zona de Pontuação: POLÍGONO POR CDS — INCOMPLETO.','- Vértices válidos cadastrados: '+poly.length+' / mínimo 3.','- NÃO implementar como Centro + Raio; concluir e validar o polígono antes da implementação.');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));}else if((m.category||'dominacao')==='dominacao'&&polyMode&&poly.length>=3){lines.push('- Forma da Zona de Pontuação: POLÍGONO POR CDS.','- CDS que formam o limite da Zona de Dominação:');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));lines.push('- Ligar as CDS na ordem informada e fechar do último ponto ao primeiro.','- Estas CDS formam a zona e NÃO são spawns.');}else lines.push('- Forma da zona: CENTRO + RAIO.','- Centro: '+f(m.center?.x)+', '+f(m.center?.y)+', '+f(m.center?.z),'- Raio inicial: '+Math.round(effectiveEventRadius(m))+'m');lines.push('','SPAWNS / PONTOS DE ENTRADA:','- Spawns validados: '+pts.length);pts.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)));}
     if(r){
-      lines.push('','SAFE DINÂMICA:','- Referência vertical da Safe: Z = 0.','- Fluxo com '+r.stages.length+' etapas: FECHA → MOVE → FECHA, até a SAFE final.');
+      lines.push('','SAFE DINÂMICA:','- Volume vertical da SAFE: fundo '+r.height.bottom+' até teto '+r.height.top+'.','- Fluxo com '+r.stages.length+' etapas: ESPERA → MOVE + REDUZ RAIO → próxima SAFE.');
       r.stages.forEach((st,i)=>{
         lines.push('- Safe '+(i+1)+': '+f(st.x)+', '+f(st.y)+', 0.00 | raio '+Math.round(Number(st.radius)||0)+'m | dano '+(Number(st.damage)||0)+' HP/s | fechamento '+(Number(st.closeSeconds)||0)+'s'+(i<r.stages.length-1?' | movimento '+(Number(st.moveSeconds)||0)+'s':''));
-        if(i>0)safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)).forEach((p,j)=>lines.push('  - Opção '+(j+1)+': '+f(p.x)+', '+f(p.y)+', 0.00'));
+        
       });
-      lines.push('- Aviso fora da SAFE: "VOCÊ ESTÁ FORA DA SAFE — TOMANDO X DE DANO POR SEGUNDO".','- X acompanha automaticamente o dano da etapa ativa.','- Duração configurada da progressão: '+(safeTimeline(m).at(-1)?.at||0)+' segundos.');
+      lines.push('- HUD em movimento: "ATENÇÃO — A SAFE ZONE ESTÁ SE MOVENDO".','- Aviso fora da SAFE: "VOCÊ ESTÁ TOMANDO X DE DANO POR SEGUNDO FORA DA SAFE".','- X acompanha automaticamente o dano da etapa ativa.','- Duração configurada da progressão: '+(safeTimeline(m).at(-1)?.at||0)+' segundos.');
     }
     lines.push('','VALIDAÇÃO:');if(!a.issues.length&&!a.warns.length)lines.push('- Configuração aprovada pelas validações automáticas do Planejador.');else{a.issues.forEach(x=>lines.push('- BLOQUEIO: '+x));a.warns.forEach(x=>lines.push('- AVISO: '+x));}
     lines.push('','OBSERVAÇÕES:',isSurvival?'- O Fac X Fac existente permanece como referência de funcionamento; implementar somente as diferenças necessárias para o Sobrevivência.':'- Preservar as mecânicas/regras já existentes do evento base quando aplicável.','- As CDS acima estão em formato simples; vec3/vec4 não é obrigatório.','- Spawns utilizam Z real; somente a referência visual da Safe utiliza Z = 0.');
@@ -2275,7 +2078,7 @@ v])=>{const el=qs('#'+id);if(el&&document.activeElement!==el)el.value=v;});
     if(state.editing){const changed=pushUndo();if(!changed){setSaveState('Nenhuma alteração detectada');return;}m.updatedAt=nowIso();state.lastEditSnapshot=editSnapshot();state.dirty=true;render();setSaveState(`${reason} • NÃO SALVO`);return;}
     m.updatedAt=nowIso();saveStore();render();setSaveState(`${reason} • salvo`);queueSnapshot();
   }
-  function resetMapPlacementModes(){state.mapMode='center';state.placing=false;state.polygonPlacement=false;state.safePlacementStage=null;state.safePlacementAsOption=false;clearSafeHover();qs('#missionPlannerMap')?.classList.remove('mp-crosshair');if(state.map?.getContainer())state.map.getContainer().style.cursor='';const pb=qs('#mpPlaceBtn');if(pb)pb.textContent='MARCAR PONTO NO MAPA';const vb=qs('#mpDomPolygonPlace');if(vb)vb.textContent='MARCAR VÉRTICE NO MAPA';}
+  function resetMapPlacementModes(){state.mapMode='center';state.placing=false;state.polygonPlacement=false;state.safePlacementStage=null;clearSafeHover();qs('#missionPlannerMap')?.classList.remove('mp-crosshair');if(state.map?.getContainer())state.map.getContainer().style.cursor='';const pb=qs('#mpPlaceBtn');if(pb)pb.textContent='MARCAR PONTO NO MAPA';const vb=qs('#mpDomPolygonPlace');if(vb)vb.textContent='MARCAR VÉRTICE NO MAPA';}
   function requireEdit(){if(state.editing)return true;alert('Zona travada em modo visualização. Clique em EDITAR ZONA para fazer alterações.');return false;}
   function startEdit(){const m=active();if(!m||state.editing)return;state.undoStack=[];state.redoStack=[];state.compareOverlay=false;state.editBackup={eventId:m.eventId,
 zones:JSON.parse(JSON.stringify(zonesOfEvent(m.eventId)))};state.editing=true;state.dirty=false;resetMapPlacementModes();state.lastEditSnapshot=editSnapshot();render();updateEditUi();setSaveState('MODO EDIÇÃO • alterações ainda não salvas');}
@@ -2635,13 +2438,11 @@ intro='';
       const stages=safeRoute.stages||[];if(!stages.length)return '';
       const lines=['','MOVIMENTAÇÃO DA SAFE:',''];
       stages.forEach((st,i)=>{
-        const opts=i>0?safeOptions(safeRoute,i).filter(p=>validCoord(p.x)&&validCoord(p.y)):[];
-        const pos=validCoord(st.x)&&validCoord(st.y)?f(st.x)+','+f(st.y):'posição definida pelas possibilidades abaixo';
+        const pos=validCoord(st.x)&&validCoord(st.y)?f(st.x)+','+f(st.y):'SEM POSIÇÃO';
         lines.push('- SAFE '+(i+1)+': '+pos+' • raio '+Math.round(Number(st.radius)||0)+' m • dano fora da SAFE: '+(Number(st.damage)||0)+' HP por segundo • fechamento '+(Number(st.closeSeconds)||0)+'s'+(i<stages.length-1?' • movimento para próxima SAFE '+(Number(st.moveSeconds)||0)+'s.':'.'));
-        opts.forEach((p,j)=>lines.push('  - Opção '+String.fromCharCode(65+j)+': '+f(p.x)+','+f(p.y)));
       });
       lines.push('','DANO FORA DA SAFE:','- O dano deve ser aplicado continuamente por segundo enquanto o player estiver fora do círculo ativo.','- O valor do dano deve acompanhar automaticamente a etapa atual da SAFE.','- Enquanto estiver fora da SAFE, exibir aviso visível ao player no padrão: "VOCÊ ESTÁ FORA DA SAFE — TOMANDO X DE DANO POR SEGUNDO".','- Substituir X pelo dano configurado na SAFE ativa e atualizar o aviso quando a etapa mudar.','- Ao retornar para dentro da SAFE, interromper imediatamente o dano e remover o aviso.');
-      lines.push('','REGRA DE MOVIMENTAÇÃO:','- A progressão não fica limitada a 3 SAFEs. Utilizar todas as etapas configuradas no Planejador, incluindo SAFE 4, SAFE 5 e seguintes, até a SAFE final.','- Quando uma etapa possuir múltiplas possibilidades, sortear somente uma opção que mantenha uma rota geometricamente compatível até a etapa seguinte.','- Durante cada deslocamento, centro e área do gás devem se mover continuamente, sem teleporte da zona.');
+      lines.push('','REGRA DE MOVIMENTAÇÃO:','- A progressão não fica limitada a 3 SAFEs. Utilizar todas as etapas configuradas no Planejador, incluindo SAFE 4, SAFE 5 e seguintes, até a SAFE final.','- Cada SAFE possui posição fixa definida pelo Planejador; não sortear posições alternativas.','- Durante cada deslocamento, centro e raio devem mudar continuamente e ao mesmo tempo, sem teleporte da zona.','- A SAFE deve existir verticalmente do fundo ao teto configurados para permanecer visível em aclives e declives.','- Exibir HUD "ATENÇÃO — A SAFE ZONE ESTÁ SE MOVENDO" durante a transição.');
       return lines.join('\n');
     })():'';
     const gasHeightNote=category==='gas'?`
