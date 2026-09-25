@@ -273,3 +273,43 @@
 #page-planejador:not(.mp-library-mode) .mp-icon-action.primary:hover{
   background:linear-gradient(135deg,#7f2bd3,#a13be8)!important;
 }
+
+
+/* V11.1 — workspace operacional contextual para missões de GÁS */
+#page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-shell{
+  grid-template-columns:minmax(300px,340px) minmax(0,1fr)!important;
+}
+#page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-side{
+  background:rgba(12,10,16,.94)!important;border:1px solid rgba(183,111,231,.16)!important;
+  border-radius:14px!important;padding:8px!important;
+}
+.mp-gas-operational-bar{display:none}
+#page-planejador.mp-gas-operational .mp-gas-operational-bar{
+  display:flex;flex-direction:column;gap:8px;padding:10px;margin-bottom:8px;
+  border:1px solid rgba(168,85,247,.22);border-radius:12px;background:linear-gradient(145deg,rgba(72,30,108,.22),rgba(18,14,23,.96));
+}
+.mp-gas-op-title{display:flex;flex-direction:column;gap:2px}.mp-gas-op-title b{font-size:11px;letter-spacing:.12em}.mp-gas-op-title span{font-size:8px;color:#aaa0b4}
+.mp-gas-op-actions{display:grid;grid-template-columns:1fr;gap:5px}.mp-gas-op-actions button{min-height:34px!important;text-align:left!important;padding:0 10px!important}
+#page-planejador.mp-gas-operational .mp-tabbar{display:none!important}
+#page-planejador.mp-gas-operational .mp-tabpanel{display:none!important}
+#page-planejador.mp-gas-operational[data-gas-view="safe"] .mp-tabpanel[data-tab="zona"]{display:block!important}
+#page-planejador.mp-gas-operational[data-gas-view="safe"] .mp-tabpanel[data-tab="zona"]>.mp-card:not(#mpSafeRouteBox){display:none!important}
+#page-planejador.mp-gas-operational[data-gas-view="safe"] #mpSafeRouteBox{display:block!important;margin:0!important}
+#page-planejador.mp-gas-operational[data-gas-view="mission"] .mp-tabpanel[data-tab="zona"],
+#page-planejador.mp-gas-operational[data-gas-view="mission"] .mp-tabpanel[data-tab="pontos"]{display:block!important}
+#page-planejador.mp-gas-operational[data-gas-view="mission"] #mpSafeRouteBox{display:none!important}
+#page-planejador.mp-gas-operational[data-gas-view="tools"] .mp-tabpanel[data-tab="validacao"],
+#page-planejador.mp-gas-operational[data-gas-view="tools"] .mp-tabpanel[data-tab="entrega"]{display:block!important}
+#page-planejador.mp-gas-operational #mpSafeRouteBox{
+  border:0!important;background:transparent!important;box-shadow:none!important;padding:4px!important;
+}
+#page-planejador.mp-gas-operational #mpSafeRouteBox>h3{font-size:10px!important;letter-spacing:.13em;color:#d8b4fe!important}
+.mp-gas-empty{min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;text-align:center;padding:20px 10px}
+.mp-gas-empty>b{font-size:15px;letter-spacing:.08em}.mp-gas-empty>span{max-width:240px;color:#a79eaf;font-size:9px;line-height:1.45}
+.mp-gas-empty>button{min-height:42px!important;padding:0 18px!important;font-size:10px!important}
+#page-planejador.mp-gas-operational .mission-planner-mapwrap{border-radius:14px!important;overflow:hidden!important}
+@media(max-width:1050px){
+ #page-planejador.mp-gas-operational:not(.mp-library-mode) .mission-planner-shell{grid-template-columns:1fr!important}
+ .mp-gas-op-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .mp-gas-op-actions button{text-align:center!important;font-size:8px!important}
+}
