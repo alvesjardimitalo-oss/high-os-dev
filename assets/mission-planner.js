@@ -1490,7 +1490,7 @@ iconAnchor:[12,
   function renderSafeRouteUi(){
     ensureSafeRouteUi();const box=qs('#mpSafeRouteBox'),m=active();if(!box||!m)return;const gas=(m.category||'dominacao')==='gas';box.style.display=gas?'block':'none';if(!gas)return;
     const host=qs('#mpSafeStages'),strip=qs('#mpSafeStageStrip'),status=qs('#mpSafeRouteStatus'),validator=qs('#mpSafeValidator');if(!host||!strip)return;
-    if(!hasDynamicSafe(m)){host.innerHTML='<button type="button" id="mpEnableDynamicSafe" class="primary">CRIAR SAFE DINÂMICA</button>';strip.innerHTML='';validator.innerHTML='';qs('#mpEnableDynamicSafe')?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');});return;}
+    if(!hasDynamicSafe(m)){host.innerHTML='<div class="mp-gas-empty"><b>SAFE DINÂMICA</b><span>A zona e os spawns atuais serão preservados.</span><button type="button" id="mpEnableDynamicSafe" class="primary">⚡ IMPLANTAR SAFE DINÂMICA</button></div>';strip.innerHTML='';validator.innerHTML='';qs('#mpEnableDynamicSafe')?.addEventListener('click',()=>{if(!requireEdit())return;ensureSafeRoute(m,true);commit('SAFE dinâmica criada');});return;}
     const r=ensureSafeRoute(m),open=Math.max(0,Math.min(Number(state.safeEditorStage)||0,r.stages.length-1));state.safeEditorStage=open;
     strip.innerHTML=r.stages.map((s,i)=>'<span style="display:inline-flex;gap:2px;align-items:center"><button type="button" data-safe-tab="'+i+'" title="Editar SAFE '+(i+1)+'" class="'+(i===open?'primary':'')+'">S'+(i+1)+'</button>'+(r.stages.length>1?'<button type="button" data-safe-delete="'+i+'" title="Remover SAFE '+(i+1)+'" aria-label="Remover SAFE '+(i+1)+'">🗑</button>':'')+'</span>').join('<span>→</span>')+(r.stages.length<4?'<button type="button" id="mpAddSafeTop" title="Adicionar próxima SAFE">＋</button>':'');
     qsa('[data-safe-tab]',strip).forEach(b=>b.onclick=()=>selectSafeStage(Number(b.dataset.safeTab),{focus:false}));qsa('[data-safe-delete]',strip).forEach(b=>b.onclick=e=>{e.stopPropagation();removeSafeStage(Number(b.dataset.safeDelete));});qs('#mpAddSafeTop')?.addEventListener('click',addDynamicSafeStage);
@@ -2072,7 +2072,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
 
   function updateExport(){const m=active(),
 out=qs('#mpExport');if(out&&m)out.value=m.points.filter(isValidated).map((p,i)=>`${p.id||i+1} - ${rawCds(p)}`).join('\n');}
-  function render(){adoptStrayCards();ensureSafeRouteUi();adoptStrayCards();renderMissionList();renderPointList();renderMap();analyze();updateExport();syncForm();renderCenterValidation();renderCoverage();renderProTools();renderPlannerBadges();renderWorkspaceBar();renderBackupList();const rt=qs('#mpRequestText'),
+  function render(){adoptStrayCards();ensureSafeRouteUi();adoptStrayCards();renderMissionList();renderPointList();renderMap();analyze();updateExport();syncForm();renderCenterValidation();renderCoverage();renderProTools();renderPlannerBadges();renderWorkspaceBar();renderOperationalMode();renderBackupList();const rt=qs('#mpRequestText'),
 m=active();if(rt&&document.activeElement!==rt)rt.value=m?.requestText||'';loadSnapshotPreview();}
 
   function syncForm(){
@@ -2724,6 +2724,35 @@ z=zones[0];if(!z)return false;
     let salva='zona';try{salva=localStorage.getItem('highos_mp_tab')||'zona';}catch(e){}
     setPlannerTab(PLANNER_TABS.some(t=>t.id===salva)?salva:'zona');
   }
+  function ensureGasOperationalUi(){
+    const side=qs('.mission-planner-side');if(!side)return;
+    let bar=qs('#mpGasOperationalBar');
+    if(!bar){
+      bar=document.createElement('div');bar.id='mpGasOperationalBar';bar.className='mp-gas-operational-bar';
+      bar.innerHTML='<div class="mp-gas-op-title"><b>OPERAÇÃO GÁS</b><span>SAFE em foco • zona e spawns preservados</span></div><div class="mp-gas-op-actions"><button type="button" data-gas-view="safe" class="primary" title="Configurar SAFE dinâmica">◎ SAFE</button><button type="button" data-gas-view="mission" title="Abrir zona e spawns existentes">⌖ ZONA & SPAWNS</button><button type="button" data-gas-view="tools" title="Abrir ferramentas CDS, NC, TP e manutenção">⚙ FERRAMENTAS</button></div>';
+      side.insertBefore(bar,side.firstChild);
+      qsa('[data-gas-view]',bar).forEach(b=>b.onclick=()=>setGasOperationalView(b.dataset.gasView));
+    }
+  }
+  function setGasOperationalView(view){
+    const page=qs('#page-planejador'),side=qs('.mission-planner-side');if(!page||!side)return;
+    view=['safe','mission','tools'].includes(view)?view:'safe';page.dataset.gasView=view;
+    qsa('[data-gas-view]',side).forEach(b=>b.classList.toggle('primary',b.dataset.gasView===view));
+    qsa('.mp-tabpanel',side).forEach(p=>p.classList.remove('mp-gas-visible'));
+    const safe=qs('#mpSafeRouteBox');
+    if(view==='safe'){safe?.classList.add('mp-gas-visible');safe?.scrollIntoView?.({block:'nearest'});}
+    else if(view==='mission'){plannerPanel('zona')?.classList.add('mp-gas-visible');plannerPanel('pontos')?.classList.add('mp-gas-visible');}
+    else {plannerPanel('validacao')?.classList.add('mp-gas-visible');plannerPanel('entrega')?.classList.add('mp-gas-visible');}
+    setTimeout(()=>{try{state.map?.invalidateSize()}catch(e){}},60);
+  }
+  function renderOperationalMode(){
+    const page=qs('#page-planejador'),m=active();if(!page||!m)return;
+    const gas=(m.category||'dominacao')==='gas';page.classList.toggle('mp-gas-operational',gas);
+    if(!gas){delete page.dataset.gasView;return;}
+    ensureGasOperationalUi();
+    if(!page.dataset.gasView)setGasOperationalView('safe');else setGasOperationalView(page.dataset.gasView);
+  }
+
   function renderPlannerBadges(){
     const m=active();if(!m)return;
     const pend=(m.points||[]).filter(p=>!isValidated(p)).length;
