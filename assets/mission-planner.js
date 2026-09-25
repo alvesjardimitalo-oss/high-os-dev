@@ -1990,7 +1990,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
         lines.push('- Safe '+(i+1)+': '+f(st.x)+', '+f(st.y)+', 0.00 | raio '+Math.round(Number(st.radius)||0)+'m | dano '+(Number(st.damage)||0)+' HP/s | fechamento '+(Number(st.closeSeconds)||0)+'s'+(i<r.stages.length-1?' | movimento '+(Number(st.moveSeconds)||0)+'s':''));
         
       });
-      lines.push('- HUD em movimento: "ATENÇÃO — A SAFE ZONE ESTÁ SE MOVENDO".','- Aviso fora da SAFE: "VOCÊ ESTÁ TOMANDO X DE DANO POR SEGUNDO FORA DA SAFE".','- X acompanha automaticamente o dano da etapa ativa.','- Duração configurada da progressão: '+(safeTimeline(m).at(-1)?.at||0)+' segundos.');
+      lines.push('- HUD em movimento: "ATENÇÃO — A SAFE ZONE ESTÁ SE MOVENDO".','- Aviso fora da SAFE: "VOCÊ ESTÁ TOMANDO X DE DANO POR SEGUNDO FORA DA SAFE".','- X acompanha automaticamente o dano da etapa ativa.','- FECHAMENTO FINAL: a última SAFE deve reduzir continuamente até raio 0.','- ENCERRAMENTO: quando o raio atingir 0, encerrar o evento imediatamente.','- DURAÇÃO TOTAL DO EVENTO: '+safeTotalSeconds(m)+' segundos ('+formatDuration(safeTotalSeconds(m))+'). Esta duração é derivada da timeline da SAFE e substitui qualquer duração fixa anterior.');
     }
     lines.push('','VALIDAÇÃO:');if(!a.issues.length&&!a.warns.length)lines.push('- Configuração aprovada pelas validações automáticas do Planejador.');else{a.issues.forEach(x=>lines.push('- BLOQUEIO: '+x));a.warns.forEach(x=>lines.push('- AVISO: '+x));}
     lines.push('','OBSERVAÇÕES:',isSurvival?'- O Fac X Fac existente permanece como referência de funcionamento; implementar somente as diferenças necessárias para o Sobrevivência.':'- Preservar as mecânicas/regras já existentes do evento base quando aplicável.','- As CDS acima estão em formato simples; vec3/vec4 não é obrigatório.','- Spawns utilizam Z real; somente a referência visual da Safe utiliza Z = 0.');
@@ -2002,7 +2002,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
   }
   function exportMission(format='lua'){
     const m=active();if(!m)return '';if(format==='high')return highRequestExport();if(format==='summary')return technicalSummary();const pts=(m.points||[]).filter(isValidated);
-    if(format==='json')return JSON.stringify({event:m.event,zone:m.name,center:m.center,radius:effectiveEventRadius(m),spawns:pts,safeRoute:m.safeRoute||null},null,2);
+    if(format==='json')return JSON.stringify({event:m.event,zone:m.name,center:m.center,radius:effectiveEventRadius(m),spawns:pts,safeRoute:m.safeRoute||null,eventDurationSeconds:hasDynamicSafe(m)?safeTotalSeconds(m):null,endCondition:hasDynamicSafe(m)?'SAFE_RADIUS_ZERO':null},null,2);
     if(format==='plain')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)).join('\n');
     if(format==='vec3')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - vec3('+f(p.x)+', '+f(p.y)+', '+f(p.z)+')').join('\n');
     if(format==='vec4')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - vec4('+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)+')').join('\n');
@@ -2516,7 +2516,7 @@ DISTRIBUIÇÃO:
 
 ${mechanic}${safeRouteText}${gasHeightNote}
 
-- As demais configurações, regras, premiações, duração e funcionamento do evento deverão permanecer inalterados.`;
+${category==='gas'&&hasDynamicSafe(m)?'- DURAÇÃO TOTAL DO EVENTO: '+safeTotalSeconds(m)+' segundos ('+formatDuration(safeTotalSeconds(m))+').\n\n- A duração deve ser recalculada automaticamente sempre que a timeline da SAFE for alterada.\n\n- O evento termina exatamente quando a SAFE final atingir raio 0.\n\n- As demais configurações, regras, premiações e funcionamento do evento deverão permanecer inalterados.':'- As demais configurações, regras, premiações, duração e funcionamento do evento deverão permanecer inalterados.'}`;
     m.requestText=text;if(qs('#mpRequestText'))qs('#mpRequestText').value=text;
   }
   async function copyCurrentRequest(){generateRequest();const m=active();if(!m?.requestText)return;await copyText(m.requestText);const b=qs('#mpCopyRequest');if(b){const old=b.textContent;b.textContent='COPIADO ✓';setTimeout(()=>b.textContent=old,900);}}
