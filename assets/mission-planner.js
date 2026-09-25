@@ -1664,9 +1664,7 @@ iconAnchor:[12,
     hud=document.createElement('div');hud.id='mpSafePreviewHud';Object.assign(hud.style,{position:'absolute',top:'16px',left:'50%',transform:'translateX(-50%)',zIndex:'10050',background:'rgba(8,10,18,.88)',border:'1px solid rgba(192,132,252,.7)',borderRadius:'12px',padding:'10px 16px',color:'#fff',fontWeight:'700',fontFamily:'system-ui',textAlign:'center',pointerEvents:'none',boxShadow:'0 10px 30px rgba(0,0,0,.35)'});wrap.appendChild(hud);return hud;
   }
   function fitSafeRouteForPresentation(){
-    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!state.map)return;const pts=[];
-    [...(r.stages||[]),...Object.keys(r.stageOptions||{}).flatMap(k=>safeOptions(r,Number(k)))].forEach(p=>{if(validCoord(p?.x)&&validCoord(p?.y))pts.push(ll(p.x,p.y));});
-    if(validCoord(m.center?.x)&&validCoord(m.center?.y))pts.push(ll(m.center.x,m.center.y));
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r||!state.map)return;const pts=(r.stages||[]).filter(safeStageValid).map(p=>ll(p.x,p.y));
     if(pts.length>1)state.map.fitBounds(L.latLngBounds(pts).pad(.18),{maxZoom:5});else if(pts.length)state.map.setView(pts[0],4);
   }
   function startSafePresentation(){
@@ -2046,13 +2044,10 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
   }
   function safePreflight(m){
     if(!m||(m.category||'dominacao')!=='gas')return {blocking:[],warnings:[],firstStage:null};
-    const blocking=safeRouteAudit(m),r=ensureSafeRoute(m);
-    if(r){
-      r.stages.forEach((st,i)=>{const land=safeStageValid(st)?safeLandCheck(st):null;if(land&&!land.ok)blocking.push('SAFE '+(i+1)+': '+land.reason);});
-      const reach=safeRouteReachability(r);for(let i=1;i<r.stages.length;i++){const opts=safeOptions(r,i);if(opts.length&&!reach[i]?.viable?.some(x=>x.index>=0))blocking.push('SAFE '+(i+1)+' não possui possibilidade com continuidade até a SAFE final.');}
-    }
-    const unique=[...new Set(blocking)],first=unique.map(safeIssueStage).find(x=>x!==null&&Number.isFinite(x));
-    return {blocking:unique,warnings:[],firstStage:first??null};
+    const r=ensureSafeRoute(m),warnings=[];if(!r)return {blocking:[],warnings,firstStage:null};
+    const missing=r.stages.map((s,i)=>safeStageValid(s)?null:i).filter(i=>i!==null);if(missing.length)warnings.push('SAFE(s) sem posição: '+missing.map(i=>'S'+(i+1)).join(', ')+'.');
+    safeWalkAnalysis(m).forEach(a=>{if(a.status!=='SEGURO')warnings.push(a.from+'→'+a.to+': '+a.status+' • borda '+a.edgeSpeed.toFixed(2)+'m/s • recomendado ≥ '+a.recommended+'s.');});
+    return {blocking:[],warnings,firstStage:missing[0]??null};
   }
   function focusSafePreflight(stage){
     const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return;
@@ -2060,10 +2055,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     const st=r.stages[i];if(safeStageValid(st)&&state.map)state.map.panTo(ll(st.x,st.y));
   }
   function requireSafePreflight(m,action='gerar a solicitação'){
-    const check=safePreflight(m);if(!check.blocking.length)return true;
-    if(check.firstStage!==null)focusSafePreflight(check.firstStage);
-    alert('NÃO É POSSÍVEL '+action.toUpperCase()+'.\n\nCorrija primeiro:\n- '+check.blocking.join('\n- ')+'\n\nA primeira SAFE com problema foi aberta no editor.');
-    return false;
+    const check=safePreflight(m);if(check.warnings.length)setSaveState('SAFE com '+check.warnings.length+' aviso(s) técnico(s) • '+action+' permitido');return true;
   }
   function highRequestExport(){
     const m=active();if(!m)return '';const a=plannerAudit(m),pts=(m.points||[]).filter(isValidated),r=(m.category||'dominacao')==='gas'?ensureSafeRoute(m):null,isSurvival=/sobreviv[eê]ncia/i.test(m.event||''),change=requestChangeScope(m),polyRaw=(m.category||'dominacao')==='dominacao'&&Array.isArray(m.zonePolygon)?m.zonePolygon:[],polyAudit=(m.category||'dominacao')==='dominacao'?dominationPolygonAudit(m):null,polyPending=polyRaw.filter(v=>validCoord(v?.x)&&validCoord(v?.y)&&(!validCoord(v?.z)||v?.status!=='validated')).length,polyInvalid=polyRaw.filter(v=>!validCoord(v?.x)||!validCoord(v?.y)).length;
@@ -2077,12 +2069,12 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     else if(change.zoneOnly&&!creating){const poly=dominationPolygon(m),polyMode=dominationZoneMode(m)==='polygon';lines.push('','ESCOPO DA ALTERAÇÃO:','- Alteração exclusiva da Zona de Pontuação deste evento.','- Manter spawns, mecânica de pontuação, regras, premiações e demais configurações atuais sem alteração.');if(polyMode&&poly.length<3){lines.push('- A forma escolhida é POLÍGONO POR CDS, porém o contorno ainda está incompleto.','- NÃO converter para Centro + Raio e NÃO implementar esta alteração enquanto faltarem vértices.','','ZONA ATUALIZADA — POLÍGONO EM CONSTRUÇÃO:','- Vértices válidos cadastrados: '+poly.length+' / mínimo 3.');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));}else if(polyMode&&poly.length>=3){if(change.zoneTransition==='radius-to-polygon')lines.push('- Converter a Zona de Pontuação atual de CENTRO + RAIO para POLÍGONO POR CDS.');else if(change.zoneTransition==='polygon-to-polygon')lines.push('- Substituir o contorno atual do POLÍGONO pelas novas CDS abaixo.');else lines.push('- Atualizar os limites da Zona de Dominação pelas CDS abaixo.');lines.push('','ZONA ATUALIZADA — POLÍGONO POR CDS:');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));lines.push('- As CDS acima formam o limite da Zona de Dominação, devem ser ligadas na ordem informada e fechadas do último ponto ao primeiro.','- Estas CDS NÃO são pontos de spawn.');}else{if(change.zoneTransition==='polygon-to-radius')lines.push('- Converter a Zona de Pontuação atual de POLÍGONO POR CDS para CENTRO + RAIO.','- O polígono/CDS de contorno anterior deixa de definir a área válida da Zona de Pontuação.','- Manter os pontos de spawn atuais sem alteração.');else lines.push('- Atualizar somente o centro e o raio conforme abaixo.');lines.push('','ZONA ATUALIZADA — CENTRO + RAIO:','- Centro: '+f(m.center?.x)+', '+f(m.center?.y)+', '+f(m.center?.z),'- Raio: '+Math.round(effectiveEventRadius(m))+'m');}}
     else{const poly=dominationPolygon(m),polyMode=dominationZoneMode(m)==='polygon';lines.push('','CONFIGURAÇÃO DA ZONA:');if((m.category||'dominacao')==='dominacao'&&polyMode&&poly.length<3){lines.push('- Forma da Zona de Pontuação: POLÍGONO POR CDS — INCOMPLETO.','- Vértices válidos cadastrados: '+poly.length+' / mínimo 3.','- NÃO implementar como Centro + Raio; concluir e validar o polígono antes da implementação.');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));}else if((m.category||'dominacao')==='dominacao'&&polyMode&&poly.length>=3){lines.push('- Forma da Zona de Pontuação: POLÍGONO POR CDS.','- CDS que formam o limite da Zona de Dominação:');poly.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+(isValidated(p)?'':'  [PENDENTE DE VALIDAÇÃO]')));lines.push('- Ligar as CDS na ordem informada e fechar do último ponto ao primeiro.','- Estas CDS formam a zona e NÃO são spawns.');}else lines.push('- Forma da zona: CENTRO + RAIO.','- Centro: '+f(m.center?.x)+', '+f(m.center?.y)+', '+f(m.center?.z),'- Raio inicial: '+Math.round(effectiveEventRadius(m))+'m');lines.push('','SPAWNS / PONTOS DE ENTRADA:','- Spawns validados: '+pts.length);pts.forEach((p,i)=>lines.push('  '+String(i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)));}
     if(r){
-      lines.push('','SAFE DINÂMICA:','- Referência vertical da Safe: Z = 0.','- Fluxo com '+r.stages.length+' etapas: FECHA → MOVE → FECHA, até a SAFE final.');
+      lines.push('','SAFE DINÂMICA:','- Volume vertical da SAFE: fundo '+r.height.bottom+' até teto '+r.height.top+'.','- Fluxo com '+r.stages.length+' etapas: ESPERA → MOVE + REDUZ RAIO → próxima SAFE.');
       r.stages.forEach((st,i)=>{
         lines.push('- Safe '+(i+1)+': '+f(st.x)+', '+f(st.y)+', 0.00 | raio '+Math.round(Number(st.radius)||0)+'m | dano '+(Number(st.damage)||0)+' HP/s | fechamento '+(Number(st.closeSeconds)||0)+'s'+(i<r.stages.length-1?' | movimento '+(Number(st.moveSeconds)||0)+'s':''));
-        if(i>0)safeOptions(r,i).filter(p=>validCoord(p.x)&&validCoord(p.y)).forEach((p,j)=>lines.push('  - Opção '+(j+1)+': '+f(p.x)+', '+f(p.y)+', 0.00'));
+        
       });
-      lines.push('- Aviso fora da SAFE: "VOCÊ ESTÁ FORA DA SAFE — TOMANDO X DE DANO POR SEGUNDO".','- X acompanha automaticamente o dano da etapa ativa.','- Duração configurada da progressão: '+(safeTimeline(m).at(-1)?.at||0)+' segundos.');
+      lines.push('- HUD em movimento: "ATENÇÃO — A SAFE ZONE ESTÁ SE MOVENDO".','- Aviso fora da SAFE: "VOCÊ ESTÁ TOMANDO X DE DANO POR SEGUNDO FORA DA SAFE".','- X acompanha automaticamente o dano da etapa ativa.','- Duração configurada da progressão: '+(safeTimeline(m).at(-1)?.at||0)+' segundos.');
     }
     lines.push('','VALIDAÇÃO:');if(!a.issues.length&&!a.warns.length)lines.push('- Configuração aprovada pelas validações automáticas do Planejador.');else{a.issues.forEach(x=>lines.push('- BLOQUEIO: '+x));a.warns.forEach(x=>lines.push('- AVISO: '+x));}
     lines.push('','OBSERVAÇÕES:',isSurvival?'- O Fac X Fac existente permanece como referência de funcionamento; implementar somente as diferenças necessárias para o Sobrevivência.':'- Preservar as mecânicas/regras já existentes do evento base quando aplicável.','- As CDS acima estão em formato simples; vec3/vec4 não é obrigatório.','- Spawns utilizam Z real; somente a referência visual da Safe utiliza Z = 0.');
