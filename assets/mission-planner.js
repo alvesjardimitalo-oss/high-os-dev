@@ -1035,8 +1035,8 @@ infinite:true});}
     const base=`${remoteBases[baseIndex]}/${style}`;
     const SafeTiles=L.TileLayer.extend({
       getTileUrl(coords){
-        const max=Math.pow(2,coords.z)-1;
-        if(coords.x<0||coords.y<0||coords.x>max||coords.y>max)return TRANSPARENT_TILE;
+        // CRS GTA usa transformação própria; não aplicar limites XYZ WebMercator aqui.
+        // O servidor/fallback decide se a coordenada existe.
         return `${base}/${coords.z}/${coords.x}/${coords.y}.${ext}`;
       }
     });
