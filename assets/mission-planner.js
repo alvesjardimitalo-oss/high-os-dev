@@ -1381,7 +1381,7 @@ iconAnchor:[12,
   function safeTimeline(m){
     const r=ensureSafeRoute(m);if(!r)return [];const initial=safeInitialStage(m),stages=(r.stages||[]).filter(safeStageValid);if(!safeStageValid(initial)||!stages.length)return [];
     let at=0;const out=[{label:'RAIO INICIAL',at:0,radius:initial.radius,duration:0,type:'start'}],chain=[initial,...stages];
-    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],transition=safeTransitionSeconds(from,to,i);at+=transition;out.push({label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),at,radius:to.radius,duration:transition,type:'transition'});if(i<stages.length-1){const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold){at+=hold;out.push({label:'S'+(i+1)+' ATIVA',at,radius:to.radius,duration:hold,type:'hold'});}}
+    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],transition=safeTransitionSeconds(from,to,i);at+=transition;out.push({label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),at,radius:to.radius,duration:transition,type:'transition'});if(i<stages.length-1){const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold){at+=hold;out.push({label:'S'+(i+1)+' ATIVA',at,radius:to.radius,duration:hold,type:'hold'});}}}
     const final=stages[stages.length-1],finalClose=safeFinalCloseSeconds(r);at+=finalClose;out.push({label:'FECHAMENTO TOTAL',at,radius:0,duration:finalClose,type:'final-close'});return out;
   }
   function safeTotalSeconds(m){const tl=safeTimeline(m);return tl.length?tl[tl.length-1].at:0;}
