@@ -1523,7 +1523,7 @@ iconAnchor:[12,
   }
   function safeTotalSeconds(m){const tl=safeTimeline(m);return tl.length?tl[tl.length-1].at:0;}
   function formatDuration(sec){sec=Math.max(0,Math.round(Number(sec)||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return (h?h+'h ':'')+(m?m+'min ':'')+(s||(!h&&!m)?s+'s':'');}
-  function setSafeConfigView(on){state.safeConfigView=!!on;if(on)state.layerVisibility.spawns=false;renderMap();}
+  function setSafeConfigView(on){state.safeConfigView=!!on;state.layerVisibility.spawns=!on;qsa('[data-mplayer="spawns"]').forEach(c=>c.checked=!on);const b=qs('#mpSafeFocus');if(b){b.textContent=on?'Mostrar spawns':'Ocultar spawns';b.title=on?'Voltar a exibir os spawns no mapa':'Esconder os spawns para enxergar só as safes';}renderMap();} // V12.8.1 - antes escondia e nunca reexibia
   
   function safeRouteAudit(m){return [];}
   

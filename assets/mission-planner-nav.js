@@ -32,7 +32,7 @@
     mpSurvivalBtn:'Criar sobrevivência Fac x Fac',mpSavePresetBtn:'Salvar como preset',mpBackupDownload:'Baixar cópia',
     mpEnableDynamicSafe:'Criar safe dinâmica',mpAddSafeTop:'Adicionar safe',mpRemoveSafeTop:'Remover safe',
     mpDeleteSelectedSafe:'Excluir safe',mpPlaceSelectedSafe:'Posicionar safe',mpFocusSelectedSafe:'Focar safe',
-    mpSafeFocus:'Focar safe',mpSafePresent:'Apresentar',mpSafeTestPlayer:'Player de teste',
+    mpSafeFocus:'Ocultar spawns',mpSafePresent:'Apresentar',mpSafeTestPlayer:'Player de teste',
     mpSafePrevStage:'Safe anterior',mpSafeNextStage:'Próxima safe',
     mpDomPolygonAdd:'Adicionar vértice',mpDomPolygonBulkAdd:'Importar vértices',mpDomPolygonBulkReplace:'Substituir polígono',
     mpDomPolygonClear:'Limpar polígono',mpDomPolygonUndo:'Remover último',mpDomPolygonValidateAll:'Validar todos',
@@ -67,7 +67,7 @@
     [/^Marcar|^Posicionar|^Centralizar|^Parar de marcar|^Parar marcação/,'pin'],
     [/^Próximo|^Próxima|^Ir ao/,'next'],[/anterior$/i,'prev'],[/^Gerar/,'spark'],
     [/^Importar|^Restaurar|^Substituir/,'upload'],[/^Baixar/,'download'],[/^Reproduzir/,'play'],
-    [/^Pausar/,'pause'],[/^Gravar/,'record'],[/^Parar$/,'stop'],[/^Focar|^Ver |^Ocultar|^Antes/,'eye'],
+    [/^Pausar/,'pause'],[/^Gravar/,'record'],[/^Parar$/,'stop'],[/^Focar|^Ver |^Ocultar|^Mostrar|^Antes/,'eye'],
     [/^Replicar|^Duplicar/,'duplicate'],[/^Checklist/,'list'],[/^Player/,'user'],
     [/^(Los Santos|Cayo Perico)$/,'map'],[/^Renumerar/,'list']
   ];
