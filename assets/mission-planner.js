@@ -976,7 +976,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
       list.forEach(raw=>{
         if(!raw||!raw.id)return;
         const k=key(raw);if(known.has(k))return;
-        const m=JSON.parse(JSON.stringify(raw));normalizeCenter(m);
+        const m=JSON.parse(JSON.stringify(raw));delete m._syncConflict;normalizeCenter(m);
         if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');
         inferLegacyStructure(m);state.missions.push(m);known.add(k);recovered++;
       });
@@ -988,7 +988,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     try{raw=JSON.parse(localStorage.getItem(STORE)||'null')}catch(e){}
     if(Array.isArray(raw)&&raw.length){
       state.missions=raw;
-      state.missions.forEach(m=>{normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);});
+      state.missions.forEach(m=>{delete m._syncConflict;normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);});
     }else{
       // Nunca envia presets para o Firebase antes do primeiro pull.
       state.missions=presets.map(presetMission);
@@ -999,8 +999,7 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     state.activeId=state.missions.some(m=>m.id===preferred)?preferred:(state.missions[0]?.id||null);
     const am=state.missions.find(m=>m.id===state.activeId)||state.missions[0];
     state.libraryCategory=(am?.category||'dominacao');state.activeEventId=am?.eventId||null;
-    // Boot é somente leitura da nuvem: persiste localmente, sem HighOSMissionCloud.push.
-    persistBootStateLocalOnly();
+    // Boot é leitura pura: não grava cache, backup ou Firebase.
     if(recovered)console.info('Planejador: '+recovered+' missão(ões) recuperada(s) dos backups locais no boot.');
   }
 
@@ -2535,7 +2534,7 @@ ${mechanic}${safeRouteText}${gasHeightNote}
 z=zones[0];if(!z)return false;
     state.activeId=z.id;state.activeEventId=eventId;state.libraryCategory=z.category||'dominacao';return true;
   }
-  function syncConflicts(){return state.editing&&state.dirty?state.missions.filter(m=>m.id===state.activeId&&m?._syncConflict?.remote):[];}
+  function syncConflicts(){if(!(state.editing&&state.dirty))return [];return state.missions.filter(m=>m.id===state.activeId&&m?._syncConflict?.remote);}
   function resolveSyncConflict(id,choice){
     const idx=state.missions.findIndex(m=>m.id===id);if(idx<0)return;
     const local=state.missions[idx],remote=local?._syncConflict?.remote;if(!remote)return;
