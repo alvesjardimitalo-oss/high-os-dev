@@ -1384,11 +1384,12 @@ iconAnchor:[12,
     if(index===0)return Math.max(1,Number(to?.moveSeconds)||Number(to?.closeSeconds)||60);
     return Math.max(1,Number(from?.moveSeconds)||60);
   }
+  function safeFinalCloseSeconds(r){const last=r?.stages?.[r.stages.length-1];return Math.max(1,Number(last?.closeSeconds)||60);}
   function safeTimeline(m){
     const r=ensureSafeRoute(m);if(!r)return [];const initial=safeInitialStage(m),stages=(r.stages||[]).filter(safeStageValid);if(!safeStageValid(initial)||!stages.length)return [];
     let at=0;const out=[{label:'RAIO INICIAL',at:0,radius:initial.radius,duration:0,type:'start'}],chain=[initial,...stages];
-    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],transition=safeTransitionSeconds(from,to,i);at+=transition;out.push({label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),at,radius:to.radius,duration:transition,type:'transition'});const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold){at+=hold;out.push({label:'S'+(i+1)+' ATIVA',at,radius:to.radius,duration:hold,type:'hold'});}}
-    return out;
+    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],transition=safeTransitionSeconds(from,to,i);at+=transition;out.push({label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),at,radius:to.radius,duration:transition,type:'transition'});if(i<stages.length-1){const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold){at+=hold;out.push({label:'S'+(i+1)+' ATIVA',at,radius:to.radius,duration:hold,type:'hold'});}}
+    const final=stages[stages.length-1],finalClose=safeFinalCloseSeconds(r);at+=finalClose;out.push({label:'FECHAMENTO TOTAL',at,radius:0,duration:finalClose,type:'final-close'});return out;
   }
   function safeTotalSeconds(m){const tl=safeTimeline(m);return tl.length?tl[tl.length-1].at:0;}
   function formatDuration(sec){sec=Math.max(0,Math.round(Number(sec)||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return (h?h+'h ':'')+(m?m+'min ':'')+(s||(!h&&!m)?s+'s':'');}
@@ -1619,7 +1620,7 @@ iconAnchor:[12,
     if(state.safePreviewLayer){state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);}if(state.safePreviewCenterMarker)state.safePreviewCenterMarker.setLatLng(ll(x,y));updateSafeGasMask({x,y},rad);
     const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
     const geom=p.type==='transition'?safeTransitionGeometry(p.a,p.b):null,moved=geom?geom.centerDistance*u:0;
-    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='transition'?'⚠ A SAFE ESTÁ FECHANDO<br>⚠ A SAFE ESTÁ SE MOVIMENTANDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='transition'?(p.stage===0?'INICIAL → S1':'S'+p.stage+' → S'+(p.stage+1))+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • centro '+Math.round(moved)+'/'+Math.round(geom.centerDistance)+'m • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
+    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='final-close'?'⚠ FECHAMENTO FINAL<br>⚠ A SAFE ESTÁ FECHANDO TOTALMENTE':p.type==='transition'?'⚠ A SAFE ESTÁ FECHANDO<br>⚠ A SAFE ESTÁ SE MOVIMENTANDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='transition'?(p.stage===0?'INICIAL → S1':'S'+p.stage+' → S'+(p.stage+1))+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • centro '+Math.round(moved)+'/'+Math.round(geom.centerDistance)+'m • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
     const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';model.phaseIndex=pi;
   }
   function ensureSafeTimeline(){
@@ -1637,7 +1638,7 @@ iconAnchor:[12,
     stopSafePreview();state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
     (state.drawn||[]).filter(l=>l?._mpKind==='safe').forEach(l=>{try{if(state.map?.hasLayer(l))state.map.removeLayer(l);}catch(e){}});
     const chain=[initial,...stages],phases=[];
-    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],sec=safeTransitionSeconds(from,to,i);phases.push({type:'transition',label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),a:from,b:to,from:from.radius,to:to.radius,damage:Number(to.damage)||0,seconds:sec,stage:i});const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:to,b:to,from:to.radius,to:to.radius,damage:Number(to.damage)||0,seconds:hold,stage:i});}
+    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],sec=safeTransitionSeconds(from,to,i);phases.push({type:'transition',label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),a:from,b:to,from:from.radius,to:to.radius,damage:Number(to.damage)||0,seconds:sec,stage:i});if(i<stages.length-1){const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:to,b:to,from:to.radius,to:to.radius,damage:Number(to.damage)||0,seconds:hold,stage:i});}}const last=stages[stages.length-1],zero={...last,radius:0};phases.push({type:'final-close',label:'FECHAMENTO TOTAL',a:last,b:zero,from:last.radius,to:0,damage:Number(last.damage)||0,seconds:safeFinalCloseSeconds(r),stage:stages.length-1});
     state.safePreviewMask=safeGasMask(initial,initial.radius);state.safePreviewLayer=L.circle(ll(initial.x,initial.y),{radius:Number(initial.radius),weight:5,color:'#d8b4fe',opacity:1,fill:false,fillOpacity:0,interactive:false,pane:'overlayPane'}).addTo(state.map);
     state.safePreviewRouteLayer=L.polyline(chain.map(s=>ll(s.x,s.y)),{color:'#f5d0fe',weight:3,opacity:.9,dashArray:'10 8',interactive:false}).addTo(state.map);
     const centerIcon=L.divIcon({className:'',html:'<div style="width:24px;height:24px;border-radius:50%;background:#7c3aed;border:4px solid #fff;box-shadow:0 0 0 4px rgba(124,58,237,.35),0 4px 14px rgba(0,0,0,.55)"></div>',iconSize:[24,24],iconAnchor:[12,12]});
