@@ -879,16 +879,15 @@ corpo});
     const chave=m=>`${String(m.eventId||'')}|${normalizeText(m.name||'')}`;
     entrada.forEach(raw=>{
       if(!raw||!raw.id)return;
-      const m=JSON.parse(JSON.stringify(raw));normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);
+      const m=JSON.parse(JSON.stringify(raw));delete m._syncConflict;normalizeCenter(m);if(!m.category)m.category=(String(m.event||'').toLowerCase().includes('domina')?'dominacao':'gas');inferLegacyStructure(m);
       let idx=state.missions.findIndex(x=>x.id===m.id);if(idx<0)idx=state.missions.findIndex(x=>chave(x)===chave(m));
       if(idx<0){state.missions.push(m);result.added++;return;}
-      const local=state.missions[idx];if(missionComparable(local)===missionComparable(m))return;
-      const lt=missionTime(local),rt=missionTime(m);
-      if(rt>lt){state.missions[idx]=m;result.updated++;result.conflicts.push({id:m.id,name:m.name,resolution:'firebase',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});}
-      else if(lt>rt){result.keptLocal++;result.conflicts.push({id:local.id,name:local.name,resolution:'local',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});}
-      else{local._syncConflict={at:nowIso(),remote:m};result.keptLocal++;result.conflicts.push({id:local.id,name:local.name,resolution:'manual',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});}
+      const local=state.missions[idx],isDirtyEdit=!!(state.editing&&state.dirty&&local.id===state.activeId);
+      if(missionComparable(local)===missionComparable(m)){delete local._syncConflict;return;}
+      if(isDirtyEdit){local._syncConflict={at:nowIso(),remote:m};result.keptLocal++;result.conflicts.push({id:local.id,name:local.name,resolution:'manual',localAt:local.updatedAt||'',remoteAt:m.updatedAt||''});return;}
+      state.missions[idx]=m;result.updated++;
     });
-    if(result.added||result.updated){state.applyingCloud=true;try{saveStore();}finally{state.applyingCloud=false;}render();}
+    if(result.added||result.updated)render();
     return result;
   }
 
@@ -2539,9 +2538,9 @@ ${mechanic}${safeRouteText}${gasHeightNote}
   function selectEventForAction(eventId){
     const zones=zonesOfEvent(eventId),
 z=zones[0];if(!z)return false;
-    state.activeId=z.id;state.activeEventId=eventId;state.libraryCategory=z.category||'dominacao';saveStore();return true;
+    state.activeId=z.id;state.activeEventId=eventId;state.libraryCategory=z.category||'dominacao';return true;
   }
-  function syncConflicts(){return state.missions.filter(m=>m?._syncConflict?.remote);}
+  function syncConflicts(){return state.editing&&state.dirty?state.missions.filter(m=>m.id===state.activeId&&m?._syncConflict?.remote):[];}
   function resolveSyncConflict(id,choice){
     const idx=state.missions.findIndex(m=>m.id===id);if(idx<0)return;
     const local=state.missions[idx],remote=local?._syncConflict?.remote;if(!remote)return;
