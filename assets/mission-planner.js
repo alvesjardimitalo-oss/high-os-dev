@@ -1376,9 +1376,18 @@ iconAnchor:[12,
   
   
   function safeStageValid(s){return !!s&&validCoord(s.x)&&validCoord(s.y)&&Number(s.radius)>0;}
+  function safeInitialStage(m){
+    const radius=Math.max(1,Number(effectiveEventRadius(m))||1000),cx=Number(m?.center?.x),cy=Number(m?.center?.y);
+    return {x:Number.isFinite(cx)?cx:null,y:Number.isFinite(cy)?cy:null,z:Number(m?.center?.z)||0,radius,damage:0,closeSeconds:0,moveSeconds:0,label:'INICIAL'};
+  }
+  function safeTransitionSeconds(from,to,index){
+    if(index===0)return Math.max(1,Number(to?.moveSeconds)||Number(to?.closeSeconds)||60);
+    return Math.max(1,Number(from?.moveSeconds)||60);
+  }
   function safeTimeline(m){
-    const r=ensureSafeRoute(m);if(!r)return [];let at=0;const out=[{label:'INÍCIO DO EVENTO',at:0,radius:effectiveEventRadius(m),duration:0,type:'start'}];
-    r.stages.forEach((st,i)=>{const close=Math.max(0,Number(st.closeSeconds)||0);at+=close;out.push({label:'SAFE '+(i+1)+' FECHADA',at,radius:Number(st.radius)||0,duration:close,type:'close'});if(i<r.stages.length-1){const move=Math.max(0,Number(st.moveSeconds)||0);at+=move;out.push({label:'MOVIMENTO → SAFE '+(i+2),at,radius:Number(st.radius)||0,duration:move,type:'move'});}});
+    const r=ensureSafeRoute(m);if(!r)return [];const initial=safeInitialStage(m),stages=(r.stages||[]).filter(safeStageValid);if(!safeStageValid(initial)||!stages.length)return [];
+    let at=0;const out=[{label:'RAIO INICIAL',at:0,radius:initial.radius,duration:0,type:'start'}],chain=[initial,...stages];
+    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],transition=safeTransitionSeconds(from,to,i);at+=transition;out.push({label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),at,radius:to.radius,duration:transition,type:'transition'});const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold){at+=hold;out.push({label:'S'+(i+1)+' ATIVA',at,radius:to.radius,duration:hold,type:'hold'});}}
     return out;
   }
   function safeTotalSeconds(m){const tl=safeTimeline(m);return tl.length?tl[tl.length-1].at:0;}
@@ -1496,7 +1505,7 @@ iconAnchor:[12,
     qs('#mpPlaceSelectedSafe')?.addEventListener('click',()=>beginSafePlacement(open));qs('#mpFocusSelectedSafe')?.addEventListener('click',()=>focusSafeStage(open));qs('#mpDeleteSelectedSafe')?.addEventListener('click',()=>removeSafeStage(open));
     qsa('[data-safe-field]',host).forEach(inp=>inp.addEventListener('change',e=>{if(!requireEdit())return;const rr=ensureSafeRoute(active()),v=Number(e.target.value);if(!Number.isFinite(v))return;rr.stages[open][e.target.dataset.safeField]=Math.max(0,v);commit('S'+(open+1)+' alterada');}));
     const analyses=safeWalkAnalysis(m);validator.innerHTML=analyses.length?'<b>ESCAPE A PÉ</b><br>'+analyses.map(a=>'<div title="'+esc(a.detail)+'" style="margin:5px 0"><b>'+a.from+'→'+a.to+'</b> • '+(a.canEscape?'✓ PLAYER CONSEGUE CORRER SEM O GÁS ALCANÇAR':'⚠ GÁS ALCANÇA O PLAYER')+'<br><small>Borda '+a.edgeSpeed.toFixed(2)+'m/s × player '+a.playerSpeed.toFixed(2)+'m/s • tempo '+a.seconds+'s → recomendado ≥ '+a.recommended+'s • raio destino '+Math.round(a.toRadius||0)+'m → sugestão ≥ '+Math.round(a.recommendedRadius)+'m</small></div>').join(''):'<b>ESCAPE A PÉ</b><br>Posicione pelo menos duas SAFEs.';
-    if(status)status.innerHTML='<b>S'+(open+1)+' '+(pos?'POSICIONADA':'SEM POSIÇÃO')+'</b> • clique em S1–S4 para editar • 🗑 remove individualmente';
+    if(status)status.innerHTML='<b>INICIAL → S1 → '+(r.stages.length>1?'S2'+(r.stages.length>2?' → S3':'')+(r.stages.length>3?' → S4':''):'')+'</b><br>Raio inicial '+Math.round(effectiveEventRadius(m))+'m • duração recalculada: <b>'+formatDuration(safeTotalSeconds(m))+'</b><br><small>S'+(open+1)+' '+(pos?'posicionada':'sem posição')+' • cada transição fecha e movimenta simultaneamente</small>';
   }
   function selectSafeStage(index,{focus=true,cancelPlacement=true}={}){
     const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return false;
@@ -1520,12 +1529,10 @@ iconAnchor:[12,
   }
   function safeBearingLabel(deg){const names=['N','NE','L','SE','S','SO','O','NO'];return names[Math.round(((deg%360)+360)%360/45)%8]+' '+Math.round(deg)+'°';}
   function safeWalkAnalysis(m){
-    const r=ensureSafeRoute(m);if(!r)return [];const playerSpeed=Math.max(1,Number(r.walkSpeed)||5.2),safeSpeed=playerSpeed*(Number(r.safetyMargin)||.85),out=[];
-    for(let i=0;i<r.stages.length-1;i++){const a=r.stages[i],b=r.stages[i+1],g=safeTransitionGeometry(a,b);if(!g)continue;
-      const recommended=Math.ceil(g.edgeTravel/safeSpeed),ratio=g.edgeSpeed/safeSpeed,status=ratio<=.8?'SEGURO':ratio<=1?'ATENÇÃO':'RISCO',canEscape=g.edgeSpeed<playerSpeed;
-      const maxShrinkForTime=Math.max(0,playerSpeed*g.seconds-g.centerDistance),minTargetRadius=Math.max(1,Math.ceil(Number(a.radius)-maxShrinkForTime));
-      const recommendedRadius=Math.min(Number(a.radius),Math.max(Number(b.radius),minTargetRadius));
-      out.push({from:'S'+(i+1),to:'S'+(i+2),...g,bearingLabel:safeBearingLabel(g.bearing),recommended,status,canEscape,playerSpeed,recommendedRadius,detail:'Centro '+Math.round(g.centerDistance)+'m + redução '+Math.round(g.shrink)+'m = avanço máximo '+Math.round(g.edgeTravel)+'m. Player '+playerSpeed.toFixed(2)+'m/s. Configurado '+g.seconds+'s; tempo seguro recomendado ≥ '+recommended+'s; raio de destino recomendado ≥ '+Math.round(recommendedRadius)+'m para manter este tempo.'});
+    const r=ensureSafeRoute(m);if(!r)return [];const playerSpeed=Math.max(1,Number(r.walkSpeed)||5.2),safeSpeed=playerSpeed*(Number(r.safetyMargin)||.85),stages=r.stages.filter(safeStageValid),initial=safeInitialStage(m),chain=safeStageValid(initial)?[initial,...stages]:stages,out=[];
+    for(let i=0;i<chain.length-1;i++){const a={...chain[i],moveSeconds:safeTransitionSeconds(chain[i],chain[i+1],i)},b=chain[i+1],g=safeTransitionGeometry(a,b);if(!g)continue;
+      const recommended=Math.ceil(g.edgeTravel/safeSpeed),ratio=g.edgeSpeed/safeSpeed,status=ratio<=.8?'SEGURO':ratio<=1?'ATENÇÃO':'RISCO',canEscape=g.edgeSpeed<=playerSpeed,maxShrinkForTime=Math.max(0,playerSpeed*g.seconds-g.centerDistance),minTargetRadius=Math.max(1,Math.ceil(Number(a.radius)-maxShrinkForTime)),recommendedRadius=Math.min(Number(a.radius),Math.max(Number(b.radius),minTargetRadius)),from=i===0?'INICIAL':'S'+i,to='S'+(i+1);
+      out.push({from,to,...g,bearingLabel:safeBearingLabel(g.bearing),recommended,status,canEscape,playerSpeed,recommendedRadius,detail:'Centro '+Math.round(g.centerDistance)+'m + redução '+Math.round(g.shrink)+'m = avanço máximo '+Math.round(g.edgeTravel)+'m. Player '+playerSpeed.toFixed(2)+'m/s. Configurado '+g.seconds+'s; tempo seguro recomendado ≥ '+recommended+'s; raio de destino recomendado ≥ '+Math.round(recommendedRadius)+'m.'});
     }return out;
   }
   
@@ -1608,11 +1615,11 @@ iconAnchor:[12,
   function safePreviewAt(seconds){
     const model=state.safePreviewModel;if(!model||!model.phases.length)return;const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
     for(let i=0;i<model.phases.length;i++){if(elapsed<=acc+model.phases[i].seconds||i===model.phases.length-1){p=model.phases[i];pi=i;break;}acc+=model.phases[i].seconds;}
-    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,x=p.type==='move'?Number(p.a.x)+(Number(p.b.x)-Number(p.a.x))*u:Number(p.a.x),y=p.type==='move'?Number(p.a.y)+(Number(p.b.y)-Number(p.a.y))*u:Number(p.a.y),rad=Number(p.from)+(Number(p.to)-Number(p.from))*u,damage=p.type==='move'?Math.round(Number(p.a.damage||0)+(Number(p.b.damage||0)-Number(p.a.damage||0))*u):Number(p.damage)||0;
+    const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,x=p.type==='transition'?Number(p.a.x)+(Number(p.b.x)-Number(p.a.x))*u:Number(p.a.x),y=p.type==='transition'?Number(p.a.y)+(Number(p.b.y)-Number(p.a.y))*u:Number(p.a.y),rad=Number(p.from)+(Number(p.to)-Number(p.from))*u,damage=p.type==='transition'?Math.round(Number(p.a.damage||0)+(Number(p.b.damage||0)-Number(p.a.damage||0))*u):Number(p.damage)||0;
     if(state.safePreviewLayer){state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);}if(state.safePreviewCenterMarker)state.safePreviewCenterMarker.setLatLng(ll(x,y));updateSafeGasMask({x,y},rad);
     const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
-    const geom=p.type==='move'?safeTransitionGeometry(p.a,p.b):null,moved=geom?geom.centerDistance*u:0;
-    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='move'?'⚠ A SAFE ZONE ESTÁ SE MOVENDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='move'?'S'+(p.stage+1)+' → S'+(p.stage+2)+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • centro '+Math.round(moved)+'/'+Math.round(geom.centerDistance)+'m • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
+    const geom=p.type==='transition'?safeTransitionGeometry(p.a,p.b):null,moved=geom?geom.centerDistance*u:0;
+    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='transition'?'⚠ A SAFE ESTÁ FECHANDO<br>⚠ A SAFE ESTÁ SE MOVIMENTANDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='transition'?(p.stage===0?'INICIAL → S1':'S'+p.stage+' → S'+(p.stage+1))+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • centro '+Math.round(moved)+'/'+Math.round(geom.centerDistance)+'m • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
     const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';model.phaseIndex=pi;
   }
   function ensureSafeTimeline(){
@@ -1625,26 +1632,31 @@ iconAnchor:[12,
     qs('#mpSafePrevStage',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.max(0,(model.phaseIndex||0)-2)));};qs('#mpSafeNextStage',bar).onclick=()=>{state.safePreviewPlaying=false;safePreviewAt(phaseStart(Math.min(model.phases.length-1,(model.phaseIndex||0)+2)));};qs('#mpSafeTestPlayer',bar).onclick=toggleSafeTestPlayer;return bar;
   }
   function startSafePreview(){
-    const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;const route=r.stages.filter(safeStageValid);if(route.length<2){alert('Posicione pelo menos S1 e S2 para simular.');return;}
+    const m=active(),r=ensureSafeRoute(m);if(!m||!r)return;const stages=r.stages.filter(safeStageValid),initial=safeInitialStage(m);
+    if(!safeStageValid(initial)||!stages.length){alert('Configure o raio inicial e posicione a S1 para simular.');return;}
     stopSafePreview();state.safeConfigView=true;state.layerVisibility.spawns=false;renderMap();
     (state.drawn||[]).filter(l=>l?._mpKind==='safe').forEach(l=>{try{if(state.map?.hasLayer(l))state.map.removeLayer(l);}catch(e){}});
-    const phases=[];route.forEach((st,i)=>{const hold=Math.max(0,Number(st.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:st,b:st,from:st.radius,to:st.radius,damage:st.damage,seconds:hold,stage:i});if(i<route.length-1){const next=route[i+1],sec=Math.max(1,Number(st.moveSeconds)||60);phases.push({type:'move',label:'A SAFE ZONE ESTÁ SE MOVENDO • S'+(i+1)+' → S'+(i+2),a:st,b:next,from:st.radius,to:next.radius,damage:st.damage,seconds:sec,stage:i});}});
-    const s1=route[0];state.safePreviewMask=safeGasMask(s1,s1.radius);state.safePreviewLayer=L.circle(ll(s1.x,s1.y),{radius:Number(s1.radius),weight:5,color:'#d8b4fe',opacity:1,fill:false,fillOpacity:0,interactive:false,pane:'overlayPane'}).addTo(state.map);state.safePreviewLayer.bringToFront?.();state.safePreviewRouteLayer=L.polyline(route.map(s=>ll(s.x,s.y)),{color:'#f5d0fe',weight:3,opacity:.9,dashArray:'10 8',interactive:false}).addTo(state.map);const centerIcon=L.divIcon({className:'',html:'<div style="width:24px;height:24px;border-radius:50%;background:#7c3aed;border:4px solid #fff;box-shadow:0 0 0 4px rgba(124,58,237,.35),0 4px 14px rgba(0,0,0,.55)"></div>',iconSize:[24,24],iconAnchor:[12,12]});state.safePreviewCenterMarker=L.marker(ll(s1.x,s1.y),{icon:centerIcon,interactive:false,zIndexOffset:5000}).addTo(state.map);state.safePreviewRouteLayer.bringToFront?.();state.safePreviewLayer.bringToFront?.();state.safePreviewCenterMarker.setZIndexOffset?.(5000);
-    const totalSeconds=phases.reduce((a,p)=>a+p.seconds,0),firstMoveIndex=phases.findIndex(p=>p.type==='move'),firstMoveAt=firstMoveIndex>0?phases.slice(0,firstMoveIndex).reduce((n,p)=>n+p.seconds,0):0;state.safePreviewModel={route,phases,totalSeconds,routeMode:'FIXA',phaseIndex:firstMoveIndex>=0?firstMoveIndex:0};state.safePreviewElapsed=firstMoveAt;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(firstMoveAt);
+    const chain=[initial,...stages],phases=[];
+    for(let i=0;i<stages.length;i++){const from=chain[i],to=chain[i+1],sec=safeTransitionSeconds(from,to,i);phases.push({type:'transition',label:(i===0?'INICIAL':'S'+i)+' → S'+(i+1),a:from,b:to,from:from.radius,to:to.radius,damage:Number(to.damage)||0,seconds:sec,stage:i});const hold=Math.max(0,Number(to.closeSeconds)||0);if(hold)phases.push({type:'hold',label:'SAFE '+(i+1)+' ATIVA',a:to,b:to,from:to.radius,to:to.radius,damage:Number(to.damage)||0,seconds:hold,stage:i});}
+    state.safePreviewMask=safeGasMask(initial,initial.radius);state.safePreviewLayer=L.circle(ll(initial.x,initial.y),{radius:Number(initial.radius),weight:5,color:'#d8b4fe',opacity:1,fill:false,fillOpacity:0,interactive:false,pane:'overlayPane'}).addTo(state.map);
+    state.safePreviewRouteLayer=L.polyline(chain.map(s=>ll(s.x,s.y)),{color:'#f5d0fe',weight:3,opacity:.9,dashArray:'10 8',interactive:false}).addTo(state.map);
+    const centerIcon=L.divIcon({className:'',html:'<div style="width:24px;height:24px;border-radius:50%;background:#7c3aed;border:4px solid #fff;box-shadow:0 0 0 4px rgba(124,58,237,.35),0 4px 14px rgba(0,0,0,.55)"></div>',iconSize:[24,24],iconAnchor:[12,12]});
+    state.safePreviewCenterMarker=L.marker(ll(initial.x,initial.y),{icon:centerIcon,interactive:false,zIndexOffset:5000}).addTo(state.map);
+    const totalSeconds=phases.reduce((n,p)=>n+p.seconds,0);state.safePreviewModel={route:chain,phases,totalSeconds,routeMode:'FIXA',phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
     let last=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-last)/1000;last=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},40);
   }
 
   async function recordSafeDemonstration(){
     const mapEl=state.map?.getContainer(),m=active(),r=ensureSafeRoute(m);if(!mapEl||!m||!r)return;
-    if(r.stages.filter(safeStageValid).length<2){alert('Posicione pelo menos S1 e S2 antes de gravar.');return;}
+    if(r.stages.filter(safeStageValid).length<1){alert('Posicione pelo menos S1 antes de gravar.');return;}
     if(!navigator.mediaDevices?.getDisplayMedia||typeof MediaRecorder==='undefined'){alert('Este navegador não oferece gravação de tela compatível.');return;}
-    stopSafePreview();startSafePreview();
+    stopSafePreview();
     let stream;try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false,preferCurrentTab:true});}catch{return;}
     const chunks=[],mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm',recorder=new MediaRecorder(stream,{mimeType:mime});
     state.safeRecorder=recorder;state.safeRecordStream=stream;
     recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data);};
     recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());state.safeRecorder=null;state.safeRecordStream=null;if(!chunks.length)return;const blob=new Blob(chunks,{type:'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='high-os-safe-'+slugify(m.event||'evento')+'-'+Date.now()+'.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);const b=qs('#mpSafeRecord');if(b){b.textContent='●';b.title='Gravar simulação';}};
-    recorder.start(500);const b=qs('#mpSafeRecord');if(b){b.textContent='■';b.title='Parar e salvar gravação';}
+    recorder.start(500);startSafePreview();const b=qs('#mpSafeRecord');if(b){b.textContent='■';b.title='Parar e salvar gravação';}
   }
   function toggleSafeRecording(){
     if(state.safeRecorder&&state.safeRecorder.state!=='inactive'){state.safeRecorder.stop();return;}
