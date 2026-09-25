@@ -918,10 +918,8 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     setCloudState('sync','↻ SINCRONIZANDO FIREBASE...');
     try{
       const res=await cloud.pull({force:true}),remote=Array.isArray(res?.missions)?res.missions:[],merge=mergeMissions(remote);if(res?.updatedAtText)state.cloudMeta={updatedAtText:res.updatedAtText,updatedBy:res.updatedBy||''};
-      const ok=cloud.pushNow?await cloud.pushNow(state.missions):(cloud.push?.(state.missions),true);
-      if(!ok){const ce=window.HighOSMissionCloudLastError;if(ce?.quota){const suffix=ce.when?` • tente após ${ce.when}${ce.estimated?' (estimado)':''}`:'';setCloudState('local','⚠ COTA FIREBASE ESGOTADA'+suffix);setSaveState('Cota do Firebase esgotada'+suffix+' • dados locais preservados');return;}throw new Error('Falha ao confirmar gravação');}
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
-      setSaveState(`Sincronização manual concluída ✓${merge.added?' • '+merge.added+' nova(s)':''}${merge.updated?' • '+merge.updated+' atualizada(s) do Firebase':''}${merge.keptLocal?' • '+merge.keptLocal+' versão(ões) locais mais recentes':''}${merge.conflicts.some(x=>x.resolution==='manual')?' • ⚠ conflito(s) para revisar':''}`);
+      setSaveState(`Firebase atualizado em memória ✓${merge.added?' • '+merge.added+' nova(s)':''}${merge.updated?' • '+merge.updated+' atualizada(s)':''}${merge.conflicts.some(x=>x.resolution==='manual')?' • ⚠ edição local não salva em conflito':''}`);
       render();
     }catch(e){
       console.warn('Planejador: sincronização manual falhou',e);setCloudState('local','⚠ FIREBASE PENDENTE');setSaveState('Falha ao sincronizar Firebase • dados locais preservados');
@@ -934,11 +932,8 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
     cloud.pull().then(async res=>{
       const remote=Array.isArray(res?.missions)?res.missions:[];
       const merge=mergeMissions(remote);
-      // V9.5: primeira sincronizacao e sempre uma UNIAO segura. O navegador
-      // nunca e substituido pela nuvem; depois da fusao, a lista completa volta
-      // ao Firestore para que outros computadores recebam as zonas que so
-      // existiam localmente.
-      if(cloud.pushNow){await cloud.pushNow(state.missions);}else cloud.push?.(state.missions);
+      // Leitura pura: abrir/sincronizar nunca grava de volta no Firebase.
+      // Escrita acontece somente no SALVAR explícito após alteração real.
       setCloudState('ok',`☁ SINCRONIZADO · ${new Set(state.missions.map(m=>m.eventId).filter(Boolean)).size} eventos · ${state.missions.length} zonas`);
       if(merge.added||merge.updated)setStatus(`${merge.added} nova(s) • ${merge.updated} atualizada(s) recebidas do Firebase.`,'ok');if(merge.conflicts.some(x=>x.resolution==='manual'))setSaveState('⚠ Existem conflitos de sincronização que não foram sobrescritos.');
     }).catch(()=>setCloudState('local'));
