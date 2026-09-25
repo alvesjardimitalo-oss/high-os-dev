@@ -1731,7 +1731,7 @@ iconAnchor:[12,
     const parents=idx===0?[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}]:safeParentCandidates(r,idx);
     parents.filter(safeStageValid).forEach((parent,j)=>{
       const allowed=Math.max(0,Number(parent.radius)-Number(child.radius));if(!allowed)return;
-      const circle=L.circle(ll(parent.x,parent.y),{radius:allowed,weight:3,color:'#38bdf8',opacity:.82,fillColor:'#38bdf8',fillOpacity:.045,dashArray:'6 7',interactive:true}).addTo(state.map);
+      const circle=L.circle(ll(parent.x,parent.y),{radius:allowed,weight:3,color:'#38bdf8',opacity:.82,fillColor:'#38bdf8',fillOpacity:.045,dashArray:'6 7',interactive:false}).addTo(state.map);
       circle.bindPopup('<b>ÁREA VÁLIDA DO CENTRO • SAFE '+(idx+1)+'</b><br>O centro da SAFE '+(idx+1)+' pode ficar dentro deste limite.<br>Raio da SAFE anterior: '+Math.round(Number(parent.radius))+'m<br>Raio da SAFE '+(idx+1)+': '+Math.round(Number(child.radius))+'m<br><b>Deslocamento máximo: '+Math.round(allowed)+'m</b>');
       state.drawn.push(circle);
       if(j===0){
@@ -1746,7 +1746,7 @@ iconAnchor:[12,
     for(let i=1;i<chain.length;i++){
       const parent=chain[i-1],child=chain[i],g=safeTransitionGeometry(parent,child);if(!g)continue;
       const from=i===1?'INICIAL':'S'+(i-1),to='S'+i,color=g.ok?'#22c55e':'#ef4444';
-      const line=L.polyline([ll(parent.x,parent.y),ll(child.x,child.y)],{weight:g.ok?2.2:5,dashArray:g.ok?'5 7':'12 6',opacity:g.ok?.34:.95,color,interactive:true}).addTo(state.map);
+      const line=L.polyline([ll(parent.x,parent.y),ll(child.x,child.y)],{weight:g.ok?2.2:5,dashArray:g.ok?'5 7':'12 6',opacity:g.ok?.34:.95,color,interactive:false}).addTo(state.map);
       const mid={x:(Number(parent.x)+Number(child.x))/2,y:(Number(parent.y)+Number(child.y))/2};
       const label=g.ok?'MARGEM +'+Math.round(g.margin)+'m':'EXCEDE '+Math.round(g.overflow)+'m';
       line.bindPopup('<b>'+from+' → '+to+'</b><br>Distância entre centros: '+Math.round(g.distance)+'m<br>Deslocamento máximo permitido: '+Math.round(g.available)+'m<br><b style="color:'+color+'">'+label+'</b>');
