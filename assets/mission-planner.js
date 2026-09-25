@@ -1498,7 +1498,7 @@ iconAnchor:[12,
     const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return false;
     const raw=Number(index);if(!Number.isInteger(raw))return false;
     const i=Math.max(0,Math.min(raw,r.stages.length-1));
-    if(cancelPlacement&&(state.safePlacementStage!==null||state.mapMode==='safe-stage'||state.mapMode==='safe-option'))resetMapPlacementModes();
+    if(cancelPlacement&&(state.safePlacementStage!==null||state.mapMode==='safe-stage'))resetMapPlacementModes();
     state.safeEditorStage=i;
     renderMap();
     if(focus)focusSafeStage(i);
