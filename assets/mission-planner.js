@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-mapMode:'center',safePlacementStage:null,safePlacementAsOption:false,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
+mapMode:'center',safeEditorStage:0,safePlacementStage:null,safePlacementAsOption:false,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -1678,9 +1678,9 @@ iconAnchor:[12,
         </div>
       </div>
     </section>`;}).join('');
-    qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeToggle);renderSafeRouteUi();renderMap();focusSafeStage(state.safeEditorStage);}));
-    qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safePlace);beginSafePlacement(Number(btn.dataset.safePlace),false);}));
-    qsa('[data-safe-option]',host).forEach(btn=>btn.addEventListener('click',()=>{state.safeEditorStage=Number(btn.dataset.safeOption);beginSafePlacement(Number(btn.dataset.safeOption),true);}));
+    qsa('[data-safe-toggle]',host).forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();selectSafeStage(Number(btn.dataset.safeToggle));}));
+    qsa('[data-safe-place]',host).forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const i=Number(btn.dataset.safePlace);selectSafeStage(i,{focus:false});beginSafePlacement(i,false);}));
+    qsa('[data-safe-option]',host).forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();const i=Number(btn.dataset.safeOption);selectSafeStage(i,{focus:false});beginSafePlacement(i,true);}));
     qsa('[data-safe-clear]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeClear);setSafeOptions(r,i,[]);commit('Possibilidades da SAFE '+(i+1)+' removidas');renderSafeRouteUi();renderMap();}));
     qsa('[data-safe-add-next]',host).forEach(btn=>btn.addEventListener('click',()=>addDynamicSafeStage()));
     qsa('[data-safe-option-remove]',host).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const i=Number(btn.dataset.safeOptionRemove),n=Number(btn.dataset.index),opts=safeOptions(r,i,true);if(!opts[n])return;opts.splice(n,1);commit('Possibilidade inválida S'+(i+1)+'-'+(n+1)+' removida');renderSafeRouteUi();renderMap();}));
@@ -1699,6 +1699,16 @@ iconAnchor:[12,
     qsa('[data-safe-remove]',opts).forEach(btn=>btn.addEventListener('click',()=>{if(!requireEdit())return;const stage=Number(btn.dataset.safeRemove),idx=Number(btn.dataset.index),arr=safeOptions(r,stage-1);if(!arr[idx])return;arr.splice(idx,1);setSafeOptions(r,stage-1,arr);commit('Opção inválida da Safe '+stage+' removida');}));
     qs('#mpSafeClearOptions')?.addEventListener('click',()=>{if(!requireEdit())return;for(let i=1;i<r.stages.length;i++)setSafeOptions(r,i,[]);r.stages.slice(1).forEach(st=>{st.x=null;st.y=null;});commit('Opções aleatórias da Safe removidas');});
     status.innerHTML=`Raio inicial: <b>${Math.round(initial)} m</b> • Etapas válidas: <b>${ok}/${r.stages.length}</b> • Evento: <b>${formatDuration(safeTotalSeconds(m))}</b>${state.safeConfigView?' • <b>SPAWNS OCULTOS</b>':''}<br><small>SAFE selecionada: <b>${openSafe+1}</b>${openSafe>0?` • caminhos viáveis: <b>${safeRouteReachability(r)[openSafe]?.viable?.length||0}</b>`:''} • Qualquer SAFE 2+ pode ter múltiplas possibilidades. A simulação monta apenas combinações compatíveis etapa por etapa.</small>`;
+  }
+  function selectSafeStage(index,{focus=true,cancelPlacement=true}={}){
+    const m=active(),r=ensureSafeRoute(m);if(!r?.stages?.length)return false;
+    const raw=Number(index);if(!Number.isInteger(raw))return false;
+    const i=Math.max(0,Math.min(raw,r.stages.length-1));
+    if(cancelPlacement&&(state.safePlacementStage!==null||state.mapMode==='safe-stage'||state.mapMode==='safe-option'))resetMapPlacementModes();
+    state.safeEditorStage=i;
+    renderMap();
+    if(focus)focusSafeStage(i);
+    return true;
   }
   function focusSafeStage(index){
     const m=active(),r=ensureSafeRoute(m);if(!state.map||!r)return;const i=Math.max(0,Math.min(Number(index)||0,r.stages.length-1)),st=r.stages[i];
@@ -1776,7 +1786,7 @@ iconAnchor:[12,
       const icon=L.divIcon({className:'',html:`<div class="mp-center-pin ${routeOk?'validated':''} ${isCurrent?'mp-safe-current':''}" style="font-size:11px;font-weight:900;${bg?'background:'+bg+';':''}${!routeOk?'border-color:#f87171':''}">S${i+1}</div>`,iconSize:[isCurrent?38:32,isCurrent?38:32],iconAnchor:[isCurrent?19:16,isCurrent?19:16]});
       const canDrag=!!state.editing&&isCurrent&&!state.safePresentation;
       const pin=L.marker(ll(s.x,s.y),{icon,interactive:true,draggable:canDrag}).addTo(state.map).bindPopup(`<b>SAFE ${i+1}${context?' • '+context:''}</b><br><b style="color:${routeOk?'#4ade80':'#f87171'}">${routeOk?'✓ ROTA VÁLIDA':'⚠ ROTA INVÁLIDA'}</b><br>Raio final: ${Math.round(Number(s.radius))}m<br>Dano: ${Number(s.damage)||0}<br>Fecha: ${Number(s.closeSeconds)||0}s${i<r.stages.length-1?`<br>Move: ${Number(s.moveSeconds)||0}s`:''}${canDrag?'<br><small>Arraste para reposicionar • verde = válido</small>':''}`);
-      pin.on('click',()=>{state.safeEditorStage=i;renderSafeRouteUi();renderMap();});
+      pin.on('click',()=>selectSafeStage(i));
       if(canDrag){
         const original={x:Number(s.x),y:Number(s.y)};
         pin.on('drag',e=>{const pos=e.target.getLatLng(),candidate={...s,x:pos.lng,y:pos.lat,z:0},parents=i===0?[{x:m.center?.x,y:m.center?.y,z:0,radius:effectiveEventRadius(m)}]:safeParentCandidates(r,i),fits=parents.length&&parents.some(p=>safeCircleFits(p,candidate)),land=safeLandCheck(candidate),next=r.stages[i+1],nextOk=!next||!safeStageValid(next)||safeCircleFits(candidate,next),ok=fits&&land.ok&&nextOk;
