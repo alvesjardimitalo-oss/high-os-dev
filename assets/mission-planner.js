@@ -531,7 +531,7 @@ activeEventId:null,
 activeMapName:null,
 workspaceOpen:false,
 cloudState:'local',
-mapMode:'center',safeEditorStage:0,safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,safePreviewCenterMarker:null,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
+mapMode:'center',safeEditorStage:0,safePlacementStage:null,polygonPlacement:false,layerVisibility:{zone:true,spawns:true,center:true,access:false},proToolsReady:false,undoStack:[],redoStack:[],lastEditSnapshot:null,compareOverlay:false,safePresentation:false,safePresentationPrev:null,safeConfigView:false,safePreviewModel:null,safePreviewElapsed:0,safePreviewPlaying:false,safePreviewSpeed:1,safeTestPlayer:null,safeTestPlayerMarker:null,safePreviewCenterMarker:null,safeBots:[],safeBotLayer:null,safeBotLastElapsed:0,zoneProposal:null,safeHoverMarker:null,cloudMeta:{updatedAtText:'',updatedBy:''}};
   const f=n=>Number(n).toFixed(2);
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const nowIso=()=>new Date().toISOString();
@@ -1685,7 +1685,7 @@ iconAnchor:[12,
     if(state.safePreviewRouteLayer&&state.map){try{state.map.removeLayer(state.safePreviewRouteLayer)}catch{}state.safePreviewRouteLayer=null;}if(state.safePreviewCenterMarker&&state.map){try{state.map.removeLayer(state.safePreviewCenterMarker)}catch{}state.safePreviewCenterMarker=null;}
     const hud=qs('#mpSafePreviewHud');if(hud)hud.remove();
     if(state.safeTestPlayerMarker&&state.map){try{state.map.removeLayer(state.safeTestPlayerMarker)}catch{}state.safeTestPlayerMarker=null;}
-    state.safeTestPlayer=null;qs('#mpSafeTimeline')?.remove();qs('#mpSafeTimelineSim')?.remove();
+    state.safeTestPlayer=null;clearSafeBots();qs('#mpSafeTimeline')?.remove();qs('#mpSafeTimelineSim')?.remove();
   }
   function ensurePreviewHud(){
     let hud=qs('#mpSafePreviewHud');if(hud)return hud;const wrap=qs('#missionPlannerMap')?.parentElement;if(!wrap)return null;
@@ -1743,14 +1743,31 @@ iconAnchor:[12,
     if(state.safeTestPlayer){if(state.safeTestPlayerMarker&&state.map){try{state.map.removeLayer(state.safeTestPlayerMarker)}catch{}}state.safeTestPlayer=null;state.safeTestPlayerMarker=null;safePreviewAt(state.safePreviewElapsed);return;}
     const model=state.safePreviewModel;if(!model?.route?.length)return;const s=model.route[0];state.safeTestPlayer={x:Number(s.x),y:Number(s.y)};updateSafeTestPlayerMarker();safePreviewAt(state.safePreviewElapsed);
   }
+  function clearSafeBots(){if(state.safeBotLayer&&state.map){try{state.map.removeLayer(state.safeBotLayer)}catch(e){}}state.safeBotLayer=null;state.safeBots=[];state.safeBotLastElapsed=0;}
+  function initSafeBots(m,initial){
+    clearSafeBots();if(!state.map||!m)return;const spawns=(m.points||[]).filter(p=>validCoord(p.x)&&validCoord(p.y));if(!spawns.length)return;
+    state.safeBotLayer=L.layerGroup().addTo(state.map);const total=70,per=Math.max(1,Math.floor(total/spawns.length));let made=0;
+    for(let si=0;si<spawns.length&&made<total;si++){const count=Math.min(total-made,si===spawns.length-1?total-made:per);for(let j=0;j<count&&made<total;j++,made++){const ang=(j/Math.max(1,count))*Math.PI*2+(si*.37),spread=5+(j%5)*2,x=Number(spawns[si].x)+Math.cos(ang)*spread,y=Number(spawns[si].y)+Math.sin(ang)*spread,team=si%10;
+      const mk=L.circleMarker(ll(x,y),{radius:3.2,weight:1,color:'#fff',opacity:.95,fillColor:['#60a5fa','#f87171','#34d399','#fbbf24','#c084fc','#fb7185','#22d3ee','#a3e635','#f97316','#818cf8'][team],fillOpacity:.95,interactive:false,pane:'markerPane'}).addTo(state.safeBotLayer);
+      state.safeBots.push({id:made,x,y,alive:true,team,marker:mk,seed:(made*9301+49297)%233280,nextFight:8+(made%11),kills:0});
+    }}
+  }
+  function updateSafeBots(elapsed,safe){
+    const bots=state.safeBots||[];if(!bots.length)return {alive:0,kills:0};const dt=Math.max(0,Math.min(1,elapsed-(state.safeBotLastElapsed||0)));state.safeBotLastElapsed=elapsed;
+    const target={x:Number(safe.x),y:Number(safe.y)},rad=Math.max(1,Number(safe.rad)||1);
+    bots.forEach((b,idx)=>{if(!b.alive)return;const dx=target.x-b.x,dy=target.y-b.y,d=Math.hypot(dx,dy)||1,inside=d<=rad*.72,wander=Math.sin(elapsed*.19+b.seed)*.55,speed=inside?1.15:3.9;b.x+=(dx/d*speed+(-dy/d)*wander)*dt;b.y+=(dy/d*speed+(dx/d)*wander)*dt;
+      if(elapsed>=b.nextFight){b.nextFight=elapsed+6+((b.seed+Math.floor(elapsed))%9);let enemy=null,best=170;for(const e of bots){if(!e.alive||e.team===b.team||e===b)continue;const ed=Math.hypot(e.x-b.x,e.y-b.y);if(ed<best){best=ed;enemy=e;}}if(enemy&&((b.seed+Math.floor(elapsed*3))%100)<34){enemy.alive=false;b.kills++;try{enemy.marker.setStyle({radius:2,color:'#6b7280',fillColor:'#111827',fillOpacity:.28,opacity:.35})}catch(e){}}}
+      try{b.marker.setLatLng(ll(b.x,b.y));}catch(e){}
+    });return {alive:bots.filter(b=>b.alive).length,kills:bots.reduce((n,b)=>n+b.kills,0)};
+  }
   function safePreviewAt(seconds){
     const model=state.safePreviewModel;if(!model||!model.phases.length)return;const total=model.totalSeconds,elapsed=Math.max(0,Math.min(total,Number(seconds)||0));state.safePreviewElapsed=elapsed;let acc=0,p=model.phases[model.phases.length-1],pi=model.phases.length-1;
     for(let i=0;i<model.phases.length;i++){if(elapsed<=acc+model.phases[i].seconds||i===model.phases.length-1){p=model.phases[i];pi=i;break;}acc+=model.phases[i].seconds;}
     const local=Math.max(0,elapsed-acc),u=p.seconds?Math.min(1,local/p.seconds):1,x=p.type==='transition'?Number(p.a.x)+(Number(p.b.x)-Number(p.a.x))*u:Number(p.a.x),y=p.type==='transition'?Number(p.a.y)+(Number(p.b.y)-Number(p.a.y))*u:Number(p.a.y),rad=Number(p.from)+(Number(p.to)-Number(p.from))*u,damage=p.type==='transition'?Math.round(Number(p.a.damage||0)+(Number(p.b.damage||0)-Number(p.a.damage||0))*u):Number(p.damage)||0;
     if(state.safePreviewLayer){state.safePreviewLayer.setLatLng(ll(x,y));state.safePreviewLayer.setRadius(rad);}if(state.safePreviewCenterMarker)state.safePreviewCenterMarker.setLatLng(ll(x,y));updateSafeGasMask({x,y},rad);
-    const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage);updateSafeTestPlayerMarker();
+    const hud=ensurePreviewHud(),remain=Math.max(0,Math.ceil(p.seconds-local)),player=safeTestPlayerStatus({x,y},rad,damage),botStats=updateSafeBots(elapsed,{x,y,rad});updateSafeTestPlayerMarker();
     const geom=p.type==='transition'?safeTransitionGeometry(p.a,p.b):null,moved=geom?geom.centerDistance*u:0;
-    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='final-close'?'⚠ FECHAMENTO FINAL<br>⚠ A SAFE ESTÁ FECHANDO TOTALMENTE':p.type==='transition'?'⚠ A SAFE ESTÁ FECHANDO<br>⚠ A SAFE ESTÁ SE MOVIMENTANDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='transition'?(p.stage===0?'INICIAL → S1':'S'+p.stage+' → S'+(p.stage+1))+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • centro '+Math.round(moved)+'/'+Math.round(geom.centerDistance)+'m • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
+    if(hud)hud.innerHTML='<div style="font-size:15px;font-weight:900">'+(p.type==='final-close'?'⚠ FECHAMENTO FINAL<br>⚠ A SAFE ESTÁ FECHANDO TOTALMENTE':p.type==='transition'?'⚠ A SAFE ESTÁ FECHANDO<br>⚠ A SAFE ESTÁ SE MOVIMENTANDO':'SAFE '+(p.stage+1)+' ATIVA')+'</div><div style="font-size:12px;margin-top:3px">'+(p.type==='transition'?(p.stage===0?'INICIAL → S1':'S'+p.stage+' → S'+(p.stage+1))+' • ':'')+'Raio '+Math.round(rad)+'m • '+damage+' dano/s fora • '+remain+'s'+(geom?' • centro '+Math.round(moved)+'/'+Math.round(geom.centerDistance)+'m • borda '+geom.edgeSpeed.toFixed(2)+'m/s':'')+'</div>'+(botStats.alive?'<div style="margin-top:5px;font-size:11px;color:#e9d5ff">SIMULAÇÃO • '+botStats.alive+'/70 vivos • '+botStats.kills+' eliminações</div>':'')+(player&&!player.inside?'<div style="margin-top:6px;color:#fca5a5;font-weight:900">VOCÊ ESTÁ TOMANDO '+damage+' DE DANO POR SEGUNDO FORA DA SAFE</div>':'');
     const range=qs('#mpSafeTimeRange'),clock=qs('#mpSafeTimeClock'),play=qs('#mpSafeTimePlay');if(range&&document.activeElement!==range)range.value=String(elapsed);if(clock)clock.textContent=formatDuration(elapsed)+' / '+formatDuration(total);if(play)play.textContent=state.safePreviewPlaying?'❚❚':'▶';model.phaseIndex=pi;
   }
   function ensureSafeTimeline(){
@@ -1773,7 +1790,7 @@ iconAnchor:[12,
     state.safePreviewRouteLayer=L.polyline(chain.map(s=>ll(s.x,s.y)),{color:'#f5d0fe',weight:3,opacity:.9,dashArray:'10 8',interactive:false}).addTo(state.map);
     const centerIcon=L.divIcon({className:'',html:'<div style="width:24px;height:24px;border-radius:50%;background:#7c3aed;border:4px solid #fff;box-shadow:0 0 0 4px rgba(124,58,237,.35),0 4px 14px rgba(0,0,0,.55)"></div>',iconSize:[24,24],iconAnchor:[12,12]});
     state.safePreviewCenterMarker=L.marker(ll(initial.x,initial.y),{icon:centerIcon,interactive:false,zIndexOffset:5000}).addTo(state.map);
-    const totalSeconds=phases.reduce((n,p)=>n+p.seconds,0);state.safePreviewModel={route:chain,phases,totalSeconds,routeMode:'FIXA',phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
+    const totalSeconds=phases.reduce((n,p)=>n+p.seconds,0);initSafeBots(m,initial);state.safePreviewModel={route:chain,phases,totalSeconds,routeMode:'FIXA',phaseIndex:0};state.safePreviewElapsed=0;state.safePreviewPlaying=true;state.safePreviewSpeed=1;ensureSafeTimeline();safePreviewAt(0);
     let lastTick=performance.now();state.safePreviewTimer=setInterval(()=>{const now=performance.now(),dt=(now-lastTick)/1000;lastTick=now;if(!state.safePreviewPlaying)return;const next=state.safePreviewElapsed+dt*state.safePreviewSpeed;if(next>=totalSeconds){state.safePreviewPlaying=false;safePreviewAt(totalSeconds);}else safePreviewAt(next);},40);
   }
 
