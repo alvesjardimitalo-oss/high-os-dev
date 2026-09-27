@@ -11544,7 +11544,6 @@ responsavel:currentProfile?.name||currentUser?.displayName||currentUser.email,
 confirmadoPor:currentUser.email};
 
  try{await setDoc(doc(db,'highos','data','faccoes',group),{anuncioDiscordStatus:status,
-status:'INATIVA',
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true});
 await addDoc(histCol,{sessionId:currentSessionId||'',
@@ -11558,7 +11557,8 @@ imagemUrl:f.imagemAnuncio||'',
 usuario:currentUser.email,
 data:serverTimestamp()});
 f.anuncioDiscordStatus=status;
-f.status='INATIVA';
+// Status de anúncio e status de ocupação são independentes.
+// Nunca rebaixar uma facção entregue para INATIVA ao confirmar postagem no Discord.
 f.updatedBy=currentUser.email;
 queryFreshAt.set('faccoes',Date.now());
 renderAvailableFaccoes();
