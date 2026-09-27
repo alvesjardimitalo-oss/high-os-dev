@@ -47,6 +47,20 @@ facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#deniedView'),appView=$('#appView'),sessionArea=$('#sessionArea');
 
 let currentUser=null,currentProfile=null,faccoes=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
+const HIGH_OS_DISCORD_API='https://high-os-discord-production.up.railway.app';
+async function highOsDiscordRequest(path,options={}){
+ if(!currentUser)throw new Error('Sessão expirada. Entre novamente.');
+ const token=await currentUser.getIdToken();
+ const res=await fetch(HIGH_OS_DISCORD_API+path,{...options,headers:{'content-type':'application/json','authorization':'Bearer '+token,...(options.headers||{})}});
+ const data=await res.json().catch(()=>({}));
+ if(!res.ok)throw new Error(data.error||('High OS Discord HTTP '+res.status));
+ return data;
+}
+function factionDiscordPayload(f={}){
+ return {group:f.group,segmento:f.segmento||'',qg:f.qg||'',status:f.status||'INATIVA',faccao:f.faccao||'',lider:f.lider||'',staff:f.staff||'',dataEntrega:f.dataEntrega||'',contingenteMin:Number(f.contingenteMin||0),contingenteMax:Number(f.contingenteMax||0),beneficios:f.beneficios||{},observacoes:f.observacao||f.observacoes||'',discordImageUrls:Array.isArray(f.discordImageUrls)?f.discordImageUrls:(f.imagemAnuncio?[f.imagemAnuncio]:[])};
+}
+async function saveFactionToDiscord(f){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify(factionDiscordPayload(f))});}
+
 
 const facCol=collection(db,'highos','data','faccoes'), histCol=collection(db,'highos','data','historico'), reqCol=collection(db,'highos','data','solicitacoes'), deliveryCol=collection(db,'highos','data','entregas'), orgCol=collection(db,'highos','data','organizacoes'), sessionCol=collection(db,'highos','data','sessoes_usuario'), usersCol=collection(db,'users');
 
@@ -4906,49 +4920,32 @@ createdAtText:new Date().toISOString(),
 createdBy:currentUser.email};
 
  try{
-  // encerra logicamente a ocupação anterior no Group e mantém a estrutura física do local.
+  // V12 Discord Storage: ocupação passa a ser persistida no High OS Discord.
+  // Não cria/atualiza documentos de facções, entregas, organizações ou histórico no Firestore.
   const previous=entregas.filter(x=>x.group===f.group&&x.status==='ATIVA');
-for(const d of previous)await setDoc(doc(db,'highos','data','entregas',d.id),{...d,
-status:'RECOLHIDA',
-recolhidaEm:serverTimestamp(),
-recolhidaPor:currentUser.email},{merge:true});
+  const deliveredGroup={...f,
+   status:'ATIVA',
+   faccao,
+   lider:payload.lider,
+   staff:payload.staff,
+   dataEntrega:payload.dataEntrega,
+   ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,beneficiosAtivos:active},
+   updatedBy:currentUser.email};
 
-  const deliveryRef=await addDoc(deliveryCol,payload);
-const deliveredGroup={...f,
-status:'ATIVA',
-faccao,
-lider:payload.lider,
-staff:payload.staff,
-dataEntrega:payload.dataEntrega,
-ocupacaoAtual:{faccao,
-lider:payload.lider,
-staff:payload.staff,
-dataEntrega:payload.dataEntrega,
-plano:payload.plano,
-beneficiosAtivos:active},
-updatedAt:serverTimestamp(),
-updatedBy:currentUser.email};
-await setDoc(doc(db,'highos','data','faccoes',f.group),deliveredGroup);
-await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
-await upsertOrganizationFromDelivery(payload,f);
+  await saveFactionToDiscord(deliveredGroup);
+  await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
 
-  await addDoc(histCol,{sessionId:currentSessionId||'',
-tipo:'ENTREGA_GROUP',
-group:f.group,
-faccao,
-solicitacoesGeradas:requests,
-extrato:extract,
-usuario:currentUser.email,
-data:serverTimestamp()});
-$('#newDeliveryModal').classList.add('hidden');
-const previousIds=new Set(previous.map(d=>d.id));
-entregas=entregas.map(d=>previousIds.has(d.id)?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email}:d);
-entregas.unshift({id:deliveryRef.id,...clonePlain(payload),createdAt:null});
-const fix=faccoes.findIndex(x=>x.group===f.group);
-if(fix>=0)faccoes[fix]={...clonePlain(deliveredGroup),id:faccoes[fix].id||f.group,updatedBy:currentUser.email};
-queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('entregas',Date.now());
-renderFaccoes();renderDeliveries();renderOrganizations();
-alert('Entrega registrada. A estrutura permanente do Group foi preservada.');
+  $('#newDeliveryModal').classList.add('hidden');
+  const previousIds=new Set(previous.map(d=>d.id));
+  entregas=entregas.map(d=>previousIds.has(d.id)?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email}:d);
+  entregas.unshift({id:'discord:'+f.group+':'+Date.now(),...clonePlain(payload),createdAt:null,storage:'DISCORD'});
+  const fix=faccoes.findIndex(x=>x.group===f.group);
+  if(fix>=0)faccoes[fix]={...clonePlain(deliveredGroup),id:faccoes[fix].id||f.group,updatedBy:currentUser.email};
+  queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('entregas',Date.now());
+  cacheEscrever('entregas_resumo',entregas);
+  renderFaccoes();renderDeliveries();renderOrganizations();
+  alert('Entrega registrada no High OS Discord.');
+
 
  }catch(err){alert('Erro ao concluir entrega: '+err.message)}
  finally{
