@@ -4625,6 +4625,52 @@ async function loadDeliveries(){
   renderDeliveries();
  }catch(e){if($('#deliveryList'))$('#deliveryList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message)}</p></div>`}
 }
+async function reconcileActiveDeliveriesToGroups(){
+ if(!Array.isArray(entregas)||!Array.isArray(faccoes)||!entregas.length||!faccoes.length)return;
+ const activeByGroup=new Map();
+ entregas.filter(d=>d&&d.status==='ATIVA'&&String(d.group||'').trim()&&String(d.faccao||'').trim())
+  .sort((a,b)=>String(a.createdAtText||a.dataEntrega||'').localeCompare(String(b.createdAtText||b.dataEntrega||'')))
+  .forEach(d=>activeByGroup.set(String(d.group),d));
+ const fixes=[];
+ for(const [group,d] of activeByGroup){
+  const f=faccoes.find(x=>x.group===group);
+  if(!f||f.removido)continue;
+  if(f.status==='ATIVA'&&String(f.faccao||'').trim()===String(d.faccao||'').trim())continue;
+  fixes.push({f,d});
+ }
+ if(!fixes.length)return;
+ if(!isAdmin())return;
+ try{
+  const batch=writeBatch(db);
+  fixes.forEach(({f,d})=>batch.set(doc(db,'highos','data','faccoes',f.group),{
+   status:'ATIVA',
+   faccao:String(d.faccao||'').trim(),
+   lider:d.lider||f.lider||'',
+   staff:d.staff||f.staff||'',
+   dataEntrega:d.dataEntrega||f.dataEntrega||'',
+   ocupacaoAtual:{
+    faccao:String(d.faccao||'').trim(),
+    lider:d.lider||'',
+    staff:d.staff||'',
+    dataEntrega:d.dataEntrega||'',
+    plano:d.plano||'',
+    beneficiosAtivos:Array.isArray(d.beneficiosAtivos)?d.beneficiosAtivos:[]
+   },
+   updatedAt:serverTimestamp(),
+   updatedBy:currentUser.email
+  },{merge:true}));
+  await batch.commit();
+  faccoes=faccoes.map(f=>{
+   const hit=fixes.find(x=>x.f.group===f.group);
+   if(!hit)return f;
+   const d=hit.d;
+   return {...f,status:'ATIVA',faccao:String(d.faccao||'').trim(),lider:d.lider||f.lider||'',staff:d.staff||f.staff||'',dataEntrega:d.dataEntrega||f.dataEntrega||'',ocupacaoAtual:{faccao:String(d.faccao||'').trim(),lider:d.lider||'',staff:d.staff||'',dataEntrega:d.dataEntrega||'',plano:d.plano||'',beneficiosAtivos:Array.isArray(d.beneficiosAtivos)?d.beneficiosAtivos:[]}};
+  });
+  queryFreshAt.set('faccoes',Date.now());
+  console.info('[HIGH OS] ocupações restauradas a partir das entregas ativas:',fixes.map(x=>x.f.group));
+ }catch(e){console.warn('[HIGH OS] falha ao reconciliar entregas ativas com Groups',e)}
+}
+
 function renderDeliveries(){
  if(!$('#deliveryList'))return;
 const q=($('#deliverySearch').value||'').toLowerCase(),
@@ -4912,7 +4958,9 @@ initDeliveryUi();
 const _loadFaccoesV5=loadFaccoes;
 loadFaccoes=async function(){await _loadFaccoesV5();
 renderFaccoes();
-await loadDeliveries()};
+await loadDeliveries();
+await reconcileActiveDeliveriesToGroups();
+renderFaccoes();renderAvailableFaccoes();renderOrganizations()};
 
 // ===== HIGH OS V5.1 · PERFIL TÉCNICO + MEMÓRIA OPERACIONAL DO GROUP =====
 let historico=[];
