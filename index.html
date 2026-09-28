@@ -86,6 +86,7 @@
           <button class="nav-item" data-page="metricas">▥ <span>Métricas</span></button>
           <button class="nav-item" data-page="economia">$ <span>Economia</span></button>
           <button class="nav-item" data-page="historico">◷ <span>Histórico</span></button>
+          <button class="nav-item" data-page="diario">▦ <span>Diário Operacional</span></button>
           <button class="nav-item" data-page="planejador">◎ <span>Planejador de Missões</span></button>
           <button class="nav-item" data-page="chat">✉ <span>Chat da Equipe</span></button>
           <button class="nav-item hidden" data-page="spotify">♫ <span>Spotify</span></button>
@@ -376,6 +377,15 @@
               <div id="missionPlannerMap"></div>
             </div>
           </div>
+        </section>
+        <section class="page" id="page-diario">
+          <div class="page-head"><div><div class="eyebrow">CRONOGRAMA • EXECUÇÃO • RESULTADOS • PREMIAÇÕES</div><h2>DIÁRIO OPERACIONAL</h2><p class="page-subtitle">Agenda e histórico oficial do Ilegal. Eventos, reuniões, doações, sorteios, benefícios e blindados registrados no Discord/Railway.</p></div><button id="diarioRefresh" class="btn-primary compact">ATUALIZAR</button></div>
+          <div class="metric-period-panel"><div class="metric-period-dates"><label>DATA<input id="diarioDate" type="date"></label><button id="diarioToday" class="btn-secondary compact">HOJE</button></div></div>
+          <div id="diarioStats" class="fac-stats"></div>
+          <div class="economy-shell"><div class="economy-summary"><div><span>AGENDA</span><b id="diarioAgendaCount">—</b></div><div><span>REALIZADOS</span><b id="diarioDoneCount">—</b></div><div><span>FONTE</span><b>Discord / Railway</b></div></div></div>
+          <div id="diarioAgenda" class="history-list"><div class="placeholder"><b>▦</b><h3>CARREGANDO CRONOGRAMA</h3></div></div>
+          <div class="page-head" style="margin-top:28px"><div><div class="eyebrow">FECHAMENTO DO DIA</div><h2>REGISTROS REALIZADOS</h2></div></div>
+          <div id="diarioList" class="history-list"><div class="placeholder"><b>◷</b><h3>CARREGANDO DIÁRIO</h3></div></div>
         </section>
         <section class="page" id="page-historico">
           <div class="page-head"><div><div class="eyebrow">AUDITORIA OPERACIONAL</div><h2>HISTÓRICO</h2><p class="page-subtitle">Linha do tempo de entregas, recolhimentos, alterações de estrutura, usuários e solicitações registradas no High OS.</p></div></div>
