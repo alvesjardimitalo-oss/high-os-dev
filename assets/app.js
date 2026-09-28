@@ -14821,120 +14821,32 @@ async function pullMissionsFromCloud({force=false}={}){
  if(!currentUser||!canViewModule('planejador'))return null;
  if(!force&&missionCloudLastPull&&Date.now()-missionCloudLastPullAt<MISSION_PULL_TTL)return missionCloudLastPull;
  try{
-  const snap=await getDocs(missionZonesCol);
-  let entries=snap.docs.map(missionSnapToEntry),legacy=false;
-  if(!entries.length){
-   const old=await getDoc(missionsDoc);
-   const lista=old.exists()&&Array.isArray(old.data()?.missions)?old.data().missions:[];
-   entries=lista.filter(m=>m&&m.id).map(m=>({id:String(m.id),rev:0,deleted:false,zona:m,legacy:true}));
-   legacy=true;
-  }else missionCloudMigrated=true;
-  missionCloudLastPull={entries,legacy,pulledAt:new Date().toISOString()};
-  missionCloudLastPullAt=Date.now();
-  return missionCloudLastPull;
- }catch(e){console.warn('Missoes: falha ao ler da nuvem',e);return null}
+  const rows=await highOsStoreList('missoes_zonas');
+  const entries=rows.map(x=>{let zona=null;if(!x.deleted){try{zona=JSON.parse(x.json||'null')}catch{}}return {id:String(x.zonaId||x.id),rev:Number(x.rev)||0,deleted:!!x.deleted,zona,updatedAtText:x.updatedAtText||'',updatedBy:x.updatedBy||'',deletedAtText:x.deletedAtText||'',deletedBy:x.deletedBy||''}});
+  missionCloudMigrated=true;missionCloudLastPull={entries,legacy:false,pulledAt:new Date().toISOString()};missionCloudLastPullAt=Date.now();return missionCloudLastPull;
+ }catch(err){console.warn('Missoes: falha ao ler do Discord',err);return null}
 }
-
-/* Migração única: documento antigo + cópia local deste navegador
-   (fica a versão mais recente de cada zona) viram documentos individuais.
-   Uma trava impede dois navegadores de migrarem ao mesmo tempo. */
 async function ensureMissionsMigrated(localList=[]){
- if(missionCloudMigrated)return {ok:true,migrated:false};
- if(!currentUser)return {ok:false,reason:'login'};
- try{
-  const marca=await getDoc(missionMigrationDoc);
-  if(marca.exists()&&marca.data()?.status==='done'){missionCloudMigrated=true;return {ok:true,migrated:false};}
-  if(!canEditModule('planejador'))return {ok:false,reason:'permission'};
-  assertRemoteWriteAvailable();
-  const email=missionEmail(),agora=new Date().toISOString();
-  const peguei=await runTransaction(db,async tx=>{
-   const m=await tx.get(missionMigrationDoc);
-   if(m.exists()){
-    const d=m.data()||{};
-    if(d.status==='done')return 'done';
-    const inicio=Date.parse(d.startedAt||'')||0;
-    if(d.status==='running'&&Date.now()-inicio<10*60*1000)return 'busy';
-   }
-   tx.set(missionMigrationDoc,{status:'running',startedAt:agora,by:email});
-   return 'mine';
-  });
-  if(peguei==='done'){missionCloudMigrated=true;return {ok:true,migrated:false};}
-  if(peguei==='busy')return {ok:false,reason:'busy'};
-
-  const old=await getDoc(missionsDoc);
-  const antigas=old.exists()&&Array.isArray(old.data()?.missions)?old.data().missions:[];
-  const tempo=m=>{const t=Date.parse(m?.updatedAt||'');return Number.isFinite(t)?t:0};
-  const porId=new Map();
-  [...antigas,...(Array.isArray(localList)?localList:[])].forEach(m=>{
-   if(!m||!m.id)return;
-   const id=String(m.id),atual=porId.get(id);
-   if(!atual||tempo(m)>tempo(atual))porId.set(id,m);
-  });
-  const lista=[...porId.values()];
-  for(let i=0;i<lista.length;i+=400){
-   const b=writeBatch(db);
-   lista.slice(i,i+400).forEach(z=>{
-    const limpa=missionCleanZone(z),json=JSON.stringify(limpa);
-    b.set(missionZoneRef(z.id),{zonaId:String(z.id),rev:1,deleted:false,json,
-     nome:String(limpa.name||''),eventId:String(limpa.eventId||''),evento:String(limpa.event||''),categoria:String(limpa.category||''),
-     updatedAt:serverTimestamp(),updatedAtText:agora,updatedBy:email,migradoEm:agora});
-   });
-   await b.commit();
-  }
-  await setDoc(missionMigrationDoc,{status:'done',doneAt:new Date().toISOString(),by:email,zonas:lista.length,origemAntiga:antigas.length},{merge:true});
-  missionCloudMigrated=true;missionCloudLastPullAt=0;
-  return {ok:true,migrated:true,count:lista.length};
- }catch(e){
-  console.warn('Missoes: falha na migração',e);
-  return {ok:false,reason:'error',error:missionCloudErrorInfo(e)};
- }
+ missionCloudMigrated=true;return {ok:true,migrated:false};
 }
-
-/* Grava ou exclui uma zona só se a nuvem ainda estiver na versão baseRev.
-   baseRev=null ignora a checagem (usado quando o usuário decide sobrescrever). */
 async function writeMissionZone(zona,baseRev,excluir){
  assertRemoteWriteAvailable();
- const id=String(zona?.id||''),ref=missionZoneRef(id),email=missionEmail(),agora=new Date().toISOString();
+ const id=String(zona?.id||''),docId=missionDocId(id),email=missionEmail(),agora=new Date().toISOString();
  if(!id)return {ok:false,id,reason:'sem-id'};
- return runTransaction(db,async tx=>{
-  const cur=await tx.get(ref);
-  const atual=cur.exists()?cur.data()||{}:null;
-  const remoteRev=atual?Number(atual.rev)||0:0;
-  if(baseRev!==null&&baseRev!==undefined&&remoteRev!==(Number(baseRev)||0)){
-   return {ok:false,id,conflict:true,remoteRev,remote:cur.exists()?missionSnapToEntry(cur):null};
-  }
-  const limpa=missionCleanZone(zona),json=excluir&&atual?.json?atual.json:JSON.stringify(limpa);
-  if(json.length>MISSION_MAX_JSON)return {ok:false,id,tooBig:true};
-  const base={zonaId:id,rev:remoteRev+1,json,
-   nome:String(limpa.name||atual?.nome||''),eventId:String(limpa.eventId||atual?.eventId||''),
-   evento:String(limpa.event||atual?.evento||''),categoria:String(limpa.category||atual?.categoria||''),
-   updatedAt:serverTimestamp(),updatedAtText:agora,updatedBy:email};
-  if(excluir)tx.set(ref,{...base,deleted:true,deletedAtText:agora,deletedBy:email});
-  else tx.set(ref,{...base,deleted:false,deletedAtText:'',deletedBy:''});
-  return {ok:true,id,rev:remoteRev+1,deleted:!!excluir,updatedAtText:agora,updatedBy:email};
- });
+ let atual=null;try{atual=await highOsStoreGet('missoes_zonas',docId)}catch{}
+ const remoteRev=atual?Number(atual.rev)||0:0;
+ if(baseRev!==null&&baseRev!==undefined&&remoteRev!==(Number(baseRev)||0))return {ok:false,id,conflict:true,remoteRev,remote:atual};
+ const limpa=missionCleanZone(zona),json=excluir&&atual?.json?atual.json:JSON.stringify(limpa);
+ const data={zonaId:id,rev:remoteRev+1,json,nome:String(limpa.name||atual?.nome||''),eventId:String(limpa.eventId||atual?.eventId||''),evento:String(limpa.event||atual?.evento||''),categoria:String(limpa.category||atual?.categoria||''),updatedAtText:agora,updatedBy:email,deleted:!!excluir,deletedAtText:excluir?agora:'',deletedBy:excluir?email:''};
+ await highOsStorePut('missoes_zonas',docId,data);
+ return {ok:true,id,rev:remoteRev+1,deleted:!!excluir,updatedAtText:agora,updatedBy:email};
 }
-
 async function writeMissionZones(itens=[],excluir=false){
  if(!currentUser||!canEditModule('planejador'))return {ok:false,permission:true,results:[]};
- const mig=await ensureMissionsMigrated([]);
- if(!mig.ok)return {ok:false,migration:mig,results:[]};
- const results=[];
- missionCloudEvent({state:'sync'});
- try{
-  for(const it of itens)results.push(await writeMissionZone(it.zona,it.baseRev,excluir));
- }catch(e){
-  console.warn('Missoes: falha ao gravar na nuvem',e);
-  const info=missionCloudErrorInfo(e);
-  window.HighOSMissionCloudLastError=info;
-  missionCloudEvent({state:info.quota?'quota':info.permission?'permission':'local',error:info});
-  return {ok:false,error:info,results};
- }
- missionCloudLastPullAt=0;
- window.HighOSMissionCloudLastError=null;
- const ok=results.every(r=>r.ok);
- missionCloudEvent({state:ok?'ok':'local',updatedAtText:new Date().toISOString(),updatedBy:missionEmail()});
- return {ok,results};
+ const results=[];missionCloudEvent({state:'sync'});
+ try{for(const it of itens)results.push(await writeMissionZone(it.zona,it.baseRev,excluir))}
+ catch(err){missionCloudEvent({state:'local',error:{message:err.message}});return {ok:false,error:{message:err.message},results}}
+ missionCloudLastPullAt=0;const ok=results.every(r=>r.ok);missionCloudEvent({state:ok?'ok':'local',updatedAtText:new Date().toISOString(),updatedBy:missionEmail()});return {ok,results};
 }
 
 window.HighOSMissionCloud={
