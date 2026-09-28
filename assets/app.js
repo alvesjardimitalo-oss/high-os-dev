@@ -5485,7 +5485,10 @@ function parseIsoMetricDate(v=''){const m=String(v).match(/^(\d{4})-(\d{2})-(\d{
 return m?new Date(+m[1],+m[2]-1,+m[3]):null}
 function metricGroupOccupied(group){return faccoes.some(f=>alvesNorm(f.group)===alvesNorm(group)&&f.status==='ATIVA'&&String(f.faccao||'').trim())}
 function metricRowHasHistoricalOccupant(m={}){
- return !!String(m.faccaoSnapshot||m.faccaoHistorica||'').trim();
+ // Snapshots novos podem trazer a identidade histórica; registros legados do
+ // cache do bot não trazem. Group válido continua sendo dado histórico válido
+ // e não deve desaparecer apenas porque a ocupação atual mudou.
+ return !!String(m.faccaoSnapshot||m.faccaoHistorica||'').trim()||!!String(m.group||m.organizacao||'').trim();
 }
 function activeMetricRows(){
  /* V12.5 - uma métrica histórica pertence à facção que ocupava o Group
