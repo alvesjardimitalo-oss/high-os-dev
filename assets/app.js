@@ -6011,59 +6011,10 @@ break}}
 }
 
 async function persistMetricRows(rows,sheet='',{jaFiltrado=false}={}){
- if(metricQuotaBlocked)return {gravadas:0,
-bloqueado:true};
-
- const pendentes=jaFiltrado?rows:metricRowsPendentes(rows,metricasCache);
-
- if(!pendentes.length){
-  metricasCache=rows.slice();
-
-  return {gravadas:0,
-bloqueado:false};
-
- }
- try{
-  const chunks=[];
-for(let i=0;i<pendentes.length;i+=400)chunks.push(pendentes.slice(i,i+400));
-
-  for(const chunk of chunks){
-   const batch=writeBatch(db);
-
-   chunk.forEach(r=>{
-    r=metricSnapshot(r);
-    const id=(r.group+'_'+r.data).replace(/[^a-zA-Z0-9_-]/g,'_');
-    batch.set(doc(db,'highos','data','metricas',id),{...r,
-source:'GOOGLE_SHEETS_READONLY',
-sourceSheet:sheet||metricSourceConfig.sheet||'',
-updatedAt:serverTimestamp(),
-updatedBy:currentUser.email},{merge:true});
-   });
-
-   await batch.commit();
-
-   metricWriteCount+=chunk.length;
-
-  }
-  /* V10.55 - compatibilidade legada: a gravação dos próprios registros já
-     contém updatedAt/updatedBy. Evita uma escrita adicional de Histórico. */
-  metricasCache=rows.slice();
-
-  renderMetricQuotaPanel();
-
-  return {gravadas:pendentes.length,
-bloqueado:false};
-
- }catch(e){
-  if(isQuotaError(e))enterQuotaMode(e);
- else console.warn('[MÉTRICAS] falha ao gravar:',e?.message||e);
-
-  return {gravadas:0,
-bloqueado:metricQuotaBlocked,
-erro:e?.message||String(e)};
-
- }
+ metricasCache=Array.isArray(rows)?rows.slice():[];
+ return {gravadas:0,bloqueado:false,source:'GOOGLE_SHEETS'};
 }
+
 function applyMetricSnapshot(qs,{realtime=false}={}){
  const previousKey=metricPeriodKey||currentMetricMonthKey();
 
@@ -6306,63 +6257,11 @@ n++}
 /* Grava um documento por mes alterado. Substitui persistMetricRows no
    fluxo novo; a funcao antiga continua no arquivo para compatibilidade. */
 async function salvarEspelhoMensal(rows=[],sheet=''){
- if(metricQuotaBlocked||!currentUser)return {gravados:0};
-
- if(!canEditModule('metricas'))return {gravados:0};
-
- const porMes=agruparPorMes(rows);
-
- let gravados=0;
-
- for(const [mes,
-linhas] of porMes){
-  const assinatura=assinaturaMes(linhas);
-
-  let anterior='';
-
-  try{anterior=localStorage.getItem('highos_metric_sig_'+mes)||''}catch(e){}
-  if(anterior===assinatura)continue;
-               // nada mudou nesse mes
-  try{
-   await setDoc(doc(metricMonthCol,mes),{
-    mes,
-
-    total:linhas.length,
-
-    assinatura,
-
-    sourceSheet:sheet||metricSourceConfig.sheet||'',
-
-    rows:compactarLinhas(linhas),
-
-    updatedAt:serverTimestamp(),
-
-    updatedAtText:new Date().toISOString(),
-
-    updatedBy:currentUser.email||''
-   });
-
-   metricWriteCount++;
-gravados++;
-
-   try{localStorage.setItem('highos_metric_sig_'+mes,assinatura)}catch(e){}
-  }catch(e){
-   if(isQuotaError(e)){enterQuotaMode(e);
-break}
-   console.warn('[MÉTRICAS] falha ao gravar o espelho de',mes,e?.message||e);
-
-  }
- }
- /* V10.55 - sincronização automática é telemetria técnica, não auditoria
-    administrativa. O próprio documento mensal já guarda updatedAt/updatedBy;
-    não criamos mais um documento extra no Histórico a cada ciclo. */
- if(gravados){
-  metricSourceState={...metricSourceState,lastSync:Date.now()};
- }
- renderMetricQuotaPanel();
-
- return {gravados};
-
+ // V12 Discord Storage: métricas permanecem na Google Sheets.
+ // O bot High OS lê a planilha diretamente; não replicar no Firestore.
+ metricasCache=Array.isArray(rows)?rows.slice():[];
+ metricSourceState={...metricSourceState,lastSync:Date.now()};
+ return {gravados:0,source:'GOOGLE_SHEETS'};
 }
 
 /* Le o espelho mensal. Usado quando o CSV nao esta disponivel. */
@@ -6450,28 +6349,7 @@ error:''};
   }catch(e){console.warn('[MÉTRICAS] planilha indisponível na abertura:',e?.message||e)}
  }
 
- // 2) espelho mensal: 1 leitura por mes
- try{
-  const doEspelho=await lerEspelhoMensal([currentMetricMonthKey(),
-metricPeriodKey]);
-
-  if(doEspelho?.length){
-   aplicarLinhasMetricas(doEspelho,'ESPELHO');
-
-   metricSourceState={...metricSourceState,
-status:'ESPELHO LOCAL',
-error:'Planilha indisponível; exibindo a última cópia mensal.'};
-
-   renderMetricSourceStatus();
-renderMetricQuotaPanel();
-startMetricAutoRecovery();
-    startMetricRealtime();
-metricsLoaded=true;
-
-   return;
-
-  }
- }catch(e){console.warn('[MÉTRICAS] espelho indisponível:',e?.message||e)}
+ // 2) Firestore removido do fluxo de métricas. Fallback somente para cache local já existente.
 
  // 3) V10.54 - nunca abrir automaticamente a coleção legada gigante.
  // Usa somente cache local já existente; sem cache, mantém a tela vazia e segura.
