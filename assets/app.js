@@ -10368,20 +10368,10 @@ b]){
 });
 
 async function wipeCollection(name){
-  const c = collection(db,'highos','data',name);
-
-  const qs = await getDocsCached(c,name,{ttl:0});
-
-  for(let i=0;i<qs.docs.length;i+=400){
-    const batch = writeBatch(db);
-
-    qs.docs.slice(i,i+400).forEach(d => batch.delete(d.ref));
-
-    await batch.commit();
-
-  }
-  return qs.size;
-
+ const rows=name==='faccoes'?(await highOsDiscordRequest('/v1/factions')).records||[]:await highOsStoreList(name);
+ if(name==='faccoes')throw new Error('Limpeza total de facções bloqueada para proteger os fóruns canônicos do Discord.');
+ for(const row of rows)await highOsStoreDelete(name,row.id);
+ return rows.length;
 }
 
 async function adminWipe(target){
