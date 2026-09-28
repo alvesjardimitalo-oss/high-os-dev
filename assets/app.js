@@ -6558,12 +6558,14 @@ all=days.flatMap(d=>hours.map(h=>d.slots[h]).filter(Number.isFinite)),
 max=Math.max(1,...all);
 const W=920,
 H=250,
-pad=38,
-step=days.length>1?(W-pad*2)/(days.length-1):0;
-const y=v=>H-pad-(v/max)*(H-pad*2);
-const lines=hours.map((h,idx)=>{const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?`${pad+i*step},${y(d.slots[h]).toFixed(1)}`:null);let segs=[],
-cur=[];pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur);return `<g class="metric-line line-${idx}">${segs.map(s=>s.length>1?`<polyline points="${s.join(' ')}"/>`:'' ).join('')}${days.map((d,i)=>Number.isFinite(d.slots[h])?`<circle cx="${pad+i*step}" cy="${y(d.slots[h]).toFixed(1)}" r="4"><title>${metricFmtDay(d.date)} • ${h} • ${d.slots[h]} online</title></circle>`:'').join('')}</g>`}).join('');
-return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img">${[0,.25,.5,.75,1].map(t=>`<line x1="${pad}" x2="${W-pad}" y1="${y(max*t)}" y2="${y(max*t)}" class="metric-grid-line"/><text x="4" y="${y(max*t)+4}" class="metric-axis-text">${Math.round(max*t)}</text>`).join('')}${lines}</svg>`}
+padY=38,
+// O SVG ocupa as mesmas 7 frações da régua de dias abaixo. Cada ponto fica
+// no centro exato da respectiva coluna (SEG..DOM), em vez de usar as bordas.
+x=i=>((i+.5)/7)*W;
+const y=v=>H-padY-(v/max)*(H-padY*2);
+const lines=hours.map((h,idx)=>{const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?`${x(i).toFixed(1)},${y(d.slots[h]).toFixed(1)}`:null);let segs=[],
+cur=[];pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur);return `<g class="metric-line line-${idx}">${segs.map(s=>s.length>1?`<polyline points="${s.join(' ')}"/>`:'' ).join('')}${days.map((d,i)=>Number.isFinite(d.slots[h])?`<circle cx="${x(i).toFixed(1)}" cy="${y(d.slots[h]).toFixed(1)}" r="4"><title>${metricFmtDay(d.date)} • ${h} • ${d.slots[h]} online</title></circle>`:'').join('')}</g>`}).join('');
+return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img">${[0,.25,.5,.75,1].map(t=>`<line x1="0" x2="${W}" y1="${y(max*t)}" y2="${y(max*t)}" class="metric-grid-line"/><text x="4" y="${y(max*t)+4}" class="metric-axis-text">${Math.round(max*t)}</text>`).join('')}${lines}</svg>`}
 function renderMetricIntelligence(rows=[],raw=[],seg=''){
  const daily=$('#metricDailyIntel'),
 weekly=$('#metricWeeklyIntel');
