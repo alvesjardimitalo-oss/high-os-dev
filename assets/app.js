@@ -4229,13 +4229,13 @@ function renderSaudeSistema(){
    <button type="button" id="saudeAtualizar">ATUALIZAR</button>
   </div>
   <div class="saude-grid">
-   ${saudeCartao('LEITURAS NESTA SESSÃO',leituras.toLocaleString('pt-BR'),pctL>70?'alerta':'ok',`${pctL}% do limite diário gratuito (50.000)`)}
-   ${saudeCartao('GRAVAÇÕES NESTA SESSÃO',gravacoes.toLocaleString('pt-BR'),gravacoes>15000?'alerta':'ok','limite diário: 20.000')}
+   ${saudeCartao('LEITURAS FIRESTORE',leituras.toLocaleString('pt-BR'),'neutro','legado; dados operacionais usam Discord')}
+   ${saudeCartao('GRAVAÇÕES FIRESTORE',gravacoes.toLocaleString('pt-BR'),'neutro','legado; dados operacionais usam Discord')}
    ${saudeCartao('ORIGEM DAS MÉTRICAS',origem,estadoOrigem,metricOrigem==='COLECAO_ANTIGA'?'a planilha e o espelho falharam':'')}
    ${saudeCartao('ÚLTIMA SINCRONIZAÇÃO',syncTexto,'neutro',sync?new Date(sync).toLocaleString('pt-BR'):'')}
    ${saudeCartao('ÚLTIMO BACKUP',backupTexto,estadoBackup,estadoBackup==='ok'?'':'rode tools/backup-firestore.html')}
    ${saudeCartao('SESSÕES ABERTAS',String(sessoesAbertas),sessoesAbertas>4?'alerta':'ok','contas com sessão em andamento')}
-   ${saudeCartao('MODO LOCAL',window.HighOSOffline?.ativo?'ATIVO':'desligado',window.HighOSOffline?.ativo?'erro':'ok',window.HighOSOffline?.ativo?'o Firebase não respondeu':'conexão normal')}
+   ${saudeCartao('STORAGE OPERACIONAL','DISCORD','ok','Railway / Discord Storage')}
    ${saudeCartao('MISSÕES SALVAS',String((JSON.parse(localStorage.getItem('highos_mission_planner_v832_missions')||'[]')||[]).length),'neutro','neste navegador')}
   </div>`;
  document.getElementById('saudeAtualizar')?.addEventListener('click',renderSaudeSistema);
@@ -4266,8 +4266,10 @@ async function loadUserAudit({force=false}={}){
     statBump('sessoes_usuario','docs',qs.docs.length);
    }
   }catch(err){
-   console.warn('[AUDITORIA] consulta paginada indisponível, usando cache legado:',err?.code||err?.message);
-   qs=await getDocsCached(sessionCol,'sessoes_usuario',{ttl:300000});
+   console.warn('[AUDITORIA] Discord indisponível, usando cache local:',err?.code||err?.message);
+   const local=cacheLer('sessoes_auditoria');
+   if(!local?.rows)throw err;
+   qs=comoSnapshot(local.rows);
   }
   userSessions=qs.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>sessionStartMs(b)-sessionStartMs(a));
   userSessionsLoadedAt=Date.now();
@@ -12205,7 +12207,7 @@ p.innerHTML=`<span>📎 ${esc(chatPendingAttachment.name)} • ${Math.round(chat
 $('#chatAttachmentClear').onclick=()=>{chatPendingAttachment=null;
 renderChatAttachmentPreview()}}
 async function prepareChatAttachment(file){if(!file)return;
-if(file.size>600*1024)return alert('Para manter o chat rápido e dentro do limite do Firestore, o anexo pode ter no máximo 600 KB.');
+if(file.size>600*1024)return alert('Para manter o chat rápido e dentro do limite do armazenamento do High OS, o anexo pode ter no máximo 600 KB.');
 const dataUrl=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)});
 chatPendingAttachment={name:file.name,
 type:file.type||'application/octet-stream',
@@ -12215,8 +12217,8 @@ renderChatAttachmentPreview()}
 function hmDisplayName(){const n=currentProfile?.name||currentUser?.displayName||currentUser?.email||'Usuário',
 r=currentProfile?.cargo||currentProfile?.role||'MEMBRO';
 return `${n} • ${r}`}
-// ===== HIGH OS V9.5.3 · HIGH CALL NATIVO (WebRTC + Firestore) =====
-// Sem iframe/Jitsi. Firestore faz somente a sinalizacao; audio/video trafegam por WebRTC.
+// ===== HIGH OS V12.8 · HIGH CALL NATIVO (WebRTC + Discord Storage) =====
+// Sem iframe/Jitsi. Railway/Discord faz a sinalização; áudio/vídeo trafegam por WebRTC.
 const HIGH_RTC_CONFIG={iceServers:[{urls:['stun:stun.l.google.com:19302',
 'stun:stun1.l.google.com:19302']}]};
 
