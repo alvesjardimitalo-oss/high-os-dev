@@ -6586,22 +6586,12 @@ avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null,
 pending=4-collected.length,
 status=!day||!collected.length?'SEM COLETA':pending?`PARCIAL • ${collected.length}/4 COLETAS • AGUARDANDO ${pending}`:'4/4 COLETAS • DIA COMPLETO';
 return `<section class="metric-daily-card"><header><div><span>${esc(title)}</span><h3>${day?esc(day.date.toLocaleDateString('pt-BR')):'SEM COLETA'}</h3><em class="metric-partial-status ${pending?'partial':'complete'}">${status}</em></div><div><small>PICO</small><b>${peak??'—'}</b></div><div><small>MÉDIA PARCIAL</small><b>${avg===null?'—':avg.toFixed(1)}</b></div></header><div class="metric-hour-grid">${hours.map(h=>`<div class="metric-hour-cell ${day&&Number.isFinite(day.slots[h])?'collected':'waiting'}"><span>${h.replace('H',':00')}</span><b>${day&&Number.isFinite(day.slots[h])?day.slots[h]:'—'}</b><small>${day&&Number.isFinite(day.slots[h])?'ONLINE':'AGUARDANDO COLETA'}</small></div>`).join('')}</div></section>`}
-function metricWeekSvg(days=[]){const hours=['14H',
-'16H',
-'21H',
-'23H'],
-all=days.flatMap(d=>hours.map(h=>d.slots[h]).filter(Number.isFinite)),
-max=Math.max(1,...all);
-const W=920,
-H=250,
-padY=38,
-// O SVG ocupa as mesmas 7 frações da régua de dias abaixo. Cada ponto fica
-// no centro exato da respectiva coluna (SEG..DOM), em vez de usar as bordas.
-x=i=>((i+.5)/7)*W;
-const y=v=>H-padY-(v/max)*(H-padY*2);
-const lines=hours.map((h,idx)=>{const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?`${x(i).toFixed(1)},${y(d.slots[h]).toFixed(1)}`:null);let segs=[],
-cur=[];pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur);return `<g class="metric-line line-${idx}">${segs.map(s=>s.length>1?`<polyline points="${s.join(' ')}"/>`:'' ).join('')}${days.map((d,i)=>Number.isFinite(d.slots[h])?`<circle cx="${x(i).toFixed(1)}" cy="${y(d.slots[h]).toFixed(1)}" r="4"><title>${metricFmtDay(d.date)} • ${h} • ${d.slots[h]} online</title></circle>`:'').join('')}</g>`}).join('');
-return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img">${[0,.25,.5,.75,1].map(t=>`<line x1="0" x2="${W}" y1="${y(max*t)}" y2="${y(max*t)}" class="metric-grid-line"/><text x="4" y="${y(max*t)+4}" class="metric-axis-text">${Math.round(max*t)}</text>`).join('')}${lines}</svg>`}
+function metricWeekSvg(days=[]){const hours=['14H','16H','21H','23H'],all=days.flatMap(d=>hours.map(h=>d.slots[h]).filter(Number.isFinite)),max=Math.max(1,...all);
+const W=920,H=280,padTop=28,padBottom=54,padLeft=38,padRight=18,plotW=W-padLeft-padRight,plotH=H-padTop-padBottom,x=i=>padLeft+(i/(Math.max(1,days.length-1)))*plotW,y=v=>padTop+plotH-(v/max)*plotH;
+const lines=hours.map((h,idx)=>{const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?`${x(i).toFixed(1)},${y(d.slots[h]).toFixed(1)}`:null);let segs=[],cur=[];pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur);return `<g class="metric-line line-${idx}">${segs.map(s=>s.length>1?`<polyline points="${s.join(' ')}"/>`:'').join('')}${days.map((d,i)=>Number.isFinite(d.slots[h])?`<circle cx="${x(i).toFixed(1)}" cy="${y(d.slots[h]).toFixed(1)}" r="4"><title>${metricFmtDay(d.date)} • ${h} • ${d.slots[h]} online</title></circle>`:'').join('')}</g>`}).join('');
+const grid=[0,.25,.5,.75,1].map(t=>`<line x1="${padLeft}" x2="${W-padRight}" y1="${y(max*t)}" y2="${y(max*t)}" class="metric-grid-line"/><text x="${padLeft-7}" y="${y(max*t)+4}" text-anchor="end" class="metric-axis-text">${Math.round(max*t)}</text>`).join('');
+const labels=days.map((d,i)=>`<g class="metric-x-day" data-metric-day="${d.key}"><line x1="${x(i)}" x2="${x(i)}" y1="${padTop}" y2="${padTop+plotH}" class="metric-day-guide"/><text x="${x(i)}" y="${H-25}" text-anchor="middle" class="metric-x-label">${metricFmtDay(d.date)}</text></g>`).join('');
+return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img">${grid}${labels}${lines}</svg>`}
 let metricWeekOffset=0;
 function renderMetricIntelligence(rows=[],raw=[],seg=''){
  const daily=$('#metricDailyIntel'),
@@ -6635,8 +6625,8 @@ const hours=['14H',
 '16H',
 '21H',
 '23H'];
-weekly.innerHTML=`<section class="metric-week-card"><header><div><span>SEMANA • ${esc(title)}</span><h3>${wb.start.toLocaleDateString('pt-BR')} — ${wb.end.toLocaleDateString('pt-BR')}</h3></div><div class="metric-week-legend">${hours.map((h,i)=>`<span class="l-${i}"><i></i>${h}</span>`).join('')}</div></header><div class="metric-week-nav"><button type="button" data-week-nav="-1">‹ SEMANA ANTERIOR</button><button type="button" data-week-current ${metricWeekOffset===0?'disabled':''}>SEMANA ATUAL</button><button type="button" data-week-nav="1" ${metricWeekOffset>=0?'disabled':''}>PRÓXIMA ›</button></div>${metricWeekSvg(week)}<div class="metric-week-days">${week.map(d=>`<button type="button" data-metric-day="${d.key}"><b>${metricFmtDay(d.date)}</b><small>${hours.map(h=>Number.isFinite(d.slots[h])?`${h} ${d.slots[h]}`:`${h} —`).join(' • ')}</small></button>`).join('')}</div></section>`;
-weekly.querySelectorAll('[data-metric-day]').forEach(b=>b.onclick=()=>{metricDateStart=b.dataset.metricDay;metricDateEnd=b.dataset.metricDay;syncMetricDateInputs();renderMetrics()});
+weekly.innerHTML=`<section class="metric-week-card"><header><div><span>SEMANA • ${esc(title)}</span><h3>${wb.start.toLocaleDateString('pt-BR')} — ${wb.end.toLocaleDateString('pt-BR')}</h3></div><div class="metric-week-legend">${hours.map((h,i)=>`<span class="l-${i}"><i></i>${h}</span>`).join('')}</div></header><div class="metric-week-nav"><button type="button" data-week-nav="-1">‹ SEMANA ANTERIOR</button><button type="button" data-week-current ${metricWeekOffset===0?'disabled':''}>SEMANA ATUAL</button><button type="button" data-week-nav="1" ${metricWeekOffset>=0?'disabled':''}>PRÓXIMA ›</button></div>${metricWeekSvg(week)}</section>`;
+
 weekly.querySelectorAll('[data-week-nav]').forEach(b=>b.onclick=()=>{metricWeekOffset+=Number(b.dataset.weekNav||0);if(metricWeekOffset>0)metricWeekOffset=0;renderMetricIntelligence(rows,raw,seg)});
 weekly.querySelector('[data-week-current]')?.addEventListener('click',()=>{metricWeekOffset=0;renderMetricIntelligence(rows,raw,seg)})
 }
