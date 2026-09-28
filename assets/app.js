@@ -1511,7 +1511,11 @@ userPhotoEl=$('#userPhoto');
   if(needsSegments)await loadSegmentConfig();
   if(initialPage==='dashboard')await loadDashboardConfig();
   if(needsSegments)await loadFaccoes();
-  if(['dashboard','metricas'].includes(initialPage))await loadMetrics();
+  if(['dashboard','metricas'].includes(initialPage)){
+   try{await loadMetrics()}catch(e){
+    console.warn('[HIGH OS] métricas indisponíveis no boot; painel seguirá carregando:',e?.message||e);
+   }
+  }
   /* V10.62 - recuperação periódica de métricas inicia apenas quando
      Dashboard/Métricas estiverem ativos; não cria timer global no login. */
   /* V10.61 - módulos não essenciais deixam de consumir Firestore no login.
@@ -1520,7 +1524,7 @@ userPhotoEl=$('#userPhoto');
  }catch(e){
   show(deniedView);
   $('#deniedText').innerHTML=`Falha ao carregar o painel: <b>${esc(e.code||'')}</b> ${esc(e.message||String(e))}`+
-   `<br><br><span style="font-size:12px;opacity:.85">Se aparecer <b>permission-denied</b>, a coleção citada no erro não está liberada nas regras do Firestore.</span>`;
+   `<br><br><span style="font-size:12px;opacity:.85">O login usa Firebase Auth; os dados operacionais são carregados pelo High OS Discord/Railway.</span>`;
   console.error('[HIGH OS] falha no login:',e);
  }
 });
