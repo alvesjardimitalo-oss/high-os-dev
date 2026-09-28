@@ -1443,6 +1443,23 @@ document.addEventListener('submit',e=>{if(isAdmin())return;const mod=moduleForEl
    Tenta o e-mail em minusculas e depois exatamente como o Google devolveu.
    Quando falha, diz o PORQUE na tela, em vez do texto generico de sempre.
    ===================================================================== */
+async function highOsDiscordWriteSelfTest(){
+ if(!currentUser)return {ok:false,reason:'no-user'};
+ const id='web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+ const payload={kind:'HIGH_OS_WEB_WRITE_TEST',nonce:id,createdAt:new Date().toISOString(),email:String(currentUser.email||'').toLowerCase()};
+ try{
+  await highOsStorePut('_selftest',id,payload);
+  const back=await highOsStoreGet('_selftest',id);
+  const ok=back?.kind===payload.kind&&back?.nonce===payload.nonce&&back?.email===payload.email;
+  await highOsStoreDelete('_selftest',id).catch(()=>{});
+  console.log('[HIGH OS][DISCORD SELFTEST]',{ok,id,source:'WEB',roundTrip:true});
+  return {ok,id,roundTrip:true};
+ }catch(error){
+  console.error('[HIGH OS][DISCORD SELFTEST] FALHOU',error);
+  return {ok:false,id,error:error.message||String(error)};
+ }
+}
+
 async function carregarCadastro(user){
  const email=String(user.email||'').toLowerCase();
  try{
@@ -1471,7 +1488,7 @@ onAuthStateChanged(auth,async user=>{
    return;
   }
   const snap=perfil.snap;
-  currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);
+  currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();const discordSelfTest=await highOsDiscordWriteSelfTest();if(!discordSelfTest.ok)throw new Error('Falha no teste Web → Discord Storage: '+(discordSelfTest.error||discordSelfTest.reason||'erro desconhecido'));await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);
   const userNameEl=$('#userName'),
 userRoleEl=$('#userRole'),
 userAccessEl=$('#userAccessLevel'),
