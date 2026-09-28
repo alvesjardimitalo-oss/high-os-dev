@@ -7518,56 +7518,21 @@ function startMetricAutoRecovery(){
 
 }
 async function requestServerMetricSync({quiet=false}={}){
- const btn=$('#syncMetricBtn'),
-old=btn?.textContent;
-if(btn){btn.disabled=true;
-btn.textContent='ATUALIZANDO...'}
+ const btn=$('#syncMetricBtn'),old=btn?.textContent;
+ if(btn){btn.disabled=true;btn.textContent='ATUALIZANDO...'}
  try{
-  const result=await recoverMetricsAutomatically({quiet:true});
-
-  if(!quiet){
-   if(result.source==='sheet'){
-    const d=result.diff||{},
-action=d.pendingRows?`Sincronização recuperada: ${d.pendingRows} registro(s) e ${d.newSlots} coleta(s) atualizada(s).`:'A Central já estava sincronizada com a planilha.';
-
-    alert(`${action}\n\nPLANILHA: até ${result.sheetLast.date} • ${result.sheetLast.slot}\nFIRESTORE: até ${result.fireLast.date} • ${result.fireLast.slot}`);
-
-   }else alert(`Central carregada do Firestore. ${metricas.length} registro(s) disponíveis.`)
-  }
+  const result=await loadMetrics({force:true});
+  if(!quiet)alert(`Central atualizada pelo Discord. ${Number(result?.rows?.length||metricas.length).toLocaleString('pt-BR')} registro(s) disponíveis.`);
   return true;
-
  }catch(e){
-  console.warn('[MÉTRICAS AUTO] atualização manual manteve dados locais/espelho:',e);
-
-  try{await loadMetrics()}catch(_){}
-  if(!quiet)alert('A planilha não respondeu agora. A Central manteve o último espelho/cache disponível e tentará sincronizar novamente automaticamente.\n\nDetalhe: '+(e.message||e));
-return false;
-
- }finally{if(btn){btn.disabled=false;
-btn.textContent=old||'ATUALIZAR CENTRAL'}}
+  console.warn('[MÉTRICAS] atualização manual via Discord falhou:',e);
+  if(!quiet)alert('Não foi possível consultar o snapshot de métricas no Discord.\n\nDetalhe: '+(e.message||e));
+  return false;
+ }finally{if(btn){btn.disabled=false;btn.textContent=old||'ATUALIZAR CENTRAL'}}
 }
 async function saveMetricSource(){
- const baseCfg={url:$('#metricSourceUrl')?.value?.trim()||metricSourceConfig.url||'',
-sheet:$('#metricSourceSheet')?.value?.trim()||metricSourceConfig.sheet||'',
-autoSync:true,
-mode:'GOOGLE_APPS_SCRIPT_FREE',
-schedule:'14:05,16:05,21:05,23:05',
-timeZone:'America/Sao_Paulo'};
- const same=['url','sheet','autoSync','mode','schedule','timeZone'].every(k=>String(metricSourceConfig?.[k]??'')===String(baseCfg[k]??''));
- if(same){
-  $('#metricSourceModal')?.classList.add('hidden');
-  renderMetricSourceStatus();
-  return alert('A fonte de métricas já está salva com estes dados.');
- }
- const cfg={...baseCfg,updatedAt:serverTimestamp(),updatedBy:currentUser.email};
-
- try{await setDoc(metricConfigDoc,cfg,{merge:true});
-metricSourceConfig={...metricSourceConfig,
-...cfg};
-metricConfigReadAt=Date.now();
-$('#metricSourceModal')?.classList.add('hidden');
-renderMetricSourceStatus();
-alert('Fonte registrada. A sincronização automática é executada pelo Apps Script da planilha, sem Cloud Functions e sem Blaze.')}catch(e){alert('Erro ao salvar a fonte: '+e.message)}
+ const cfg={url:$('#metricSourceUrl')?.value?.trim()||metricSourceConfig.url||'',sheet:$('#metricSourceSheet')?.value?.trim()||metricSourceConfig.sheet||'',autoSync:true,mode:'DISCORD_APPS_SCRIPT',schedule:'14:05,16:05,21:05,23:05',timeZone:'America/Sao_Paulo',updatedAt:new Date().toISOString(),updatedBy:currentUser.email};
+ try{await highOsStorePut('config','metricas',cfg);metricSourceConfig={...metricSourceConfig,...cfg};metricConfigReadAt=Date.now();$('#metricSourceModal')?.classList.add('hidden');renderMetricSourceStatus();alert('Fonte registrada no Discord. O Apps Script alimenta o Railway/Discord automaticamente.')}catch(e){alert('Erro ao salvar a fonte: '+e.message)}
 }
 $('#metricSourceBtn')?.addEventListener('click',openMetricSource);
 $('#metricSourceClose')?.addEventListener('click',()=>$('#metricSourceModal')?.classList.add('hidden'));
