@@ -1597,7 +1597,7 @@ async function loadFaccoes(){
    /* Facções são fonte operacional compartilhada com o bot/Discord.
       Não usar espelho local dentro do TTL aqui: a tela precisa confirmar
       o mesmo estado remoto que o sincronizador do Discord enxerga. */
-   const qs=await getDocsCached(facCol,'faccoes',{ttl:0});
+   const qs=await getDocsCached(facCol,'faccoes',{ttl:15000});
    faccoes=qs.docs.map(d=>({id:d.id,...d.data()}));
    faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
    faccoesLoaded=true;
