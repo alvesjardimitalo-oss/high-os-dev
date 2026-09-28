@@ -1339,6 +1339,10 @@ desc:'Tabela, pista e referências econômicas'},
 label:'Histórico',
 desc:'Movimentações e auditoria operacional'},
 
+ {id:'diario',
+label:'Diário Operacional',
+desc:'Cronograma, eventos, reuniões, doações, benefícios e relatórios'},
+
  {id:'planejador',
 label:'Planejador de Missões',
 desc:'Mapa GTA V, spawns, áreas e distribuição de equipes'},
@@ -1533,6 +1537,37 @@ userPhotoEl=$('#userPhoto');
    Evita caminhos paralelos que ativavam telas sem aplicar cache/timers/permissoes. */
 document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>activateAppPage(btn.dataset.page)));
 
+
+let operationalDiaryLoaded=false;
+function diaryTodayIso(){
+ const p=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const g=t=>p.find(x=>x.type===t)?.value||'';return g('year')+'-'+g('month')+'-'+g('day');
+}
+function diaryWeekday(date){
+ const d=new Date(date+'T12:00:00');return new Intl.DateTimeFormat('pt-BR',{weekday:'long'}).format(d).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace('-feira','');
+}
+async function loadOperationalDiary(){
+ const date=$('#diarioDate')?.value||diaryTodayIso(); if($('#diarioDate')&&!$('#diarioDate').value)$('#diarioDate').value=date;
+ try{
+  const [records,schedule]=await Promise.all([highOsStoreList('diario_operacional'),highOsStoreList('cronograma_operacional')]);
+  const rows=records.filter(x=>String(x.date||'')===date).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+  const day=diaryWeekday(date),agenda=schedule.filter(x=>x.active!==false&&String(x.day||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')===day).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+  const count=t=>rows.filter(x=>x.type===t).length;
+  $('#diarioAgendaCount').textContent=agenda.length;$('#diarioDoneCount').textContent=rows.length;
+  $('#diarioStats').innerHTML=[
+   ['ATIVIDADES',rows.length],['EVENTOS',count('evento')],['REUNIÕES',count('reuniao')],['DOAÇÕES / SORTEIOS',count('doacao')],['BENEFÍCIOS / BLINDADOS',count('beneficio')]
+  ].map(x=>`<div class="stat-card"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('');
+  $('#diarioAgenda').innerHTML=agenda.length?agenda.map(x=>`<article class="history-item"><div><b>${esc(x.time||'—')} • ${esc(x.name||'Atividade')}</b><p>${esc(String(x.type||'geral').toUpperCase())} • aviso automático ${Number(x.alertMinutes??15)} min antes</p></div><span class="status-chip ativa">AGENDADO</span></article>`).join(''):`<div class="placeholder"><b>▦</b><h3>SEM ATIVIDADES EXTRAS</h3><p>O cronograma padrão continua sendo monitorado pelo bot.</p></div>`;
+  $('#diarioList').innerHTML=rows.length?rows.map(x=>`<article class="history-item"><div><b>${esc(x.time||'—')} • ${esc(x.title||'Registro')}</b><p>${esc(String(x.type||'geral').toUpperCase())}${x.winner?' • Vencedor/beneficiado: '+esc(x.winner):''}${x.prize?' • '+esc(x.prize):''}${x.quantity?' • Qtd. '+esc(x.quantity):''}</p>${x.result?`<small>${esc(x.result)}</small>`:''}</div><span class="status-chip ativa">FINALIZADO</span></article>`).join(''):`<div class="placeholder"><b>◷</b><h3>SEM REGISTROS NESTA DATA</h3><p>Use /highos registrar no Discord para lançar o realizado.</p></div>`;
+  operationalDiaryLoaded=true;
+ }catch(e){
+  $('#diarioList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message||String(e))}</p></div>`;
+ }
+}
+$('#diarioRefresh')?.addEventListener('click',loadOperationalDiary);
+$('#diarioToday')?.addEventListener('click',()=>{if($('#diarioDate'))$('#diarioDate').value=diaryTodayIso();loadOperationalDiary()});
+$('#diarioDate')?.addEventListener('change',loadOperationalDiary);
+
 // HIGH OS V6.7 · o perfil do Group passa a abrir como página interna, não como modal.
 function activateAppPage(page){
  if(page!=='administracao'&&page!=='usuarios'&&!isAdmin()&&!canViewModule(page)){permissionDeniedMessage(page,false);
@@ -1546,6 +1581,7 @@ if(page==='dashboard')setTimeout(()=>loadDashboardConfig(),0);
 if(page==='spotify')setTimeout(()=>loadSpotifyConfig(),0);
 if(page==='economia')setTimeout(()=>loadMarketCatalog(),0);
 if(page==='solicitacoes')setTimeout(()=>loadRequests(),0);
+if(page==='diario')setTimeout(()=>loadOperationalDiary(),0);
 if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','group-profile','group-settings','org-profile'].includes(page)&&!faccoesLoaded)setTimeout(()=>loadFaccoes().catch(e=>console.warn('[FACÇÕES] lazy-load falhou',e)),0);
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='chat')setTimeout(()=>startChat(),0);
