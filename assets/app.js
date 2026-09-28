@@ -6059,14 +6059,17 @@ function startMetricRealtime(){
  stopMetricRealtime();
  const activePage=document.querySelector('.page.active')?.id?.replace('page-','')||'';
  if(!['dashboard','metricas'].includes(activePage))return;
- if(!metricRealtimeAtivo()||metricQuotaBlocked)return;
+ if(metricQuotaBlocked)return;
+ // A API do Discord/Railway serve o cache em RAM e não gera leituras no
+ // Firestore. Enquanto Dashboard/Métricas estiver visível, atualizamos
+ // automaticamente para que 14H/16H/21H/23H apareçam sem recarregar a página.
  refreshMetricRealtimeCheap();
  metricLiveTimer=setInterval(refreshMetricRealtimeCheap,5*60*1000);
 }
 document.addEventListener('visibilitychange',()=>{
  if(document.visibilityState==='hidden'){
   if(metricLiveTimer){clearInterval(metricLiveTimer);metricLiveTimer=null}
- }else if(metricRealtimeAtivo()&&!metricLiveTimer){
+ }else if(!metricLiveTimer){
   const activePage=document.querySelector('.page.active')?.id?.replace('page-','')||'';
   if(['dashboard','metricas'].includes(activePage))startMetricRealtime();
  }
