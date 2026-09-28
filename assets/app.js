@@ -3464,14 +3464,9 @@ async function loadRequests(){
       crescem continuamente e ficam limitados aos 300 mais recentes. */
    let modelos=[],registros=[];
    try{
-     const [qm,qr]=await Promise.all([
-       getDocs(query(reqCol,where('isModelo','==',true))),
-       getDocs(query(reqCol,orderBy('createdAtText','desc'),limit(REQUEST_RECORD_LIMIT)))
-     ]);
-     statBump('solicitacoes','leituras',2);
-     statBump('solicitacoes','docs',qm.docs.length+qr.docs.length);
-     modelos=qm.docs.map(d=>({id:d.id,...d.data()}));
-     registros=qr.docs.map(d=>({id:d.id,...d.data()})).filter(x=>x.isModelo!==true);
+     const all=await highOsStoreList('solicitacoes');
+     modelos=all.filter(x=>x.isModelo===true);
+     registros=all.filter(x=>x.isModelo!==true).sort((x,y)=>String(y.createdAtText||'').localeCompare(String(x.createdAtText||''))).slice(0,REQUEST_RECORD_LIMIT);
    }catch(err){
      console.warn('[SOLICITAÇÕES] consultas econômicas indisponíveis; coleção inteira não será lida:',err?.code||err?.message);
      const qs=cachedSnapshotOnly('solicitacoes');
@@ -4486,12 +4481,8 @@ async function orgHistory(name){
     aparecendo no Histórico geral paginado, sem transformar a abertura do
     perfil em uma leitura crescente da coleção inteira. */
  try{
-  const qs=await getDocs(query(histCol,where('faccao','==',key),limit(24)));
-  statBump('historico_perfil','leituras');
-  statBump('historico_perfil','docs',qs.docs.length);
-  return qs.docs.map(d=>({id:d.id,...d.data()}))
-   .sort((a,b)=>historyMillis(b)-historyMillis(a))
-   .slice(0,8);
+  const rows=(await highOsStoreList('historico')).filter(x=>String(x.faccao||'')===key).sort((a,b)=>historyMillis(b)-historyMillis(a)).slice(0,8);
+  return rows;
  }catch(e){
   console.warn('[HISTÓRICO/PERFIL] consulta econômica indisponível:',e?.code||e?.message);
   return historico.filter(h=>String(h.faccao||h.depois?.faccao||h.antes?.faccao||'').toLowerCase()===key.toLowerCase())
@@ -4613,14 +4604,9 @@ async function loadDeliveries(){
      o custo normal de abertura do painel. */
   let ativos=[],recentes=[];
   try{
-   const [qa,qr]=await Promise.all([
-    getDocs(query(deliveryCol,where('status','==','ATIVA'))),
-    getDocs(query(deliveryCol,orderBy('createdAtText','desc'),limit(DELIVERY_RECENT_LIMIT)))
-   ]);
-   statBump('entregas','leituras',2);
-   statBump('entregas','docs',qa.docs.length+qr.docs.length);
-   ativos=qa.docs.map(d=>({id:d.id,...d.data()}));
-   recentes=qr.docs.map(d=>({id:d.id,...d.data()}));
+   const all=await highOsStoreList('entregas');
+   ativos=all.filter(x=>x.status==='ATIVA');
+   recentes=all.slice().sort((x,y)=>String(y.createdAtText||y.dataEntrega||'').localeCompare(String(x.createdAtText||x.dataEntrega||''))).slice(0,DELIVERY_RECENT_LIMIT);
    const mapa=new Map([...ativos,...recentes].map(x=>[x.id,x]));
    entregas=[...mapa.values()];
   }catch(err){
