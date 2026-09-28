@@ -1494,7 +1494,7 @@ onAuthStateChanged(auth,async user=>{
    return;
   }
   const snap=perfil.snap;
-  currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();const discordSelfTest=await highOsDiscordWriteSelfTest();if(!discordSelfTest.ok)throw new Error('Falha no teste Web → Discord Storage: '+(discordSelfTest.error||discordSelfTest.reason||'erro desconhecido'));await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);
+  currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);setTimeout(()=>highOsDiscordWriteSelfTest().then(r=>{if(!r.ok)console.warn('[HIGH OS] autoteste Discord falhou sem bloquear o painel',r)}),800);
   const userNameEl=$('#userName'),
 userRoleEl=$('#userRole'),
 userAccessEl=$('#userAccessLevel'),
