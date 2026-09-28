@@ -6192,10 +6192,26 @@ async function loadMetrics({force=false}={}){
    metricsLoaded=true;
    return remote;
   }catch(e){
-   metricSourceState={...metricSourceState,status:'DISCORD INDISPONÍVEL',error:e?.message||String(e)};
-   metricasCache=[];metricas=[];metricOrigem='SEM_DADOS';
-   refreshMetricPeriodOptions();renderMetrics();renderMetricSourceStatus();renderMetricQuotaPanel();
-   throw e;
+   // O Discord é a fonte operacional preferida, mas a tela de Métricas não
+   // pode ficar vazia durante restart/deploy do bot. A Google Sheets continua
+   // sendo a fonte oficial das coletas e já possui leitor sem popup no Web.
+   try{
+    const direct=await metricTimeout(readMetricsWithoutPopup(),15000,'leitura direta da planilha');
+    if(!Array.isArray(direct?.rows)||!direct.rows.length)throw new Error('Planilha sem métricas reconhecíveis.');
+    const rows=direct.rows.map(metricSnapshot);
+    aplicarLinhasMetricas(rows,'GOOGLE_SHEETS_FALLBACK');
+    metricSourceState={...metricSourceState,status:'GOOGLE SHEETS • FALLBACK',lastSync:Date.now(),count:rows.length,activeCount:activeMetricRows().length,error:'Discord: '+(e?.message||String(e)),sheet:direct.sheet||metricSourceConfig.sheet||''};
+    renderMetricSourceStatus();
+    metricsLoaded=true;
+    return {rows,source:'google_sheets_fallback',sheet:direct.sheet||''};
+   }catch(sheetError){
+    // Preserve o último conjunto válido em memória em vez de zerar a tela.
+    metricSourceState={...metricSourceState,status:'MÉTRICAS TEMPORARIAMENTE INDISPONÍVEIS',error:(e?.message||String(e))+' | Sheets: '+(sheetError?.message||String(sheetError))};
+    if(metricasCache.length)aplicarLinhasMetricas(metricasCache,'CACHE_LOCAL');
+    else {refreshMetricPeriodOptions();renderMetrics();renderMetricQuotaPanel();}
+    renderMetricSourceStatus();
+    throw e;
+   }
   }
  })();
  try{return await metricsLoadPromise}finally{metricsLoadPromise=null}
