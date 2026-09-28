@@ -60,6 +60,11 @@ function factionDiscordPayload(f={}){
  return {group:f.group,segmento:f.segmento||'',qg:f.qg||'',status:f.status||'INATIVA',faccao:f.faccao||'',lider:f.lider||'',staff:f.staff||'',dataEntrega:f.dataEntrega||'',contingenteMin:Number(f.contingenteMin||0),contingenteMax:Number(f.contingenteMax||0),beneficios:f.beneficios||{},observacoes:f.observacao||f.observacoes||'',discordImageUrls:Array.isArray(f.discordImageUrls)?f.discordImageUrls:(f.imagemAnuncio?[f.imagemAnuncio]:[])};
 }
 async function saveFactionToDiscord(f){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify(factionDiscordPayload(f))});}
+async function highOsStoreList(scope){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope));return (r.records||[]).map(x=>({id:x.id,...(x.data||{})}));}
+async function highOsStoreGet(scope,id){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id));return {id:r.record.id,...(r.record.data||{})};}
+async function highOsStorePut(scope,id,data){return highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(data)});}
+async function highOsStoreDelete(scope,id){return highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id),{method:'DELETE'});}
+function discordId(prefix='row'){return prefix+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);}
 
 
 const facCol=collection(db,'highos','data','faccoes'), histCol=collection(db,'highos','data','historico'), reqCol=collection(db,'highos','data','solicitacoes'), deliveryCol=collection(db,'highos','data','entregas'), orgCol=collection(db,'highos','data','organizacoes'), sessionCol=collection(db,'highos','data','sessoes_usuario'), usersCol=collection(db,'users');
@@ -1440,49 +1445,14 @@ document.addEventListener('submit',e=>{if(isAdmin())return;const mod=moduleForEl
    Quando falha, diz o PORQUE na tela, em vez do texto generico de sempre.
    ===================================================================== */
 async function carregarCadastro(user){
- const bruto=String(user.email||'');
-
- const baixo=bruto.toLowerCase();
-
- const tentativas=baixo===bruto?[baixo]:[baixo,
-bruto];
-
- const relatorio=[];
-
- for(const id of tentativas){
-  try{
-   const snap=await getDoc(doc(db,'users',id));
-
-   if(!snap.exists()){relatorio.push(`users/${id} — documento não encontrado`);
-continue}
-   const dados=snap.data()||{};
-
-   if(dados.active!==true){
-    relatorio.push(`users/${id} — encontrado, mas o campo <b>active</b> está como <b>${esc(String(dados.active))}</b> (precisa ser o booleano true)`);
-
-    continue;
-
-   }
-   return {ok:true,
-snap,
-id};
-
-  }catch(e){
-   relatorio.push(`users/${id} — ${esc(e.code||'')} ${esc(e.message||String(e))}`);
-
-  }
+ const email=String(user.email||'').toLowerCase();
+ try{
+  const dados=await highOsStoreGet('users',email);
+  if(dados.active!==true)return {ok:false,explicacao:'<b>'+esc(email)+'</b> está cadastrado, mas o acesso está inativo.'};
+  return {ok:true,snap:{data:()=>dados},id:email};
+ }catch(e){
+  return {ok:false,explicacao:'<b>'+esc(email)+'</b> foi autenticado no Google, mas não possui cadastro ativo no High OS Discord.'};
  }
- const dica=relatorio.some(x=>x.includes('permission-denied'))
-  ? 'As regras do Firestore recusaram a leitura do seu próprio cadastro. Publique o firestore.rules que acompanha esta versão.'
-  : 'Confira no Firebase Console, em Firestore > users, se existe um documento com o seu e-mail como ID e o campo active marcado como true (booleano, não texto).';
-
- return {ok:false,
-explicacao:
-  `<b>${esc(baixo)}</b> foi autenticado no Google, mas o High OS não conseguiu validar o cadastro.`+
-  `<br><br><span style="font-size:12px;opacity:.85">O que foi tentado:</span>`+
-  `<br><span style="font-size:12px;opacity:.85">• ${relatorio.join('<br>• ')}</span>`+
-  `<br><br><span style="font-size:12px">${dica}</span>`};
-
 }
 
 onAuthStateChanged(auth,async user=>{
@@ -3867,15 +3837,9 @@ function assertAdmin(){if(String(currentProfile?.role||'').toUpperCase()!=='ADMI
 return false}return true}
 async function loadUsers(){
  if(!assertAdmin())return;
-
  try{
-  const qs=await getDocsCached(usersCol,'usuarios');
-
-  usuarios=qs.docs.map(d=>({email:d.id,
-...d.data()})).sort((a,b)=>(a.name||a.email).localeCompare(b.name||b.email,'pt-BR'));
-
+  usuarios=(await highOsStoreList('users')).map(x=>({email:String(x.email||x.id||'').toLowerCase(),...x})).sort((a,b)=>(a.name||a.email).localeCompare(b.name||b.email,'pt-BR'));
   renderUsers();
-
  }catch(e){$('#userList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message)}</p></div>`}
 }
 function renderUsers(){
@@ -3928,7 +3892,7 @@ async function saveUser(e){
   if(same){$('#userModal').classList.add('hidden');return}
  }
  try{
-  await setDoc(doc(db,'users',email),payload,{merge:true});
+  await highOsStorePut('users',email,{...userData,updatedAt:new Date().toISOString(),updatedBy:currentUser.email});
   await addDoc(histCol,{sessionId:currentSessionId||'',tipo:old?'USUARIO_EDITADO':'USUARIO_CRIADO',usuarioAlvo:email,antes:snapshot(old),depois:snapshot(payload),usuario:currentUser.email,data:serverTimestamp()});
   $('#userModal').classList.add('hidden');
   const local={...(old||{}),...clonePlain(userData),updatedBy:currentUser.email};
@@ -3947,7 +3911,7 @@ async function toggleUserAccess(){
  const next=old.active!==true;
  if(!confirm(`${next?'Reativar':'Desativar'} o acesso de ${old.name||email}?`))return;
  try{
-  await setDoc(doc(db,'users',email),{...old,active:next,updatedAt:serverTimestamp(),updatedBy:currentUser.email},{merge:true});
+  await highOsStorePut('users',email,{...old,active:next,updatedAt:new Date().toISOString(),updatedBy:currentUser.email});
   await addDoc(histCol,{sessionId:currentSessionId||'',tipo:next?'USUARIO_REATIVADO':'USUARIO_DESATIVADO',usuarioAlvo:email,usuario:currentUser.email,data:serverTimestamp()});
   $('#userModal').classList.add('hidden');
   const ix=usuarios.findIndex(x=>x.email===email);
