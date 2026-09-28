@@ -1993,7 +1993,7 @@ $('#seedBtn').onclick=async()=>{
 
  if(faccoes.length){alert('A base já possui registros. A importação inicial foi bloqueada para evitar duplicidade.');
 return}
- if(!confirm(`Importar as ${SEED.length} posições do Documento das Facções para o Firestore?`))return;
+ if(!confirm(`Importar as ${SEED.length} posições do Documento das Facções para o Discord Storage?`))return;
 
  try{const batch=writeBatch(db);
 SEED.forEach(f=>batch.set(doc(db,'highos','data','faccoes',f.group),{...f,
@@ -6192,37 +6192,8 @@ async function salvarEspelhoMensal(rows=[],sheet=''){
 
 /* Le o espelho mensal. Usado quando o CSV nao esta disponivel. */
 async function lerEspelhoMensal(meses=[]){
- /* V10.7 - evita cobrar duas leituras do mesmo documento quando o período
-    selecionado já é o mês atual. */
- const alvo=[...new Set((meses.length?meses:[currentMetricMonthKey()]).filter(Boolean))];
-
- const out=[];
-
- for(const mes of alvo){
-  if(!mes)continue;
-
-  try{
-   const snap=await getDoc(doc(metricMonthCol,mes));
-
-   statBump('metricas_mensais','leituras');
-statBump('metricas_mensais','docs',1);
-
-   if(!snap.exists())continue;
-
-   out.push(...expandirLinhas(snap.data()?.rows||[]));
-
-   metricMesesCarregados.add(mes);
-
-  }catch(e){
-   if(isQuotaError(e))return enterQuotaMode(e),
-out;
-
-   console.warn('[MÉTRICAS] espelho de',mes,'indisponível:',e?.code||e?.message);
-
-  }
- }
- return out;
-
+ // Legado Firestore desativado: métricas vêm diretamente da Google Sheets.
+ return [];
 }
 
 function aplicarLinhasMetricas(rows=[],origem=''){
