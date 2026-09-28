@@ -5834,30 +5834,26 @@ return isNaN(d)?null:d;
 }
 function renderMetricSourceStatus(){
  const el=$('#metricSourceStatus');
-if(!el)return;
-const has=metricSourceConfig.mode==='GOOGLE_APPS_SCRIPT_FREE'||!!extractSpreadsheetId(metricSourceConfig.url),
-srv=metricSourceConfig.serverSync||{};
-const serverState=String(srv.status||'').toUpperCase();
-const localState=metricSourceState.status;
-const online=serverState==='ONLINE'||localState==='ONLINE';
-const failed=serverState==='ERRO'||localState==='ERRO';
-el.classList.toggle('online',online);
-el.classList.toggle('error',failed);
-
+ if(!el)return;
+ const srv=metricSourceConfig.serverSync||{};
+ const localState=String(metricSourceState.status||'');
+ const serverState=String(srv.status||'').toUpperCase();
+ // V12.8: Discord/Railway é a fonte operacional. Não exigir mais URL local
+ // da planilha para considerar a Central configurada.
+ const discordOnline=/DISCORD|GOOGLE SHEETS|ONLINE|CACHE_LOCAL/.test(localState.toUpperCase())&&metricas.length>0;
+ const sheetConfigured=metricSourceConfig.mode==='GOOGLE_APPS_SCRIPT_FREE'||!!extractSpreadsheetId(metricSourceConfig.url);
+ const configured=discordOnline||sheetConfigured;
+ const online=discordOnline||serverState==='ONLINE'||localState==='ONLINE';
+ const failed=!online&&(serverState==='ERRO'||localState==='ERRO'||/INDISPON/.test(localState.toUpperCase()));
+ el.classList.toggle('online',online);
+ el.classList.toggle('error',failed);
  const last=metricTsToDate(srv.lastSuccessAt)||metricTsToDate(srv.lastRunAt)||(metricSourceState.lastSync?new Date(metricSourceState.lastSync):null);
-const when=last?last.toLocaleString('pt-BR'):'—';
-let desc='Informe o link da planilha oficial';
-
- if(has)desc=metricSourceConfig.autoSync===false?'Fonte configurada • sincronização automática pausada':'Apps Script permanente • sincronização automática 14:05, 16:05, 21:05 e 23:05 • sem Blaze';
-
- if(online){desc=`Base sincronizada • ${Number(srv.rows??metricSourceState.count??metricas.length)||0} registros históricos${srv.sheet?' • aba '+srv.sheet:''}${metricLiveLastAt?' • atualização em tempo real ativa':''}`;
-const dc=metricSourceState.directCheck;
-if(dc?.sheetLast)desc+=` • Planilha ${dc.sheetLast.date} ${dc.sheetLast.slot} • Firestore ${dc.fireLast?.date||'—'} ${dc.fireLast?.slot||'—'}`;
-}
- if(failed)desc=srv.error||metricSourceState.error||'Falha na sincronização automática';
-
- el.innerHTML=`<div><span class="metric-source-dot"></span><div><b>${has?'GOOGLE SHEETS • APPS SCRIPT GRATUITO':'FONTE NÃO CONFIGURADA'}</b><small>${esc(desc)}</small></div></div><span>${has?`Última sincronização: ${esc(when)}<br>AGENDA • 14:05 · 16:05 · 21:05 · 23:05`:'CONFIGURAR'}</span>`;
-
+ const when=last?last.toLocaleString('pt-BR'):'—';
+ const count=Number(metricSourceState.count||srv.rows||metricas.length)||0;
+ let title=discordOnline?'DISCORD • CENTRAL DE MÉTRICAS':(sheetConfigured?'GOOGLE SHEETS • FONTE DIRETA':'FONTE NÃO CONFIGURADA');
+ let desc=discordOnline?`Base sincronizada pelo High OS Bot • ${count} registros históricos • Google Sheets → Bot → Discord → High OS`:(sheetConfigured?'Fonte Google Sheets configurada':'Aguardando Central de Métricas do Discord');
+ if(failed)desc=metricSourceState.error||srv.error||'Fonte temporariamente indisponível';
+ el.innerHTML=`<div><span class="metric-source-dot"></span><div><b>${esc(title)}</b><small>${esc(desc)}</small></div></div><span>${configured?`Última sincronização: ${esc(when)}<br>COLETAS • 14H · 16H · 21H · 23H`:'AUTOMÁTICO'}</span>`;
 }
 async function fetchMetricsFromSource({persist=false,
 quiet=false,
