@@ -6566,6 +6566,7 @@ const y=v=>H-padY-(v/max)*(H-padY*2);
 const lines=hours.map((h,idx)=>{const pts=days.map((d,i)=>Number.isFinite(d.slots[h])?`${x(i).toFixed(1)},${y(d.slots[h]).toFixed(1)}`:null);let segs=[],
 cur=[];pts.forEach(p=>{if(p)cur.push(p);else if(cur.length){segs.push(cur);cur=[]}});if(cur.length)segs.push(cur);return `<g class="metric-line line-${idx}">${segs.map(s=>s.length>1?`<polyline points="${s.join(' ')}"/>`:'' ).join('')}${days.map((d,i)=>Number.isFinite(d.slots[h])?`<circle cx="${x(i).toFixed(1)}" cy="${y(d.slots[h]).toFixed(1)}" r="4"><title>${metricFmtDay(d.date)} • ${h} • ${d.slots[h]} online</title></circle>`:'').join('')}</g>`}).join('');
 return `<svg class="metric-week-svg" viewBox="0 0 ${W} ${H}" role="img">${[0,.25,.5,.75,1].map(t=>`<line x1="0" x2="${W}" y1="${y(max*t)}" y2="${y(max*t)}" class="metric-grid-line"/><text x="4" y="${y(max*t)+4}" class="metric-axis-text">${Math.round(max*t)}</text>`).join('')}${lines}</svg>`}
+let metricWeekOffset=0;
 function renderMetricIntelligence(rows=[],raw=[],seg=''){
  const daily=$('#metricDailyIntel'),
 weekly=$('#metricWeeklyIntel');
@@ -6580,13 +6581,11 @@ slots:{},
 groups:{}};
 daily.innerHTML=metricDailyCard(todayDay,title);
 
- // Exibe a semana atual quando ela já possui coleta. Caso contrário,
- // ancora na semana da coleta mais recente do recorte para não mostrar um
- // gráfico vazio enquanto existem dados válidos na semana anterior.
- const currentBounds=metricWeekBounds(today);
- const hasCurrentWeek=days.some(x=>x.date>=currentBounds.start&&x.date<=currentBounds.end&&Object.values(x.slots||{}).some(Number.isFinite));
- const latestCollected=[...days].reverse().find(x=>Object.values(x.slots||{}).some(Number.isFinite));
- const weekAnchor=hasCurrentWeek?today:(latestCollected?.date||today);
+ // A semana exibida é sempre relativa à semana atual. Assim o dia de hoje
+ // já aparece como "aguardando coleta" antes do primeiro horário e recebe os
+ // pontos assim que 14H/16H/21H/23H entram no cache.
+ const weekAnchor=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+ weekAnchor.setDate(weekAnchor.getDate()+(metricWeekOffset*7));
  const wb=metricWeekBounds(weekAnchor);
 const week=[];
 for(let i=0;i<7;i++){const d=new Date(wb.start);
@@ -6600,8 +6599,10 @@ const hours=['14H',
 '16H',
 '21H',
 '23H'];
-weekly.innerHTML=`<section class="metric-week-card"><header><div><span>SEMANA • ${esc(title)}</span><h3>${wb.start.toLocaleDateString('pt-BR')} — ${wb.end.toLocaleDateString('pt-BR')}</h3></div><div class="metric-week-legend">${hours.map((h,i)=>`<span class="l-${i}"><i></i>${h}</span>`).join('')}</div></header>${metricWeekSvg(week)}<div class="metric-week-days">${week.map(d=>`<button type="button" data-metric-day="${d.key}"><b>${metricFmtDay(d.date)}</b><small>${hours.map(h=>Number.isFinite(d.slots[h])?`${h} ${d.slots[h]}`:`${h} —`).join(' • ')}</small></button>`).join('')}</div></section>`;
-weekly.querySelectorAll('[data-metric-day]').forEach(b=>b.onclick=()=>{metricDateStart=b.dataset.metricDay;metricDateEnd=b.dataset.metricDay;syncMetricDateInputs();renderMetrics()})
+weekly.innerHTML=`<section class="metric-week-card"><header><div><span>SEMANA • ${esc(title)}</span><h3>${wb.start.toLocaleDateString('pt-BR')} — ${wb.end.toLocaleDateString('pt-BR')}</h3></div><div class="metric-week-legend">${hours.map((h,i)=>`<span class="l-${i}"><i></i>${h}</span>`).join('')}</div></header><div class="metric-week-nav"><button type="button" data-week-nav="-1">‹ SEMANA ANTERIOR</button><button type="button" data-week-current ${metricWeekOffset===0?'disabled':''}>SEMANA ATUAL</button><button type="button" data-week-nav="1" ${metricWeekOffset>=0?'disabled':''}>PRÓXIMA ›</button></div>${metricWeekSvg(week)}<div class="metric-week-days">${week.map(d=>`<button type="button" data-metric-day="${d.key}"><b>${metricFmtDay(d.date)}</b><small>${hours.map(h=>Number.isFinite(d.slots[h])?`${h} ${d.slots[h]}`:`${h} —`).join(' • ')}</small></button>`).join('')}</div></section>`;
+weekly.querySelectorAll('[data-metric-day]').forEach(b=>b.onclick=()=>{metricDateStart=b.dataset.metricDay;metricDateEnd=b.dataset.metricDay;syncMetricDateInputs();renderMetrics()});
+weekly.querySelectorAll('[data-week-nav]').forEach(b=>b.onclick=()=>{metricWeekOffset+=Number(b.dataset.weekNav||0);if(metricWeekOffset>0)metricWeekOffset=0;renderMetricIntelligence(rows,raw,seg)});
+weekly.querySelector('[data-week-current]')?.addEventListener('click',()=>{metricWeekOffset=0;renderMetricIntelligence(rows,raw,seg)})
 }
 function metricDailyReportText(){const seg=$('#metricSegment')?.value||'',
 scope=metricCurrentScope(),
