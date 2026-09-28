@@ -5404,10 +5404,8 @@ mercadoStatus='CARREGANDO';
 let metricLiveUnsub=null,
 metricLiveLastAt=0;
 
-const metricCol=collection(db,'highos','data','metricas');
-const occupationCol=collection(db,'highos','data','ocupacoes');
-
-const metricConfigDoc=doc(db,'highos','metricas_config');
+// V12.8: métricas não possuem mais referências Firestore no High OS Web.
+// Fonte oficial: Apps Script -> Railway -> Discord -> /v1/metrics.
 
 const MARKET_CATALOG_URL='https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/catalogo.json';
 
@@ -6007,82 +6005,18 @@ renderMetricSourceStatus();
    ja foi usado nesta sessao e o estado da sincronizacao. Sem isso o
    sistema falhava em silencio quando o limite estourava.
    ===================================================================== */
-function metricReadCount(){
- try{return [...firestoreStats.values()].reduce((a,s)=>a+(s.docs||0),0)}catch(e){return 0}
-}
+function metricReadCount(){return 0}
 function ensureMetricQuotaPanel(){
  const host=document.getElementById('metricSourceStatus');
-
  if(!host||document.getElementById('metricQuotaPanel'))return null;
-
- const box=document.createElement('div');
-
- box.id='metricQuotaPanel';
-box.className='metric-quota-panel';
-
- host.insertAdjacentElement('afterend',box);
-
- return box;
-
+ const box=document.createElement('div');box.id='metricQuotaPanel';box.className='metric-quota-panel';host.insertAdjacentElement('afterend',box);return box;
 }
 function renderMetricQuotaPanel(){
- const box=ensureMetricQuotaPanel()||document.getElementById('metricQuotaPanel');
-
- if(!box)return;
-
- const leituras=metricReadCount(),
- gravacoes=metricWriteCount;
-
- const pctL=Math.min(100,Math.round(leituras/50000*100));
-
- const pctG=Math.min(100,Math.round(gravacoes/20000*100));
-
- const proximo=(()=>{
-  try{
-   const ultimo=Number(localStorage.getItem(METRIC_SYNC_LOCK)||0);
-   if(!ultimo)return 'a qualquer momento';
-   const falta=Math.max(0,METRIC_SYNC_INTERVALO-(Date.now()-ultimo));
-   return falta?`em ${Math.ceil(falta/60000)} min`:'a qualquer momento';
-  }catch(e){return '—'}
- })();
-
- const aoVivo=metricRealtimeAtivo();
-
- box.className='metric-quota-panel'+(metricQuotaBlocked?' bloqueado':'');
-
- box.innerHTML=`
-  <div class="mq-head">
-    <b>CONSUMO DO FIREBASE • SESSÃO ATUAL</b>
-    <span>${metricQuotaBlocked?'COTA DIÁRIA ESGOTADA':(metricOrigem==='PLANILHA'?'dados vindos da planilha — 0 leituras do Firebase':metricOrigem==='ESPELHO'?'dados vindos do espelho mensal':'dentro do limite gratuito')}</span>
-  </div>
-  <div class="mq-bars">
-    <div class="mq-bar">
-      <span>LEITURAS <b>${leituras.toLocaleString('pt-BR')}</b> / 50.000 por dia</span>
-      <i><u style="width:${pctL}%"></u></i>
-    </div>
-    <div class="mq-bar">
-      <span>GRAVAÇÕES DE MÉTRICAS <b>${gravacoes.toLocaleString('pt-BR')}</b> / 20.000 por dia</span>
-      <i><u class="w" style="width:${pctG}%"></u></i>
-    </div>
-  </div>
-  <div class="mq-foot">
-    <span>Sincronização automática a cada 30 min • próxima ${proximo}</span>
-    <label class="mq-switch"><input type="checkbox" id="metricLiveToggle" ${aoVivo?'checked':''}><i></i><span>Tempo real</span></label>
-    <button type="button" id="metricSyncNow">SINCRONIZAR AGORA</button>
-  </div>
-  ${metricQuotaBlocked?'<div class="mq-alerta">O limite gratuito do dia acabou. As métricas continuam visíveis com a última cópia lida, mas nada será gravado até a virada do dia (meia-noite no Pacífico, 4h/5h em Brasília). Para não depender disso, ative o plano Blaze com teto de gastos.</div>':''}
- `;
-
- document.getElementById('metricLiveToggle')?.addEventListener('change',e=>setMetricRealtime(e.target.checked));
-
- document.getElementById('metricSyncNow')?.addEventListener('click',async()=>{
-  const btn=document.getElementById('metricSyncNow');
-  if(btn){btn.disabled=true;btn.textContent='SINCRONIZANDO...'}
-  try{localStorage.setItem(METRIC_SYNC_LOCK,String(Date.now()))}catch(e){}
-  await runMetricAutoRecovery({quiet:false});
-  renderMetricQuotaPanel();
- });
-
+ const box=ensureMetricQuotaPanel()||document.getElementById('metricQuotaPanel');if(!box)return;
+ const online=metricOrigem==='DISCORD';
+ box.className='metric-quota-panel'+(online?'':' bloqueado');
+ box.innerHTML=`<div class="mq-head"><b>MÉTRICAS • DISCORD</b><span>${online?'fonte oficial online':'fonte oficial indisponível'}</span></div><div class="mq-foot"><span>${metricas.length.toLocaleString('pt-BR')} registros carregados • Apps Script → Railway → Discord → High OS</span><button type="button" id="metricSyncNow">ATUALIZAR AGORA</button></div>`;
+ document.getElementById('metricSyncNow')?.addEventListener('click',async()=>{const btn=document.getElementById('metricSyncNow');if(btn){btn.disabled=true;btn.textContent='ATUALIZANDO...'}try{await loadMetrics({force:true})}catch(e){alert('Não foi possível atualizar as métricas: '+e.message)}finally{if(btn){btn.disabled=false;btn.textContent='ATUALIZAR AGORA'}}});
 }
 
 /* V9.6 - a escuta em tempo real da colecao inteira cobra uma leitura por
@@ -6112,18 +6046,9 @@ function stopMetricRealtime(){
  if(metricLiveTimer){clearInterval(metricLiveTimer);metricLiveTimer=null}
 }
 async function refreshMetricRealtimeCheap(){
- if(!metricRealtimeAtivo()||metricQuotaBlocked||document.visibilityState==='hidden')return;
- /* V10.7 - respeita a mesma trava compartilhada entre abas do ciclo normal.
-    O modo "tempo real" pode checar a cada 5 min, mas só uma aba efetivamente
-    sincroniza quando a janela de 30 min estiver liberada. */
- if(!podeSincronizarAgora())return;
- try{
-  await runMetricAutoRecovery({quiet:true});
-  metricLiveLastAt=Date.now();
- }catch(e){
-  if(isQuotaError(e))return enterQuotaMode(e);
-  console.warn('[MÉTRICAS] atualização econômica falhou',e?.message||e);
- }
+ if(document.visibilityState==='hidden')return;
+ try{await loadMetrics({force:true});metricLiveLastAt=Date.now()}
+ catch(e){console.warn('[MÉTRICAS] atualização Discord falhou',e?.message||e)}
 }
 function startMetricRealtime(){
  stopMetricRealtime();
@@ -6165,8 +6090,6 @@ document.addEventListener('visibilitychange',()=>{
 
    A colecao antiga nao e apagada: fica como historico ate voce decidir.
    ===================================================================== */
-const metricMonthCol=collection(db,'highos','data','metricas_mensais');
-
 let metricOrigem='';
           // de onde vieram os dados exibidos
 let metricMesesCarregados=new Set();
@@ -6250,75 +6173,26 @@ function aplicarLinhasMetricas(rows=[],origem=''){
 
 }
 
-async function loadMetrics(){
- if(metricsLoadPromise)return metricsLoadPromise;
+async function loadMetrics({force=false}={}){
+ if(metricsLoadPromise&&!force)return metricsLoadPromise;
  metricsLoadPromise=(async()=>{
- await loadMetricSourceConfig();
-
- metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
-
- // 1) snapshot oficial persistido no Discord via Railway.
- // O navegador deixa de depender de Firestore e não precisa abrir popup do Google Sheets.
- try{
-  const remote=await metricTimeout(highOsDiscordRequest('/v1/metrics'),12000,'métricas do Discord');
-  if(Array.isArray(remote?.rows)&&remote.rows.length){
+  metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
+  try{
+   const remote=await metricTimeout(highOsDiscordRequest('/v1/metrics'),15000,'métricas do Discord');
+   if(!Array.isArray(remote?.rows)||!remote.rows.length)throw new Error('Snapshot de métricas vazio no Discord.');
    aplicarLinhasMetricas(remote.rows,'DISCORD');
-   metricSourceState={...metricSourceState,status:'DISCORD / APPS SCRIPT',lastSync:remote.receivedAt||null,count:remote.rows.length,error:''};
+   metricSourceState={...metricSourceState,status:'DISCORD / APPS SCRIPT',lastSync:remote.receivedAt||null,count:remote.rows.length,activeCount:activeMetricRows().length,error:''};
    renderMetricSourceStatus();
    metricsLoaded=true;
-   return;
+   return remote;
+  }catch(e){
+   metricSourceState={...metricSourceState,status:'DISCORD INDISPONÍVEL',error:e?.message||String(e)};
+   metricasCache=[];metricas=[];metricOrigem='SEM_DADOS';
+   refreshMetricPeriodOptions();renderMetrics();renderMetricSourceStatus();renderMetricQuotaPanel();
+   throw e;
   }
- }catch(e){console.warn('[MÉTRICAS] snapshot Discord indisponível:',e?.message||e)}
-
- // 2) fallback temporário: planilha publicada até o Apps Script enviar o primeiro snapshot.
- if(extractSpreadsheetId(metricSourceConfig.url)){
-  try{
-   const r=await metricTimeout(readMetricsWithoutPopup(),15000,'leitura da planilha');
-
-   if(r?.rows?.length){
-    aplicarLinhasMetricas(r.rows,'PLANILHA');
-
-    metricSourceState={...metricSourceState,
-status:'PLANILHA',
-error:''};
-
-    renderMetricSourceStatus();
-
-    salvarEspelhoMensal(r.rows,r.sheet);
-          // espelho em segundo plano
-    startMetricAutoRecovery();
-    startMetricRealtime();
-    metricsLoaded=true;
-
-    return;
-
-   }
-  }catch(e){console.warn('[MÉTRICAS] planilha indisponível na abertura:',e?.message||e)}
- }
-
- // 3) Firestore removido do fluxo de métricas. Fallback somente para cache local já existente.
-
- // 4) V10.54 - nunca abrir automaticamente a coleção legada gigante.
- // Usa somente cache local já existente; sem cache, mantém a tela vazia e segura.
- const legacyCache=cachedSnapshotOnly('metricas');
- if(legacyCache){
-  applyMetricSnapshot(legacyCache);
-  metricOrigem='CACHE_LEGADO';
- }else{
-  metricasCache=[];
-  metricas=[];
-  metricOrigem='SEM_DADOS';
- }
- refreshMetricPeriodOptions();
-renderMetrics();
-renderMetricSourceStatus();
-renderMetricQuotaPanel();
-startMetricAutoRecovery();
-    startMetricRealtime();
- metricsLoaded=true;
  })();
- try{return await metricsLoadPromise}
- finally{metricsLoadPromise=null}
+ try{return await metricsLoadPromise}finally{metricsLoadPromise=null}
 }
 function metricIdentity(group,row=null){
  const f=faccoes.find(x=>alvesNorm(x.group)===alvesNorm(group))||SEED.find(x=>alvesNorm(x.group)===alvesNorm(group))||{};
@@ -7308,10 +7182,10 @@ $('#metricAutoSync').disabled=true}
 }
 async function testMetricSource(){
  const out=$('#metricSourceTestResult');
-if(out)out.textContent='Atualizando os dados já sincronizados no Firestore...';
+if(out)out.textContent='Atualizando as métricas oficiais do Discord...';
 
  try{await loadMetrics();
-if(out)out.innerHTML=`<b>CENTRAL ONLINE</b> • ${metricas.length} registro(s) históricos disponíveis no Firestore.`}catch(e){if(out)out.textContent='Falha: '+e.message}
+if(out)out.innerHTML=`<b>CENTRAL ONLINE</b> • ${metricas.length} registro(s) disponíveis no Discord.`}catch(e){if(out)out.textContent='Falha: '+e.message}
 }
 /* V9.8.1 - Esta funcao havia desaparecido numa das edicoes anteriores do
    arquivo. Sem ela, loadMetrics() lancava ReferenceError e o painel inteiro
