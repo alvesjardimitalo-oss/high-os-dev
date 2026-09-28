@@ -1693,35 +1693,63 @@ function assertRemoteWriteAvailable(){
  e.code='highos/offline-write-blocked';
  throw e;
 }
-const setDoc=async(ref,...a)=>{assertRemoteWriteAvailable();const r=await _setDoc(ref,...a);invalidarCacheRef(ref);return r};
-const addDoc=async(ref,...a)=>{assertRemoteWriteAvailable();const r=await _addDoc(ref,...a);invalidarCacheRef(ref);return r};
-const deleteDoc=async(ref,...a)=>{assertRemoteWriteAvailable();const r=await _deleteDoc(ref,...a);invalidarCacheRef(ref);return r};
+function discordStoreRef(ref){
+ try{
+  const seg=ref?._key?.path?.segments||ref?._path?.segments||[];
+  const ix=seg.lastIndexOf('data');
+  if(ix>=0&&seg[ix-1]==='highos'&&seg[ix+1])return {scope:String(seg[ix+1]),id:seg.slice(ix+2).join('/')};
+ }catch{}
+ return null;
+}
+function discordPlain(v){
+ if(v===undefined)return undefined;if(v===null||['string','number','boolean'].includes(typeof v))return v;
+ if(typeof v?.toDate==='function')return v.toDate().toISOString();
+ if(Array.isArray(v))return v.map(discordPlain);
+ if(typeof v==='object'){const o={};for(const [k,x] of Object.entries(v)){const y=discordPlain(x);if(y!==undefined)o[k]=y}return o}
+ return String(v);
+}
+async function discordFactionPatch(id,patch={}){
+ let current={group:id};
+ try{const r=await highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id));current=r.record||r.faction||current}catch{}
+ const p=discordPlain(patch), merged={...current,...p,group:id};
+ return saveFactionToDiscord(merged);
+}
+const setDoc=async(ref,data,opts={})=>{
+ const ds=discordStoreRef(ref);
+ if(ds?.id){
+  assertRemoteWriteAvailable();
+  const payload=discordPlain(data||{});
+  if(ds.scope==='faccoes')await discordFactionPatch(ds.id,payload);
+  else{
+   let next=payload;
+   if(opts?.merge){try{next={...(await highOsStoreGet(ds.scope,ds.id)),...payload};delete next.id}catch{}}
+   await highOsStorePut(ds.scope,ds.id,next);
+  }
+  invalidarCacheRef(ref);return;
+ }
+ assertRemoteWriteAvailable();const r=await _setDoc(ref,data,opts);invalidarCacheRef(ref);return r;
+};
+const addDoc=async(ref,data)=>{
+ const ds=discordStoreRef(ref);
+ if(ds&&!ds.id){
+  assertRemoteWriteAvailable();const id=discordId(ds.scope.slice(0,8));await highOsStorePut(ds.scope,id,discordPlain(data||{}));invalidarCacheRef(ref);return {id};
+ }
+ assertRemoteWriteAvailable();const r=await _addDoc(ref,data);invalidarCacheRef(ref);return r;
+};
+const deleteDoc=async(ref,...a)=>{
+ const ds=discordStoreRef(ref);
+ if(ds?.id){assertRemoteWriteAvailable();if(ds.scope==='faccoes')throw new Error('Exclusão direta de facção bloqueada; use recolhimento/status.');await highOsStoreDelete(ds.scope,ds.id);invalidarCacheRef(ref);return;}
+ assertRemoteWriteAvailable();const r=await _deleteDoc(ref,...a);invalidarCacheRef(ref);return r;
+};
 
 const writeBatch=(...a)=>{
- const b=_writeBatch(...a),commit=b.commit.bind(b),tocadas=new Set();
- for(const metodo of ['set','update','delete']){
-  const original=b[metodo]?.bind(b);
-  if(!original)continue;
-  b[metodo]=(ref,...args)=>{
-   const nome=cacheNameFromRef(ref);
-   if(nome)tocadas.add(nome);
-   else{
-    const seg=ref?._key?.path?.segments||ref?._path?.segments||[];
-    if(!seg.length)tocadas.add('');
-   }
-   return original(ref,...args);
-  };
- }
- b.commit=async()=>{
-  assertRemoteWriteAvailable();
-  const r=await commit();
-  if(tocadas.has('')){
-   cacheMemoria.clear();
-   queryFreshAt.clear();
-  }else tocadas.forEach(nome=>{if(!nome)return;cacheMemoria.delete(nome);queryFreshAt.delete(nome);try{localStorage.removeItem(CACHE_PREFIX+nome)}catch(e){}});
-  return r;
- };
- return b;
+ const real=_writeBatch(...a),ops=[],tocadas=new Set();
+ const api={};
+ api.set=(ref,data,opts={})=>{const ds=discordStoreRef(ref);if(ds){ops.push({type:'set',ref,data,opts});tocadas.add(ds.scope);return api}real.set(ref,data,opts);return api};
+ api.update=(ref,data)=>{const ds=discordStoreRef(ref);if(ds){ops.push({type:'set',ref,data,opts:{merge:true}});tocadas.add(ds.scope);return api}real.update(ref,data);return api};
+ api.delete=(ref)=>{const ds=discordStoreRef(ref);if(ds){ops.push({type:'delete',ref});tocadas.add(ds.scope);return api}real.delete(ref);return api};
+ api.commit=async()=>{assertRemoteWriteAvailable();for(const op of ops){if(op.type==='delete')await deleteDoc(op.ref);else await setDoc(op.ref,op.data,op.opts)}if(!ops.length)await real.commit();tocadas.forEach(nome=>{cacheMemoria.delete(nome);queryFreshAt.delete(nome);try{localStorage.removeItem(CACHE_PREFIX+nome)}catch{}});};
+ return api;
 };
 
 const CACHE_PREFIX='highos_cache_';
