@@ -12351,35 +12351,24 @@ function chatConversationQuery(){
   limit(CHAT_PAGE_SIZE));
 
 }
-function stopChat(){if(chatUnsubscribe){try{chatUnsubscribe()}catch(e){}chatUnsubscribe=null}chatSubscriptionKey=''}
+function stopChat(){if(chatUnsubscribe){try{chatUnsubscribe()}catch{}chatUnsubscribe=null}chatSubscriptionKey=''}
+async function refreshDiscordChat(key){
+ if(!currentUser||key!==chatSubscriptionKey)return;
+ try{
+  const me=String(currentUser.email||'').toLowerCase(),other=String(chatRecipientEmail||'').toLowerCase(),cid=chatConversationId(me,other);
+  const rows=(await highOsStoreList('chat_mensagens')).filter(x=>x.conversationId===cid&&Array.isArray(x.participants)&&x.participants.includes(me)).sort((a,b)=>String(a.createdAtText||'').localeCompare(String(b.createdAtText||''))).slice(-CHAT_PAGE_SIZE);
+  renderChatMessages(rows);if(activeMeetingRoom)renderTeamCallFiles();
+ }catch(err){console.warn('[HIGH OS][CHAT] Discord storage',err)}
+}
 function subscribeChatConversation(){
  if(!currentUser||!canViewModule('chat'))return;
-
- if(!chatRecipientEmail){stopChat();chatItems=[];
-renderChatMessages([]);
-return}
+ if(!chatRecipientEmail){stopChat();chatItems=[];renderChatMessages([]);return}
  const key=chatConversationId(currentUser.email,chatRecipientEmail);
- /* V10.12 - entrar novamente na página Chat não recria a mesma assinatura.
-    Um novo listener só é aberto quando a conversa realmente muda. */
  if(chatUnsubscribe&&chatSubscriptionKey===key)return;
- stopChat();
- chatSubscriptionKey=key;
- try{
-  chatUnsubscribe=onSnapshot(chatConversationQuery(),qs=>{
-   const items=qs.docs.map(d=>({id:d.id,
-...d.data()})).sort((a,b)=>{
-    const ta=a.createdAt?.seconds||new Date(a.createdAtText||0).getTime()/1000;
-    const tb=b.createdAt?.seconds||new Date(b.createdAtText||0).getTime()/1000;
-    return ta-tb;
-   });
-   renderChatMessages(items);
-   if(activeMeetingRoom)renderTeamCallFiles();
-  },e=>{
-   const box=$('#floatingChatMessages');
-   console.error('[HIGH OS][CHAT] listener Firestore bloqueado:',e?.code||e?.message||e);if(box)box.innerHTML=`<div class="chat-empty">Nao foi possivel carregar a conversa: ${esc(e.message)}</div>`;
-  });
-
- }catch(e){console.warn(e)}
+ stopChat();chatSubscriptionKey=key;let active=true;
+ const tick=()=>{if(active)refreshDiscordChat(key)};
+ tick();const timer=setInterval(tick,2500);
+ chatUnsubscribe=()=>{active=false;clearInterval(timer)};
 }
 function startChat(){if(!currentUser||!canViewModule('chat'))return;
 $('#teamChatLauncher')?.classList.remove('hidden');
