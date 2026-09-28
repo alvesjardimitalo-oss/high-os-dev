@@ -6575,7 +6575,14 @@ slots:{},
 groups:{}};
 daily.innerHTML=metricDailyCard(todayDay,title);
 
- const wb=metricWeekBounds(today);
+ // Exibe a semana atual quando ela já possui coleta. Caso contrário,
+ // ancora na semana da coleta mais recente do recorte para não mostrar um
+ // gráfico vazio enquanto existem dados válidos na semana anterior.
+ const currentBounds=metricWeekBounds(today);
+ const hasCurrentWeek=days.some(x=>x.date>=currentBounds.start&&x.date<=currentBounds.end&&Object.values(x.slots||{}).some(Number.isFinite));
+ const latestCollected=[...days].reverse().find(x=>Object.values(x.slots||{}).some(Number.isFinite));
+ const weekAnchor=hasCurrentWeek?today:(latestCollected?.date||today);
+ const wb=metricWeekBounds(weekAnchor);
 const week=[];
 for(let i=0;i<7;i++){const d=new Date(wb.start);
 d.setDate(wb.start.getDate()+i);
