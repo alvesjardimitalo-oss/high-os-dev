@@ -4217,8 +4217,8 @@ async function loadUserAudit({force=false}={}){
     qs=comoSnapshot(cached.rows);
     statBump('sessoes_usuario','cache');
    }else{
-    qs=await getDocs(query(sessionCol,orderBy('startAt','desc'),limit(AUDIT_SESSION_PAGE)));
-    const auditRows=qs.docs.map(d=>({id:d.id,...d.data()}));
+    const auditRows=(await highOsStoreList('sessoes_usuario')).sort((a,b)=>sessionStartMs(b)-sessionStartMs(a)).slice(0,AUDIT_SESSION_PAGE);
+    qs=comoSnapshot(auditRows);
     cacheEscrever('sessoes_auditoria',auditRows);
     statBump('sessoes_usuario','leituras');
     statBump('sessoes_usuario','docs',qs.docs.length);
@@ -5081,70 +5081,11 @@ const HISTORY_CACHE_TTL=120000;
 
 async function loadHistory({append=false}={}){
  if(!$('#historyList')&&!$('#groupHistoryPreview'))return;
- if(!append&&queryAindaFresca('historico')){renderHistory();return}
-
  try{
-  if(!append){historico=[];
-historyCursor=null;
-historyEsgotado=false;
-historyModoLegado=false;
-historyFromPersistentCache=false;
-const cached=cacheLer('historico_pagina');
-if(cached&&Number(cached.at)>0&&Date.now()-Number(cached.at)<HISTORY_CACHE_TTL&&Array.isArray(cached.rows)){
- historico=cached.rows;
- historyEsgotado=historico.length<HISTORY_PAGE;
- historyFromPersistentCache=true;
- queryFreshAt.set('historico',Number(cached.at));
- statBump('historico','cache');
- renderHistory();
- return;
-}}
-  if(!historyModoLegado){
-   try{
-    if(append&&historyFromPersistentCache){
-     historyFromPersistentCache=false;
-     historico=[];
-     historyCursor=null;
-     historyEsgotado=false;
-     await loadHistory();
-     if(historyEsgotado)return;
-    }
-    const partes=[histCol,
-orderBy('data','desc'),
-limit(HISTORY_PAGE)];
-
-    if(append&&historyCursor)partes.splice(2,0,startAfter(historyCursor));
-
-    const qs=await getDocs(query(...partes));
-
-    historyCursor=qs.docs[qs.docs.length-1]||historyCursor;
-
-    if(qs.docs.length<HISTORY_PAGE)historyEsgotado=true;
-
-    const novos=qs.docs.map(d=>({id:d.id,
-...d.data()}));
-
-    historico=append?historico.concat(novos):novos;
-    queryFreshAt.set('historico',Date.now());
-    if(!append)cacheEscrever('historico_pagina',novos);
-
-    statBump('historico','leituras');
-statBump('historico','docs',novos.length);
-
-    renderHistory();
-
-    return;
-
-   }catch(e){
-    console.warn('[HISTÓRICO] consulta ordenada indisponível; leitura completa bloqueada:',e?.code||e?.message);
-    historyModoLegado=true; historyEsgotado=true;
-    const qs=cachedSnapshotOnly('historico');
-    if(!qs)throw e;
-    historico=qs.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(historyDateValue(b)?.getTime()||0)-(historyDateValue(a)?.getTime()||0)).slice(0,HISTORY_PAGE);
-    queryFreshAt.set('historico',Date.now()); renderHistory(); return;
-   }
-  }
-
+  const all=(await highOsStoreList('historico')).sort((a,b)=>historyMillis(b)-historyMillis(a));
+  const start=append?historico.length:0,novos=all.slice(start,start+HISTORY_PAGE);
+  historico=append?historico.concat(novos):novos;
+  historyEsgotado=start+novos.length>=all.length;historyModoLegado=false;queryFreshAt.set('historico',Date.now());renderHistory();
  }catch(e){if($('#historyList'))$('#historyList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message)}</p></div>`}
 }
 async function openRecollectEvidence(evidenceId,historyId=''){if(!evidenceId)return;
@@ -10458,7 +10399,7 @@ b]){
 async function wipeCollection(name){
   const c = collection(db,'highos','data',name);
 
-  const qs = await getDocs(c);
+  const qs = await getDocsCached(c,name,{ttl:0});
 
   for(let i=0;i<qs.docs.length;i+=400){
     const batch = writeBatch(db);
