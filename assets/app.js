@@ -12501,8 +12501,18 @@ updatedAt:serverTimestamp()},{merge:true})}catch(err){console.warn('High Call IC
  return pc;
 
 }
-function watchActiveCall(callId,role){if(activeCallUnsubscribe)activeCallUnsubscribe();
-activeCallUnsubscribe=onSnapshot(callDocRef(callId),async snap=>{if(!snap.exists())return closeTeamMeeting(false);const d=snap.data();if(d.status==='ended'||d.status==='rejected')return closeTeamMeeting(false);const list=role==='caller'?(d.calleeCandidates||[]):(d.callerCandidates||[]);for(const c of list){const key=JSON.stringify(c);if(seenRemoteCandidates.has(key))continue;seenRemoteCandidates.add(key);try{await activePeer?.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn('High Call candidato',e)}}if(role==='caller'&&d.answer&&!activePeer?.currentRemoteDescription){try{await activePeer.setRemoteDescription(new RTCSessionDescription(d.answer));callUiStatus('CONECTANDO…')}catch(e){console.warn('[HIGH OS][CALL] resposta WebRTC',e)}}},err=>{console.error('[HIGH OS][CALL] listener da chamada bloqueado:',err?.code||err?.message||err);callUiStatus('ERRO DE PERMISSÃO');});
+function watchActiveCall(callId,role){
+ if(activeCallUnsubscribe)activeCallUnsubscribe();
+ let active=true,last='';
+ const tick=async()=>{if(!active)return;try{
+  const d=await highOsStoreGet('call_signals',callId),sig=JSON.stringify(d);
+  if(sig===last)return;last=sig;
+  if(d.status==='ended'||d.status==='rejected')return closeTeamMeeting(false);
+  const list=role==='caller'?(d.calleeCandidates||[]):(d.callerCandidates||[]);
+  for(const cand of list){const key=JSON.stringify(cand);if(seenRemoteCandidates.has(key))continue;seenRemoteCandidates.add(key);try{await activePeer?.addIceCandidate(new RTCIceCandidate(cand))}catch(err){console.warn('High Call candidato',err)}}
+  if(role==='caller'&&d.answer&&!activePeer?.currentRemoteDescription){await activePeer.setRemoteDescription(new RTCSessionDescription(d.answer));callUiStatus('CONECTANDO…')}
+ }catch(err){if(!String(err.message).includes('not_found'))console.warn('[HIGH OS][CALL] Discord storage',err)}};
+ tick();const timer=setInterval(tick,1200);activeCallUnsubscribe=()=>{active=false;clearInterval(timer)};
 }
 async function startTeamMeeting(mode='video'){
  if(!canEditModule('chat'))return permissionDeniedMessage('chat',true);
@@ -12512,9 +12522,10 @@ if(!chatRecipientEmail)return alert('Selecione o usuário que deseja chamar.');
 showCallOverlay(`Chamada • ${target?hmUserName(target):chatRecipientEmail}`,mode,false);
 callUiStatus('PEDINDO MICROFONE…');
 await prepareLocalMedia(mode);
-const ref=doc(callCol);
-activeCallId=ref.id;
-const pc=createPeer(ref.id,'caller');
+const callId=discordId('call');
+const ref=callDocRef(callId);
+activeCallId=callId;
+const pc=createPeer(callId,'caller');
 const offer=await pc.createOffer();
 await pc.setLocalDescription(offer);
 await setDoc(ref,{caller:String(currentUser.email||'').toLowerCase(),
@@ -12527,10 +12538,10 @@ callerCandidates:[],
 calleeCandidates:[],
 createdAt:serverTimestamp(),
 updatedAt:serverTimestamp()});
-watchActiveCall(ref.id,'caller');
+watchActiveCall(callId,'caller');
 callUiStatus('CHAMANDO…');
 await addDoc(chatCol,{texto:'',
-callId:ref.id,
+callId:callId,
 callMode:mode,
 recipientEmail:chatRecipientEmail,
 conversationId:chatConversationId(currentUser.email,chatRecipientEmail),
@@ -12569,12 +12580,16 @@ function stopCallInbox(){
  $('#incomingCallBar')?.classList.add('hidden');
 }
 function startCallInbox(){if(!currentUser||!canViewModule('chat'))return;
-const me=String(currentUser.email||'').toLowerCase();
-if(callInboxUnsubscribe&&callInboxSubscriptionEmail===me)return;
-if(callInboxUnsubscribe){callInboxUnsubscribe();callInboxUnsubscribe=null}
-callInboxSubscriptionEmail=me;
-callInboxUnsubscribe=onSnapshot(query(callCol,where('participants','array-contains',me),limit(20)),snap=>{const ringing=snap.docs.map(x=>({id:x.id,
-...x.data()})).filter(x=>String(x.callee||'').toLowerCase()===me&&x.status==='ringing').sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0))[0];const bar=$('#incomingCallBar');if(!bar)return;if(!ringing||activeCallId){bar.classList.add('hidden');return}bar.classList.remove('hidden');$('#incomingCallName').textContent=`${hmUserName(hmUser(ringing.caller))} está chamando`;$('#incomingCallType').textContent=ringing.mode==='video'?'CHAMADA DE VÍDEO':'CHAMADA DE ÁUDIO';$('#incomingCallAccept').onclick=()=>{bar.classList.add('hidden');acceptIncomingCall(ringing.id,ringing)};$('#incomingCallReject').onclick=()=>rejectIncomingCall(ringing.id)},err=>{console.error('[HIGH OS][CALL] inbox Firestore bloqueado:',err?.code||err?.message||err);$('#incomingCallBar')?.classList.add('hidden')});
+ const me=String(currentUser.email||'').toLowerCase();
+ if(callInboxUnsubscribe&&callInboxSubscriptionEmail===me)return;
+ if(callInboxUnsubscribe)callInboxUnsubscribe();
+ callInboxSubscriptionEmail=me;let active=true;
+ const tick=async()=>{if(!active||activeCallId)return;try{
+  const rows=(await highOsStoreList('call_signals')).filter(x=>Array.isArray(x.participants)&&x.participants.includes(me)&&String(x.callee||'').toLowerCase()===me&&x.status==='ringing').sort((a,b)=>String(b.createdAtText||b.updatedAt||'').localeCompare(String(a.createdAtText||a.updatedAt||'')));
+  const ringing=rows[0],bar=$('#incomingCallBar');if(!bar)return;if(!ringing){bar.classList.add('hidden');return}
+  bar.classList.remove('hidden');$('#incomingCallName').textContent=`${hmUserName(hmUser(ringing.caller))} está chamando`;$('#incomingCallType').textContent=ringing.mode==='video'?'CHAMADA DE VÍDEO':'CHAMADA DE ÁUDIO';$('#incomingCallAccept').onclick=()=>{bar.classList.add('hidden');acceptIncomingCall(ringing.id,ringing)};$('#incomingCallReject').onclick=()=>rejectIncomingCall(ringing.id);
+ }catch(err){console.warn('[HIGH OS][CALL] inbox Discord',err)}};
+ tick();const timer=setInterval(tick,1500);callInboxUnsubscribe=()=>{active=false;clearInterval(timer)};
 }
 async function closeTeamMeeting(signal=true){const id=activeCallId;
 if(signal&&id)await setDoc(callDocRef(id),{status:'ended',
