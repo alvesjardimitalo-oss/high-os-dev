@@ -1731,10 +1731,10 @@ function discordPlain(v){
  return String(v);
 }
 async function discordFactionPatch(id,patch={}){
- let current={group:id};
- try{const r=await highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id));current=r.record||r.faction||current}catch{}
- const p=discordPlain(patch), merged={...current,...p,group:id};
- return saveFactionToDiscord(merged);
+ // O backend faz merge atômico com o registro atual. Evita um GET extra
+ // em cada alteração feita pelo painel Web.
+ const p=discordPlain(patch);
+ return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify({...p,group:id})});
 }
 const setDoc=async(ref,data,opts={})=>{
  const ds=discordStoreRef(ref);
