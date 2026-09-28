@@ -1594,9 +1594,8 @@ async function loadFaccoes(){
  if(faccoesLoadPromise)return faccoesLoadPromise;
  faccoesLoadPromise=(async()=>{
   try{
-   /* Facções são fonte operacional compartilhada com o bot/Discord.
-      Não usar espelho local dentro do TTL aqui: a tela precisa confirmar
-      o mesmo estado remoto que o sincronizador do Discord enxerga. */
+   /* Facções usam o Discord como fonte operacional. O cache curto de 15s
+      evita rajadas de GET sem esconder alterações por longos períodos. */
    const qs=await getDocsCached(facCol,'faccoes',{ttl:15000});
    faccoes=qs.docs.map(d=>({id:d.id,...d.data()}));
    faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
@@ -1628,8 +1627,7 @@ f.produto].join(' ').toLowerCase().includes(q)));
 
  $('#facStats').innerHTML=`<span><b>${faccoes.length}</b> POSIÇÕES</span><span><b>${at}</b> ATIVAS</span><span><b>${faccoes.length-at}</b> VAGAS</span><span><b>${filtered.length}</b> EXIBIDAS</span>`;
 
- if(!operacionais.length){$('#facList').innerHTML='<div class="placeholder"><b>◆</b><h3>BASE AINDA NÃO IMPORTADA</h3><p>ADMIN: clique em “IMPORTAR BASE INICIAL”.</p></div>';
-return}
+ if(!faccoes.length){$('#facList').innerHTML='<div class="placeholder"><b>◆</b><h3>NENHUM GROUP DISPONÍVEL</h3><p>Não foi possível carregar a base de facções do Discord.</p></div>';return}
  $('#facList').innerHTML=filtered.map(f=>`<article class="fac-card" data-id="${f.id}"><div class="fac-card-head"><h3>${esc(f.group)}</h3><span class="status-chip ${f.status==='ATIVA'?'ativa':'inativa'}">${f.status==='ATIVA'?'ATIVA':'VAGA'}</span></div><div class="fac-name">${esc(f.faccao||'— VAGA —')}</div><div class="muted">${esc(f.segmento)} • ${esc(f.qg||'SEM LOCAL')}</div><div class="muted">${f.lider?'Líder: '+esc(f.lider):''}${f.staff?'<br>Staff: '+esc(f.staff):''}</div><div class="product">${esc(f.produto||'')}</div><div class="card-actions"><button class="mini-btn req-from-fac" data-group="${esc(f.group)}">NOVA SOLICITAÇÃO</button></div></article>`).join('');
 
  document.querySelectorAll('.fac-card').forEach(c=>c.onclick=(e)=>{if(e.target.closest('.req-from-fac'))return;openFac(c.dataset.id)});
@@ -1974,6 +1972,9 @@ return comoSnapshot(mem.rows)}
     group:x.group||x.id||'',
     segmento:x.segmento||x.segment||'',
     qg:x.qg||x.location||'',
+    produto:x.produto||x.product||'',
+    cds:x.cds||x.coords||'',
+    anuncio:x.anuncio||x.announced||'',
     faccao:x.faccao||x.highOsFaction||'',
     lider:x.lider||x.responsible||'',
     staff:x.staff||'',
@@ -4358,8 +4359,7 @@ operacionais.forEach(f=>{const k=f.segmento||'OUTROS';segCounts[k]=(segCounts[k]
 
  $('#facStats').innerHTML=`<span><b>${filtered.length}</b> EXIBIDOS</span>${seg?`<span>SEGMENTO <b>${esc(seg)}</b></span>`:''}${st?`<span>STATUS <b>${st==='ATIVA'?'OCUPADOS':'VAGOS'}</b></span>`:''}`;
 
- if(!operacionais.length){$('#facList').innerHTML='<div class="placeholder"><b>◆</b><h3>BASE AINDA NÃO IMPORTADA</h3><p>ADMIN: clique em “IMPORTAR BASE INICIAL”.</p></div>';
-return}
+ if(!faccoes.length){$('#facList').innerHTML='<div class="placeholder"><b>◆</b><h3>NENHUM GROUP DISPONÍVEL</h3><p>Não foi possível carregar a base de facções do Discord.</p></div>';return}
  if(!filtered.length){$('#facList').innerHTML='<div class="placeholder"><b>⌕</b><h3>NENHUM GROUP ENCONTRADO</h3><p>Ajuste a busca ou os filtros.</p></div>';
 return}
  $('#facList').innerHTML=filtered.map(f=>`<article class="fac-card" data-id="${f.id}"><div class="fac-card-head"><div><div class="group-kicker">${esc(f.segmento||'OUTROS')}</div><h3>${esc(f.group)}</h3></div><span class="status-chip ${f.status==='ATIVA'?'ativa':'inativa'}">${f.status==='ATIVA'?'OCUPADO':'VAGO'}</span></div><div class="fac-name">${esc(f.qg||'SEM LOCAL')}</div><div class="muted">Ocupante: <b>${esc(f.faccao||'— NENHUMA —')}</b>${f.lider?'<br>Líder: '+esc(f.lider):''}</div><div class="product">${esc(f.produto||'')}</div><div class="install-count">${installedCount(f)} instalações/setagens cadastradas no Group</div><div class="group-profile"><button class="mini-btn edit-group" data-id="${f.id}">PERFIL TÉCNICO</button><button class="btn-primary compact deliver-group" data-group="${esc(f.group)}">${f.status==='ATIVA'?'NOVA ENTREGA':'ENTREGAR GROUP'}</button></div></article>`).join('');
