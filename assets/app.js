@@ -6257,7 +6257,20 @@ async function loadMetrics(){
 
  metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
 
- // 1) planilha publicada: nao consome cota do Firebase
+ // 1) snapshot oficial persistido no Discord via Railway.
+ // O navegador deixa de depender de Firestore e não precisa abrir popup do Google Sheets.
+ try{
+  const remote=await metricTimeout(highOsDiscordRequest('/v1/metrics'),12000,'métricas do Discord');
+  if(Array.isArray(remote?.rows)&&remote.rows.length){
+   aplicarLinhasMetricas(remote.rows,'DISCORD');
+   metricSourceState={...metricSourceState,status:'DISCORD / APPS SCRIPT',lastSync:remote.receivedAt||null,count:remote.rows.length,error:''};
+   renderMetricSourceStatus();
+   metricsLoaded=true;
+   return;
+  }
+ }catch(e){console.warn('[MÉTRICAS] snapshot Discord indisponível:',e?.message||e)}
+
+ // 2) fallback temporário: planilha publicada até o Apps Script enviar o primeiro snapshot.
  if(extractSpreadsheetId(metricSourceConfig.url)){
   try{
    const r=await metricTimeout(readMetricsWithoutPopup(),15000,'leitura da planilha');
@@ -6283,9 +6296,9 @@ error:''};
   }catch(e){console.warn('[MÉTRICAS] planilha indisponível na abertura:',e?.message||e)}
  }
 
- // 2) Firestore removido do fluxo de métricas. Fallback somente para cache local já existente.
+ // 3) Firestore removido do fluxo de métricas. Fallback somente para cache local já existente.
 
- // 3) V10.54 - nunca abrir automaticamente a coleção legada gigante.
+ // 4) V10.54 - nunca abrir automaticamente a coleção legada gigante.
  // Usa somente cache local já existente; sem cache, mantém a tela vazia e segura.
  const legacyCache=cachedSnapshotOnly('metricas');
  if(legacyCache){
