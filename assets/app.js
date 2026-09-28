@@ -1461,13 +1461,19 @@ async function highOsDiscordWriteSelfTest(){
 }
 
 async function carregarCadastro(user){
- const email=String(user.email||'').toLowerCase();
+ const email=String(user.email||'').trim().toLowerCase();
  try{
-  const dados=await highOsStoreGet('users',email);
+  let dados=null;
+  try{dados=await highOsStoreGet('users',email)}catch{}
+  if(!dados){
+   const users=await highOsStoreList('users');
+   dados=users.find(x=>String(x.email||x.id||'').trim().toLowerCase()===email)||null;
+  }
+  if(!dados)return {ok:false,explicacao:'<b>'+esc(email)+'</b> foi autenticado no Google, mas não possui cadastro no High OS Discord.'};
   if(dados.active!==true)return {ok:false,explicacao:'<b>'+esc(email)+'</b> está cadastrado, mas o acesso está inativo.'};
-  return {ok:true,snap:{data:()=>dados},id:email};
+  return {ok:true,snap:{data:()=>dados},id:String(dados.id||email)};
  }catch(e){
-  return {ok:false,explicacao:'<b>'+esc(email)+'</b> foi autenticado no Google, mas não possui cadastro ativo no High OS Discord.'};
+  return {ok:false,explicacao:'Falha ao consultar seu cadastro no High OS Discord: <b>'+esc(e.message||String(e))+'</b>'};
  }
 }
 
