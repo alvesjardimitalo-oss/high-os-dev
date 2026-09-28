@@ -1943,6 +1943,14 @@ return comoSnapshot(mem.rows)}
   }
  }
  try{
+  const ds=discordStoreRef(colRef);
+  if(ds&&!ds.id){
+   let rows;
+   if(ds.scope==='faccoes'){const r=await highOsDiscordRequest('/v1/factions');rows=(r.records||[]).map(x=>({id:x.group||x.id,...x}));}
+   else rows=await highOsStoreList(ds.scope);
+   cacheMemoria.set(nome,{at:Date.now(),rows});cacheEscrever(nome,rows);statBump(nome,'cache');sairModoLocal();
+   return comoSnapshot(rows);
+  }
   const qs=await getDocs(colRef);
 
   const rows=qs.docs.map(d=>({id:d.id,
