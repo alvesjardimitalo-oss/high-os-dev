@@ -1968,7 +1968,21 @@ return comoSnapshot(mem.rows)}
   const ds=discordStoreRef(colRef);
   if(ds&&!ds.id){
    let rows;
-   if(ds.scope==='faccoes'){const r=await highOsDiscordRequest('/v1/factions');rows=(r.records||[]).map(x=>({id:x.group||x.id,...x}));}
+   if(ds.scope==='faccoes'){const r=await highOsDiscordRequest('/v1/factions');rows=(r.records||[]).map(x=>({
+    ...x,
+    id:x.group||x.id,
+    group:x.group||x.id||'',
+    segmento:x.segmento||x.segment||'',
+    qg:x.qg||x.location||'',
+    faccao:x.faccao||x.highOsFaction||'',
+    lider:x.lider||x.responsible||'',
+    staff:x.staff||'',
+    dataEntrega:x.dataEntrega||x.deliveryDate||'',
+    status:(String(x.status||'').toUpperCase()==='ENTREGUE'||String(x.highOsFaction||x.faccao||'').trim())?'ATIVA':'INATIVA',
+    beneficios:x.beneficios||x.benefits||{},
+    observacoes:x.observacoes||x.observations||'',
+    discordImageUrls:Array.isArray(x.discordImageUrls)?x.discordImageUrls:[]
+   }));}
    else rows=await highOsStoreList(ds.scope);
    cacheMemoria.set(nome,{at:Date.now(),rows});cacheEscrever(nome,rows);statBump(nome,'cache');sairModoLocal();
    return comoSnapshot(rows);
