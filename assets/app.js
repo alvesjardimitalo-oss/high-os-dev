@@ -110,7 +110,7 @@ async function loadDashboardConfig({force=false}={}){
  if(!force&&dashboardConfigReadAt&&Date.now()-dashboardConfigReadAt<DASHBOARD_CONFIG_TTL){
   await loadDashboardAlertStates();renderDashboardConfigAdmin();renderCommandDashboard();return;
  }
- try{const snap=await getDoc(dashboardConfigDoc);
+ try{const _d=await highOsStoreGet('config','dashboard').catch(()=>null);const snap={exists:()=>!!_d,data:()=>_d||{}};
 dashboardConfigReadAt=Date.now();
 statBump('config_dashboard','leituras');
 statBump('config_dashboard','docs',snap.exists()?1:0);
@@ -203,11 +203,10 @@ async function loadDashboardAlertStates({force=false}={}){
   /* V10.66 - o Dashboard não precisa reler alertas semanais históricos.
      Busca somente a semana corrente e os estados persistentes de anomalia. */
   const weekKey=isoDay(startOfWeekMonday(new Date()));
-  const [qw,qa]=await Promise.all([
-   getDocs(query(dashboardAlertCol,where('weekKey','==',weekKey))),
-   getDocs(query(dashboardAlertCol,where('tipo','==','VAGO_COM_METRICA')))
-  ]);
-  const mapa=new Map([...qw.docs,...qa.docs].map(d=>[d.id,{id:d.id,...d.data()}]));
+  const _all=await highOsStoreList('alertas_dashboard');
+  const _rows=_all.filter(x=>x.weekKey===weekKey||x.tipo==='VAGO_COM_METRICA');
+  const qw={docs:_rows.filter(x=>x.weekKey===weekKey).map(x=>({id:x.id,data:()=>x}))},qa={docs:_rows.filter(x=>x.tipo==='VAGO_COM_METRICA').map(x=>({id:x.id,data:()=>x}))};
+  const mapa=new Map(_rows.map(x=>[x.id,x]));
   dashboardAlertStates=[...mapa.values()];
   const rows=dashboardAlertStates.map(x=>({...x}));
   cacheMemoria.set('alertas_dashboard',{at:Date.now(),rows});
@@ -349,7 +348,7 @@ let segmentConfigReadAt=0;
 const SEGMENT_CONFIG_TTL=10*60*1000;
 async function loadSegmentConfig({force=false}={}){
  if(!force&&segmentConfigReadAt&&Date.now()-segmentConfigReadAt<SEGMENT_CONFIG_TTL){syncSegmentSelects();renderSegmentAdmin();return}
- try{const snap=await getDoc(segmentConfigDoc);
+ try{const _d=await highOsStoreGet('config','segmentos').catch(()=>null);const snap={exists:()=>!!_d,data:()=>_d||{}};
 segmentConfigReadAt=Date.now();
 statBump('config_segmentos','leituras');
 statBump('config_segmentos','docs',snap.exists()?1:0);
@@ -5170,9 +5169,9 @@ if(!modal||!img)return;
 img.removeAttribute('src');
 meta.textContent='Carregando evidência...';
 modal.classList.remove('hidden');
-try{const snap=await getDoc(doc(db,'highos','data','evidencias_recolhimento',evidenceId));
-if(!snap.exists())throw new Error('Evidência não encontrada.');
-const e=snap.data(),
+try{const e=await highOsStoreGet('evidencias_recolhimento',evidenceId).catch(()=>null);
+if(!e)throw new Error('Evidência não encontrada.');
+
 h=historico.find(x=>x.id===historyId)||{};
 img.src=e.imagemDataUrl||'';
 meta.innerHTML=`<span><b>${esc(e.group||h.group||'—')}</b> • ${esc(e.faccao||h.faccao||'—')}</span><span>${esc(h.motivoLabel||recollectReasonLabel(e.motivo)||'Recolhimento')} • ${esc(h.dataRecolhimento||'')}</span>`}catch(err){meta.textContent='Não foi possível abrir a evidência: '+err.message}}
@@ -7378,7 +7377,7 @@ async function loadMetricSourceConfig({force=false}={}){
   renderMetricSourceStatus();
   return;
  }
- try{const s=await getDoc(metricConfigDoc);
+ try{const _d=await highOsStoreGet('config','metricas').catch(()=>null);const s={exists:()=>!!_d,data:()=>_d||{}};
 metricConfigReadAt=Date.now();
 statBump('config_metricas','leituras');
 statBump('config_metricas','docs',s.exists()?1:0);
@@ -12039,7 +12038,7 @@ let spotifyConfigReadAt=0;
 const SPOTIFY_CONFIG_TTL=10*60*1000;
 async function loadSpotifyConfig({force=false}={}){
  if(!force&&spotifyConfigReadAt&&Date.now()-spotifyConfigReadAt<SPOTIFY_CONFIG_TTL){renderSpotify();await spotifyHandleCallback();await spotifyRestoreSession();return}
- try{const s=await getDoc(spotifyConfigDoc);
+ try{const _d=await highOsStoreGet('config','spotify').catch(()=>null);const s={exists:()=>!!_d,data:()=>_d||{}};
 spotifyConfigReadAt=Date.now();
 statBump('config_spotify','leituras');
 statBump('config_spotify','docs',s.exists()?1:0);
