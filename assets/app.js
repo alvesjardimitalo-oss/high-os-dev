@@ -2637,6 +2637,9 @@ updatedBy:currentUser.email};
 
  if(data.status==='ATIVA'&&!data.faccao){alert('Informe o nome da facção para marcar como ATIVA.');
 return}
+ // O bot recusa entrega sem líder (passaporte + nome); avisa aqui antes de enviar.
+ if(data.status==='ATIVA'&&old?.status!=='ATIVA'&&!data.lider){alert('Informe o líder (passaporte e nome) para marcar como ATIVA.');
+return}
  /* V10.73 - salvar o perfil sem mudanças não deve consumir Firestore nem
     gerar um evento de auditoria vazio. Timestamps técnicos não entram na comparação. */
  const comparableData=clonePlain(data);
@@ -4958,6 +4961,8 @@ const f=faccoes.find(x=>x.group===$('#dGroup').value);
 if(!f)return alert('Selecione um Group.');
 const faccao=$('#dFaccao').value.trim();
 if(!faccao)return alert('Informe a facção que está assumindo.');
+// O bot recusa entrega sem líder (passaporte + nome); avisa aqui antes de enviar.
+if(!$('#dLider').value.trim())return alert('Informe o líder (passaporte e nome) da facção que está assumindo.');
 const active=selectedDeliveryBenefits(),
 requests=currentDeliveryRequests(),
 extract=deliveryExtractV5();
