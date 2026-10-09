@@ -2813,7 +2813,11 @@ motivo:reason,
 imagemDataUrl:recollectPanelImage,
 createdAt:serverTimestamp(),
 createdAtText:new Date().toISOString(),
-createdBy:currentUser.email});evidenceId=ev.id}recolhimento.evidenciaId=evidenceId;data.ultimoRecolhimento.evidenciaId=evidenceId;await setDoc(doc(db,'highos','data','faccoes',group),data);const recollectBatch=writeBatch(db);
+createdBy:currentUser.email});evidenceId=ev.id}recolhimento.evidenciaId=evidenceId;data.ultimoRecolhimento.evidenciaId=evidenceId;
+/* O bot posta o extrato (e o print, no baixo contingente) no tópico do Group
+   e no canal de recolhidas do Discord do Ilegal. Só vai no PUT; não fica no registro local. */
+const [tituloRec,...corpoRec]=String(recolhimento.extrato||'').split('\n');
+await setDoc(doc(db,'highos','data','faccoes',group),{...data,anuncioRecolhimento:{title:tituloRec,description:corpoRec.join('\n').trim(),imageDataUrl:recollectPanelImage||''}});const recollectBatch=writeBatch(db);
 if(old.faccao){const oid=orgKey(old.faccao);recollectBatch.set(doc(db,'highos','data','organizacoes',oid),{nome:old.faccao,
 status:'SEM_GROUP',
 groupAtual:'',
