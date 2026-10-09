@@ -59,7 +59,7 @@ async function highOsDiscordRequest(path,options={}){
 function factionDiscordPayload(f={}){
  return {group:f.group,segmento:f.segmento||'',qg:f.qg||'',status:f.status||'INATIVA',faccao:f.faccao||'',lider:f.lider||'',staff:f.staff||'',dataEntrega:f.dataEntrega||'',contingenteMin:Number(f.contingenteMin||0),contingenteMax:Number(f.contingenteMax||0),beneficios:f.beneficios||{},observacoes:f.observacao||f.observacoes||'',discordImageUrls:Array.isArray(f.discordImageUrls)?f.discordImageUrls:(f.imagemAnuncio?[f.imagemAnuncio]:[])};
 }
-async function saveFactionToDiscord(f){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify(factionDiscordPayload(f))});}
+async function saveFactionToDiscord(f,extra={}){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify({...factionDiscordPayload(f),...extra})});}
 async function highOsStoreList(scope){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope));return (r.records||[]).map(x=>({id:x.id,...(x.data||{})}));}
 async function highOsStoreGet(scope,id){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id));return {id:r.record.id,...(r.record.data||{})};}
 async function highOsStorePut(scope,id,data){return highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(data)});}
@@ -4337,7 +4337,7 @@ const INSTALLATIONS=[
  ['vipOrg','VIP Org'],['chatFaccao','Chat da Facção'],['radio','Rádio Exclusiva'],['salario','Salário'],
  ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaExclusiva','Rota Exclusiva'],
  ['telao','Telão'],['lojaRoupas','Loja de Roupas'],['barbearia','Barbearia'],['tatuagem','Tatuagem'],['shopExclusivo','Shop Exclusivo'],
- ['bau','Baú'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['sinuca','Sinuca'],['roupasFaccao','Roupas de Facção'],['farm','Farm'],['craft','Craft'],['arena','Arena']
+ ['bau','Baú'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['sinuca','Sinuca'],['roupasFaccao','Uniforme'],['farm','Farm'],['craft','Craft'],['arena','Arena']
 ];
 function renderDefaultDeliveryProfile(f){
  const p=f?.perfilEntrega||{}, b=f?.beneficios||{}, selected=new Set(p.beneficiosPadrao||[]);
@@ -5055,10 +5055,10 @@ if(!f)return '';
 `Data: ${$('#dData').value.trim()||'{DATA}'}`];
 
  if($('#dPlano').value.trim())lines.push(`Plano / Pacote: ${$('#dPlano').value.trim()}`);
-lines.push('','BENEFÍCIOS / SETAGENS ENTREGUES:');
-
- if(!active.length)lines.push('- Nenhum benefício selecionado');
- else active.forEach(k=>{const n=INSTALLATIONS.find(x=>x[0]===k)?.[1]||k;lines.push(`- ${n}${installedValue(b,k)&&!['vipOrg','chatFaccao','rotaExclusiva','telao','garagemPublica','heliponto'].includes(k)?`: ${installedValue(b,k)}`:''}${isNew.has(k)?' (NOVA INSTALAÇÃO • solicitação gerada)':''}`)});
+// Mesmo formato do anúncio em facs-entregues: só os nomes do que foi marcado.
+lines.push('','');
+ if(!active.length)lines.push('Nenhum benefício selecionado');
+ else active.forEach(k=>lines.push((INSTALLATIONS.find(x=>x[0]===k)?.[1]||k).toUpperCase()));
 
  if($('#dNotes').value.trim())lines.push('','PERSONALIZAÇÕES / ALTERAÇÕES:',$('#dNotes').value.trim());
 return lines.join('\n');
@@ -5222,6 +5222,8 @@ if(!faccao)return alert('Informe a facção que está assumindo.');
 if(!$('#dLider').value.trim())return alert('Informe o líder (passaporte e nome) da facção que está assumindo.');
 const pendentes=deliveryMissingData();
 if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que ainda não existem no Group:\n\n• '+pendentes.join('\n• ')+'\n\nPreencha os campos ou desmarque o benefício.');
+// Sem data informada, a entrega vale para hoje (o anúncio não sai com {DATA}).
+if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
 const {base:beneficiosGroup,isNew}=deliveryBenefitState(),
 active=selectedDeliveryBenefits(),
 requests=currentDeliveryRequests(),
@@ -5264,7 +5266,9 @@ createdBy:currentUser.email};
    ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,beneficiosAtivos:active,beneficiosSolicitados:[...isNew]},
    updatedBy:currentUser.email};
 
-  await saveFactionToDiscord(deliveredGroup);
+  // O bot cria o tópico em facs-entregues e posta o extrato como anúncio.
+  const [titulo,...corpo]=extract.split('\n');
+  await saveFactionToDiscord(deliveredGroup,{anuncioEntrega:{title:titulo,description:corpo.join('\n').trim()}});
   await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
 
   $('#newDeliveryModal').classList.add('hidden');
