@@ -4944,7 +4944,9 @@ const DLV_NEEDS={
  roupasFaccao:[],
  heliponto:[['helipontoBlip','Blip (CDS)','x, y, z'],['helipontoSpawn','Spawn (CDS)','x, y, z, h',true]],
  rotaExclusiva:[['rotaBlips','Pontos da rota (uma CDS por linha)','x, y, z',false,true]],
- telao:[['telaoCds','CDS do telão','x, y, z'],['telaoPostit','CDS do postit','x, y, z',true],['telaoNome','Modelo do telão','',true]],
+ telao:[['telaoNome','Modelo do telão','',true],['telaoCds','CDS do telão','x, y, z'],['telaoPostit','CDS do postit','x, y, z',true],
+  // Caixas de som: até 4; a próxima aparece quando a anterior é preenchida.
+  ['telaoCaixa1','CDS da caixa de som 1','x, y, z',true],['telaoCaixa2','CDS da caixa de som 2','x, y, z',true,false,'telaoCaixa1'],['telaoCaixa3','CDS da caixa de som 3','x, y, z',true,false,'telaoCaixa2'],['telaoCaixa4','CDS da caixa de som 4','x, y, z',true,false,'telaoCaixa3']],
  lojaRoupas:[['lojaRoupas','CDS da loja','x, y, z']],
  barbearia:[['barbearia','CDS da barbearia','x, y, z']],
  tatuagem:[['tatuagem','CDS da tatuagem','x, y, z']],
@@ -4982,7 +4984,8 @@ function dlvCoordRows(k,b){
   if(!spawn.length&&blip.length>1){spawn=blip.slice(1);blip=blip.slice(0,1)}
   return [...blip.map((c,i)=>[blip.length>1?`Blip ${i+1}`:'Blip',c]),...spawn.map((c,i)=>[spawn.length>1?`Spawn ${i+1}`:'Spawn',c])];
  }
- const list=dlvCoordParts(k==='telao'?[b.telaoCds,b.telaoPostit].filter(Boolean).join(' / '):k==='rotaExclusiva'?b.rotaBlips:b[k]);
+ if(k==='telao')return [['Telão',b.telaoCds],['Postit',b.telaoPostit],...[1,2,3,4].map(n=>[`Caixa ${n}`,b['telaoCaixa'+n]])].flatMap(([l,v])=>dlvCoordParts(v).map(c=>[l,c]));
+ const list=dlvCoordParts(k==='rotaExclusiva'?b.rotaBlips:b[k]);
  return list.map((c,i)=>[list.length>1?`CDS ${i+1}`:'CDS',c]);
 }
 function renderDeliveryBenefits(keep=null){
@@ -4996,7 +4999,7 @@ function renderDeliveryBenefits(keep=null){
   const checked=Object.prototype.hasOwnProperty.call(prev.checks,k)?prev.checks[k]:(installed&&(defaults.size?defaults.has(k):true));
   const coords=installed?dlvCoordRows(k,b):[];
   const detail=coords.length?`${coords.length} CDS`:installed?(String(installedValue(b,k))==='SIM'||installedValue(b,k)===true?'Instalado':esc(installedValue(b,k))):'Não instalado';
-  const needs=installed?'':(DLV_NEEDS[k]||[]).map(([field,label,ph,opt,multi])=>{const v=esc(prev.fields[field]??'');return `<label>${esc(label)}${opt?' <i>(opcional)</i>':''}${multi?`<textarea data-dlv-field="${field}" placeholder="${esc(ph||'')}">${v}</textarea>`:`<input data-dlv-field="${field}" placeholder="${esc(ph||'')}" value="${v}">`}</label>`}).join('');
+  const needs=installed?'':(DLV_NEEDS[k]||[]).map(([field,label,ph,opt,multi,after])=>{const v=esc(prev.fields[field]??'');return `<label${after?` data-dlv-after="${after}"${String(prev.fields[after]??'').trim()?'':' hidden'}`:''}>${esc(label)}${opt?' <i>(opcional)</i>':''}${multi?`<textarea data-dlv-field="${field}" placeholder="${esc(ph||'')}">${v}</textarea>`:`<input data-dlv-field="${field}" placeholder="${esc(ph||'')}" value="${v}">`}</label>`}).join('');
   return `<div class="dlv-item ${installed?'is-installed':'is-missing'} ${checked?'is-on':''}" data-dlv-key="${k}">
    <label class="dlv-toggle"><input type="checkbox" data-delivery-benefit="${k}" ${checked?'checked':''} ${Object.prototype.hasOwnProperty.call(prev.checks,k)?'data-touched="1"':''}>
     <span class="dlv-text"><b>${esc(n)}</b><small>${detail}${src?` · <em title="${esc(src)}">planilha</em>`:''}</small></span>
@@ -5008,7 +5011,11 @@ function renderDeliveryBenefits(keep=null){
  box.innerHTML=`${inst.length?`<div class="dlv-group-title">INSTALADOS NO GROUP <span>${inst.length}</span></div><div class="dlv-grid">${inst.map(item).join('')}</div>`:''}
   <div class="dlv-group-title">NÃO INSTALADOS · MARQUE PARA SOLICITAR <span>${miss.length}</span></div><div class="dlv-grid">${miss.map(item).join('')}</div>`;
  box.querySelectorAll('[data-delivery-benefit]').forEach(x=>x.addEventListener('change',()=>{x.dataset.touched='1';x.closest('.dlv-item')?.classList.toggle('is-on',x.checked);updateNewDeliveryPreview()}));
- box.querySelectorAll('[data-dlv-field]').forEach(x=>x.addEventListener('input',updateNewDeliveryPreview));
+ box.querySelectorAll('[data-dlv-field]').forEach(x=>x.addEventListener('input',()=>{
+  // Revela o próximo campo encadeado (ex.: caixa de som 2 depois da 1).
+  const next=x.closest('.dlv-needs')?.querySelector(`[data-dlv-after="${x.dataset.dlvField}"]`);
+  if(next&&x.value.trim())next.hidden=false;
+  updateNewDeliveryPreview()}));
  box.querySelectorAll('.dlv-copy').forEach(x=>x.addEventListener('click',()=>copyText(x.dataset.copy,x)));
  dlvRenderStatus();
 }
@@ -5174,7 +5181,8 @@ add('ROTA_FARM','Rota de Farm Exclusiva'+novo('rotaExclusiva'),['Assunto: Ativa�
 `- Telão usado: ${b.telaoNome||'{modelo_do_telao}'}`,
 '',
 `- Local/Coordenadas postit: ${fmtCds(b.telaoPostit)}`,
-`- Local/Coordenadas cds: ${fmtCds(b.telaoCds)}`].join('\n'));
+`- Local/Coordenadas cds: ${fmtCds(b.telaoCds)}`,
+...(()=>{const cx=[1,2,3,4].map(n=>b['telaoCaixa'+n]).filter(Boolean);return cx.length?['','- Caixas de som:',...cx.map((c,i)=>`* Caixa ${i+1}: ${fmtCds(c)}`)]:[]})()].join('\n'));
 
  if(has('garagemPublica'))add('GARAGEM','Garagem Pública'+novo('garagemPublica'),['Assunto:',
 '',
