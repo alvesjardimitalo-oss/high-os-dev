@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <title>High OS • Gestão do Ilegal</title>
-  <link rel="stylesheet" href="assets/style.css?v=10.4.1">
+  <link rel="stylesheet" href="assets/style.css?v=12.9.0">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'">
   <link rel="stylesheet" href="assets/mission-planner.css?v=11.0.2">
   <link rel="stylesheet" href="assets/mission-planner-nav.css?v=12.8.0">
@@ -851,7 +851,7 @@
   <script src="assets/ui-kit.js?v=10.4.1"></script>
   <script src="assets/mission-planner.js?v=12.8.1"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
-  <script type="module" src="assets/app.js?v=12.8.3"></script>
+  <script type="module" src="assets/app.js?v=12.9.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
@@ -861,10 +861,11 @@
       <label>Líder / ID / Telefone<input id="dLider"></label><label>Staff responsável<input id="dStaff"></label>
       <label>Data da entrega<input id="dData" placeholder="dd/mm/aaaa"></label><label>Plano / pacote<input id="dPlano" placeholder="Ex.: Org Ultra / VIP Org"></label>
     </div>
-    <div class="delivery-split">
-      <section><div class="eyebrow">PRÉ-CONFIGURAÇÃO DO GROUP</div><h3>INSTALAÇÕES DISPONÍVEIS</h3><div id="dInstalled" class="install-grid"></div></section>
-      <section><div class="eyebrow">CONFIGURAÇÃO DA ENTREGA</div><h3>ATIVAR PARA A FACÇÃO</h3><div id="dActive" class="install-grid"></div></section>
-    </div>
+    <section class="dlv-panel">
+      <div class="dlv-panel-head"><div><div class="eyebrow">PLANILHA + CADASTRO DO GROUP</div><h3>BENEFÍCIOS DA ENTREGA</h3></div><button type="button" id="dSheetRefresh" class="btn-secondary compact">ATUALIZAR DA PLANILHA</button></div>
+      <p id="dSheetStatus" class="dlv-status">Selecione um Group para ler os benefícios da planilha.</p>
+      <div id="dActive"></div>
+    </section>
     <label class="delivery-notes">Personalização / alterações específicas<textarea id="dNotes" placeholder="Ex.: trocar rádio para 155; alterar CDS da garagem; solicitar nova loja..."></textarea></label>
     <div class="delivery-box"><div class="benefits-head"><div><div class="eyebrow">AUTOMAÇÃO</div><h3>SOLICITAÇÕES NECESSÁRIAS</h3></div></div><div id="dRequests" class="delivery-requests-preview"></div></div>
     <div class="delivery-box"><div class="benefits-head"><div><div class="eyebrow">DISCORD DO ILEGAL</div><h3>EXTRATO DA ENTREGA</h3></div><button type="button" id="copyDExtract" class="btn-secondary compact">COPIAR EXTRATO</button></div><textarea id="dExtract" readonly></textarea></div>

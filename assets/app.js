@@ -4337,7 +4337,7 @@ const INSTALLATIONS=[
  ['vipOrg','VIP Org'],['chatFaccao','Chat da Facção'],['radio','Rádio Exclusiva'],['salario','Salário'],
  ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaExclusiva','Rota Exclusiva'],
  ['telao','Telão'],['lojaRoupas','Loja de Roupas'],['barbearia','Barbearia'],['tatuagem','Tatuagem'],['shopExclusivo','Shop Exclusivo'],
- ['bau','Baú'],['farm','Farm'],['craft','Craft'],['arena','Arena']
+ ['bau','Baú'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['sinuca','Sinuca'],['roupasFaccao','Roupas de Facção'],['farm','Farm'],['craft','Craft'],['arena','Arena']
 ];
 function renderDefaultDeliveryProfile(f){
  const p=f?.perfilEntrega||{}, b=f?.beneficios||{}, selected=new Set(p.beneficiosPadrao||[]);
@@ -4351,6 +4351,7 @@ function renderDefaultDeliveryProfile(f){
 
 function installedValue(b,k){
  if(k==='garagemVip') return [b.garagemVipBlip,b.garagemVipSpawn].filter(Boolean).join(' / ');
+ if(['garagemPublica','garagemDeluxe','heliponto'].includes(k)){const pre=k==='heliponto'?'heliponto':k,c=[b[pre+'Blip'],b[pre+'Spawn']].filter(Boolean).join(' / ');if(c)return c}
  if(k==='radio') return b.radio||''; if(k==='salario') return b.salario?`${b.salario} / ${b.salarioMinutos||40} min`:'';
  if(typeof b[k]==='boolean') return b[k]?'SIM':''; return b[k]||'';
 }
@@ -4422,6 +4423,7 @@ function initDeliveryUi(){
  $('#newDeliveryModal')?.addEventListener('click',e=>{if(e.target.id==='newDeliveryModal')$('#newDeliveryModal').classList.add('hidden')});
 
  $('#dGroup')?.addEventListener('change',()=>fillDeliveryFromGroup($('#dGroup').value));
+ $('#dSheetRefresh')?.addEventListener('click',()=>fillDeliveryFromGroup($('#dGroup').value,{force:true}));
 
  ['dFaccao',
 'dLider',
@@ -4777,44 +4779,271 @@ function openNewDelivery(group=''){
 sel.innerHTML='<option value="">SELECIONE O GROUP</option>'+faccoes.filter(f=>!f.removido).map(f=>`<option value="${esc(f.group)}">${esc(f.group)} — ${esc(f.qg||'SEM LOCAL')} ${f.status==='ATIVA'?'['+esc(f.faccao||'OCUPADO')+']':'[VAGO]'}</option>`).join('');
 
  $('#newDeliveryForm').reset();
+dlvCurrent.group='';
 if(group){sel.value=group;
-fillDeliveryFromGroup(group)}else{$('#dInstalled').innerHTML='<div class="delivery-no-change">Selecione um Group.</div>';
-$('#dActive').innerHTML='';
-updateNewDeliveryPreview()};
+fillDeliveryFromGroup(group)}else{fillDeliveryFromGroup('')};
 $('#newDeliveryModal').classList.remove('hidden');
 
 }
-function fillDeliveryFromGroup(group){
+/* =====================================================================
+   HIGH OS V12.9 · ENTREGA COM BENEFÍCIOS DA PLANILHA
+   O bot já recebe a planilha principal (Apps Script → /v1/sheets/ingest)
+   e guarda cada aba no storage "planilha". A entrega lê as abas
+   BENEFICIOS FACÇÕES e BLIPS COORDENADAS, junta com o cadastro do Group
+   e mostra TODOS os benefícios como marcáveis:
+   - instalado (planilha ou High OS) → vem marcado;
+   - não instalado → ao marcar, pede CDS/dados e gera a solicitação.
+   ===================================================================== */
+const DLV_SHEET_TABS=['beneficios-faccoes','blips-coordenadas'];
+const DLV_SHEET_TTL=5*60*1000;
+let dlvSheetCache={at:0,tabs:null,promise:null,error:''};
+const dlvFold=v=>String(v??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+const dlvAlnum=v=>dlvFold(v).replace(/[^a-z0-9]/g,'');
+const dlvNegative=v=>/^(|-|—|–|0|n|nao|não|nao possui|não possui|sem|nenhum|nenhuma|false|x nao|inativo|inativa|nao tem|não tem|n\/a|na)$/.test(dlvFold(v));
+const dlvAffirmative=v=>/^(sim|s|x|ok|✓|✔|✅|true|ativo|ativa|possui|tem|instalado|instalada|liberado|liberada)$/.test(dlvFold(v));
+
+/* Rótulo da planilha → benefício do High OS. A primeira regra que casar vence. */
+const DLV_LABEL_RULES=[
+ ['garagemDeluxe',/garag.*deluxe/],
+ ['garagemVip',/garag.*(vip|fac|org)|(vip|fac).*garag/],
+ ['garagemPublica',/garag.*publ/],
+ ['heliponto',/heli/],
+ ['telao',/telao/],
+ ['roupasFaccao',/roupas? (de |da )?(fac|org)|uniforme/],
+ ['lojaRoupas',/roupa|^loja de r$/],
+ ['barbearia',/barbe/],
+ ['tatuagem',/tatuag|tattoo/],
+ ['atm',/\batm\b|caixa eletr/],
+ ['shopDeluxe',/shop.*deluxe|loja.*deluxe|^shop d$/],
+ ['sinuca',/sinuca/],
+ ['academia',/academia/],
+ ['shopExclusivo',/shop|loja (da |de )?(fac|org)|loja exclusiva|lojinha/],
+ ['bau',/\bbau\b/],
+ ['radio',/radio/],
+ ['salario',/salario/],
+ ['chatFaccao',/chat/],
+ ['rotaExclusiva',/rota exclusiva|rota de farm exclusiva|^rota (fac|org)/],
+ ['arena',/arena/],
+ ['craft',/craft|fabrica/],
+ ['farm',/\bfarm\b/],
+ ['vipOrg',/\bvip\b/]
+];
+const DLV_SPAWNABLE={garagemDeluxe:'garagemDeluxeSpawn',garagemVip:'garagemVipSpawn',garagemPublica:'garagemPublicaSpawn',heliponto:'helipontoSpawn'};
+const DLV_IGNORE=/^(group|grupo|local|qg|localizacao|segmento|produto|status|lider|proprietario|organizacao|organizacoes|faccao|staff|entregue por|data|data de entrega|contingente|quantidade contingente|observac|obs|n|no|numero|cds|coordenada|coordenadas|anuncio|coluna \d+|iniciar rota|true|false|completo|pendente|disp|ocup|setado|remover|vencimentos?|legendas?|vips? (esmeralda|prata|ouro|deluxe|obsidian|premium))\b/;
+
+function dlvLabelKey(label){const l=dlvFold(label);for(const [k,re] of DLV_LABEL_RULES)if(re.test(l))return k;return ''}
+
+/* Fichas ancoradas em "GROUP" (mesma leitura do bot) e, se não houver,
+   tabela com coluna GROUP ou tabela com um Group por coluna. */
+function dlvSheetEntries(tab,group){
+ const cells=tab?.grid?.cells||[tab?.header||[],...(tab?.rows||[])];
+ const want=dlvAlnum(group),out=[];
+ if(!want||!cells.length)return out;
+ // 1) Fichas.
+ for(let ri=0;ri<cells.length;ri++){const line=cells[ri]||[];
+  for(let ci=0;ci<line.length;ci++){
+   if(!/^(group|grupo)$/.test(dlvFold(line[ci])))continue;
+   let end=line.length;for(let k=ci+1;k<line.length;k++)if(/^(group|grupo)$/.test(dlvFold(line[k]))){end=k;break}
+   const pick=r=>{for(let k=ci+1;k<end;k++)if(cells[r]?.[k])return k;return -1};
+   const gi=pick(ri);if(gi<0||dlvAlnum(cells[ri][gi])!==want)continue;
+   let blanks=0;
+   for(let rj=ri+1;rj<cells.length;rj++){const label=cells[rj]?.[ci]||'';
+    if(/^(group|grupo)$/.test(dlvFold(label)))break;
+    if(!label){if(++blanks>=2)break;continue}
+    blanks=0;const vi=pick(rj);out.push({label,value:vi>=0?cells[rj][vi]:''});
+   }
+  }
+ }
+ if(out.length)return out;
+ // 2) Tabela com coluna GROUP.
+ for(let hi=0;hi<Math.min(cells.length,15);hi++){const head=cells[hi]||[];
+  const gc=head.findIndex(x=>/^(group|grupo)\b/.test(dlvFold(x)));
+  if(gc<0)continue;
+  for(let ri=hi+1;ri<cells.length;ri++){const r=cells[ri]||[];
+   if(dlvAlnum(r[gc])!==want)continue;
+   head.forEach((label,i)=>{if(i!==gc&&label)out.push({label,value:r[i]||''})});
+  }
+  if(out.length)return out;
+ }
+ // 3) Um Group por coluna, rótulo na primeira coluna.
+ for(let hi=0;hi<Math.min(cells.length,15);hi++){const head=cells[hi]||[];
+  const gc=head.findIndex(x=>dlvAlnum(x)===want);
+  if(gc<0)continue;
+  for(let ri=hi+1;ri<cells.length;ri++){const r=cells[ri]||[];if(r[0])out.push({label:r[0],value:r[gc]||''})}
+  return out;
+ }
+ return out;
+}
+
+/* Converte as linhas da planilha em campos de benefício do High OS. */
+function dlvSheetBenefits(group,tabs){
+ const b={},src={},unknown=[];let found=0,last='';
+ const set=(field,value,key,tabName,label)=>{if(b[field]&&!(b[field]===true||b[field]==='SIM'))return;if(b[field]&&(value===true||value==='SIM'))return;b[field]=value;src[key]=`${tabName} › ${label}`};
+ for(const tab of tabs||[]){
+  const entries=dlvSheetEntries(tab,group);if(entries.length)found++;
+  for(const {label,value} of entries){
+   const l=dlvFold(label),v=String(value||'').trim();
+   // Spawn logo abaixo da garagem/heliponto.
+   if(/^(spawn|saida|vaga)/.test(l)&&DLV_SPAWNABLE[last]){if(v&&!dlvNegative(v))set(DLV_SPAWNABLE[last],v,last,tab.name,label);continue}
+   // Campo que lista vários benefícios ("Benefícios: Loja de roupa, Barbearia...").
+   if(/benef|estrutura|instala|setage/.test(l)&&v&&!dlvLabelKey(label)){
+    v.split(/[,;\n•|/]+/).map(x=>x.trim()).filter(Boolean).forEach(item=>{const k=dlvLabelKey(item);if(k&&!b[k])set(k,'SIM',k,tab.name,label);else if(!k)unknown.push(item)});
+    continue}
+   if(DLV_IGNORE.test(l))continue;
+   const key=dlvLabelKey(label);last=key||last;
+   if(!key){if(v&&!dlvNegative(v)&&!DLV_IGNORE.test(l))unknown.push(label);continue}
+   if(!v||dlvNegative(v))continue;
+   const spawn=/spawn|saida/.test(l);
+   if(['garagemVip','garagemPublica','garagemDeluxe'].includes(key)){
+    // Na planilha a garagem vem como "blip / spawn" na mesma célula.
+    const parts=v.split(/\s+\/\s*|\s*\/\s+/).map(x=>x.trim()).filter(x=>x&&!dlvNegative(x));
+    if(spawn)set(key+'Spawn',parts[0]||v,key,tab.name,label);
+    else{set(key+'Blip',parts[0]||v,key,tab.name,label);if(parts[1])set(key+'Spawn',parts[1],key,tab.name,label)}
+    if(key!=='garagemVip')set(key,true,key,tab.name,label)}
+   else if(key==='heliponto'){set(spawn?'helipontoSpawn':'helipontoBlip',v,key,tab.name,label);set('heliponto',true,key,tab.name,label)}
+   else if(key==='telao'){if(!dlvAffirmative(v))set('telaoCds',v,key,tab.name,label);set('telao',true,key,tab.name,label)}
+   else if(key==='salario'){const n=(v.match(/[\d.]+/)||[''])[0].replace(/\./g,'');set('salario',n||v,key,tab.name,label)}
+   else if(key==='vipOrg')set('vipOrg',dlvAffirmative(v)?true:v,key,tab.name,label);
+   else if(['chatFaccao','rotaExclusiva','roupasFaccao'].includes(key)){set(key,true,key,tab.name,label);if(key==='rotaExclusiva'&&!dlvAffirmative(v))set('rotaBlips',v,key,tab.name,label)}
+   else set(key,dlvAffirmative(v)?'SIM':v,key,tab.name,label);
+  }
+ }
+ return {b,src,found,unknown:[...new Set(unknown)].slice(0,12)};
+}
+
+async function dlvLoadSheet(force=false){
+ if(!force&&dlvSheetCache.tabs&&Date.now()-dlvSheetCache.at<DLV_SHEET_TTL)return dlvSheetCache;
+ if(dlvSheetCache.promise)return dlvSheetCache.promise;
+ dlvSheetCache.promise=(async()=>{
+  const tabs=[],errors=[];
+  for(const slug of DLV_SHEET_TABS){
+   try{tabs.push(await highOsStoreGet('planilha',slug))}catch(e){errors.push(slug+': '+e.message)}
+  }
+  dlvSheetCache={at:Date.now(),tabs,promise:null,error:tabs.length?'':(errors.join(' • ')||'abas não encontradas')};
+  return dlvSheetCache;
+ })().catch(e=>{dlvSheetCache={...dlvSheetCache,promise:null,error:e.message};return dlvSheetCache});
+ return dlvSheetCache.promise;
+}
+
+/* Dados que a entrega precisa quando o benefício ainda não existe no Group.
+   [campo, rótulo, placeholder, opcional, multilinha] */
+const DLV_NEEDS={
+ vipOrg:[],chatFaccao:[],
+ radio:[['radio','Frequência da rádio','Ex.: 155']],
+ salario:[['salario','Valor do salário','Ex.: 5000'],['salarioMinutos','A cada (minutos)','40',true]],
+ garagemVip:[['garagemVipBlip','Blip (CDS)','x, y, z'],['garagemVipSpawn','Spawn (CDS)','x, y, z, h']],
+ garagemPublica:[['garagemPublicaBlip','Blip (CDS)','x, y, z'],['garagemPublicaSpawn','Spawn (CDS)','x, y, z, h']],
+ garagemDeluxe:[['garagemDeluxeBlip','Blip (CDS)','x, y, z'],['garagemDeluxeSpawn','Spawn (CDS)','x, y, z, h']],
+ shopDeluxe:[['shopDeluxe','CDS do Shop Deluxe','x, y, z']],
+ academia:[['academia','CDS da academia','x, y, z']],
+ sinuca:[['sinuca','CDS da sinuca','x, y, z']],
+ roupasFaccao:[],
+ heliponto:[['helipontoBlip','Blip (CDS)','x, y, z'],['helipontoSpawn','Spawn (CDS)','x, y, z, h',true]],
+ rotaExclusiva:[['rotaBlips','Pontos da rota (uma CDS por linha)','x, y, z',false,true]],
+ telao:[['telaoCds','CDS do telão','x, y, z'],['telaoPostit','CDS do postit','x, y, z',true],['telaoNome','Modelo do telão','',true]],
+ lojaRoupas:[['lojaRoupas','CDS da loja','x, y, z']],
+ barbearia:[['barbearia','CDS da barbearia','x, y, z']],
+ tatuagem:[['tatuagem','CDS da tatuagem','x, y, z']],
+ shopExclusivo:[['shopExclusivo','CDS da loja da facção','x, y, z']],
+ atm:[['atm','CDS do ATM','x, y, z']],
+ bau:[['bau','CDS do baú','x, y, z'],['bauCapacidade','Capacidade','',true]],
+ farm:[['farm','CDS / descrição do farm','x, y, z']],
+ craft:[['craft','CDS do craft','x, y, z']],
+ arena:[['arena','CDS da arena','x, y, z']]
+};
+
+let dlvCurrent={group:'',stored:{},sheet:{b:{},src:{},found:0,unknown:[]},status:''};
+
+/* Benefícios do Group: planilha manda; o cadastro do High OS completa. */
+function dlvMergedBenefits(){
+ const out={...(dlvCurrent.stored||{})};
+ Object.entries(dlvCurrent.sheet?.b||{}).forEach(([k,v])=>{if(v!==''&&v!=null)out[k]=v});
+ return out;
+}
+function dlvSnapshotForm(){
+ const checks={},fields={};
+ document.querySelectorAll('[data-delivery-benefit][data-touched]').forEach(x=>checks[x.dataset.deliveryBenefit]=x.checked);
+ document.querySelectorAll('[data-dlv-field]').forEach(x=>fields[x.dataset.dlvField]=x.value);
+ return {checks,fields};
+}
+
+function renderDeliveryBenefits(keep=null){
+ const box=$('#dActive');if(!box)return;
+ const f=faccoes.find(x=>x.group===dlvCurrent.group);
+ if(!f){box.innerHTML='<div class="delivery-no-change">Selecione um Group.</div>';dlvRenderStatus();return}
+ const b=dlvMergedBenefits(),p=f.perfilEntrega||{},defaults=new Set(p.beneficiosPadrao||[]);
+ const prev=keep||{checks:{},fields:{}};
+ const item=([k,n])=>{
+  const installed=isInstalled(b,k),src=dlvCurrent.sheet?.src?.[k];
+  const checked=Object.prototype.hasOwnProperty.call(prev.checks,k)?prev.checks[k]:(installed&&(defaults.size?defaults.has(k):true));
+  const detail=installed?(String(installedValue(b,k))==='SIM'||installedValue(b,k)===true?'Instalado':esc(installedValue(b,k))):'Não instalado';
+  const needs=installed?'':(DLV_NEEDS[k]||[]).map(([field,label,ph,opt,multi])=>{const v=esc(prev.fields[field]??'');return `<label>${esc(label)}${opt?' <i>(opcional)</i>':''}${multi?`<textarea data-dlv-field="${field}" placeholder="${esc(ph||'')}">${v}</textarea>`:`<input data-dlv-field="${field}" placeholder="${esc(ph||'')}" value="${v}">`}</label>`}).join('');
+  return `<div class="dlv-item ${installed?'is-installed':'is-missing'} ${checked?'is-on':''}" data-dlv-key="${k}">
+   <label class="dlv-toggle"><input type="checkbox" data-delivery-benefit="${k}" ${checked?'checked':''} ${Object.prototype.hasOwnProperty.call(prev.checks,k)?'data-touched="1"':''}>
+    <span class="dlv-text"><b>${esc(n)}</b><small>${detail}${src?` · <em title="${esc(src)}">planilha</em>`:''}</small></span>
+    <span class="dlv-tag">${installed?'INSTALADO':'SOLICITAR'}</span></label>
+   ${installed?'':`<div class="dlv-needs">${needs||'<p>Sem dados extras: a solicitação de ativação é gerada automaticamente.</p>'}</div>`}
+  </div>`};
+ const inst=INSTALLATIONS.filter(([k])=>isInstalled(b,k)),miss=INSTALLATIONS.filter(([k])=>!isInstalled(b,k));
+ box.innerHTML=`${inst.length?`<div class="dlv-group-title">INSTALADOS NO GROUP <span>${inst.length}</span></div><div class="dlv-grid">${inst.map(item).join('')}</div>`:''}
+  <div class="dlv-group-title">NÃO INSTALADOS · MARQUE PARA SOLICITAR <span>${miss.length}</span></div><div class="dlv-grid">${miss.map(item).join('')}</div>`;
+ box.querySelectorAll('[data-delivery-benefit]').forEach(x=>x.addEventListener('change',()=>{x.dataset.touched='1';x.closest('.dlv-item')?.classList.toggle('is-on',x.checked);updateNewDeliveryPreview()}));
+ box.querySelectorAll('[data-dlv-field]').forEach(x=>x.addEventListener('input',updateNewDeliveryPreview));
+ dlvRenderStatus();
+}
+
+function dlvRenderStatus(){
+ const el=$('#dSheetStatus');if(!el)return;
+ const s=dlvCurrent.sheet||{},when=(dlvSheetCache.tabs||[]).map(t=>t.receivedAt).filter(Boolean).sort().pop();
+ const fmt=when?new Date(when).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+ let html;
+ if(dlvCurrent.status==='loading')html='<b>Lendo a planilha…</b> BENEFICIOS FACÇÕES e BLIPS COORDENADAS.';
+ else if(dlvSheetCache.error)html=`<b class="warn">Planilha indisponível.</b> Usando só o cadastro do High OS. <small>${esc(dlvSheetCache.error)}</small>`;
+ else if(!dlvCurrent.group)html='Selecione um Group para ler os benefícios da planilha.';
+ else if(!s.found)html=`<b class="warn">${esc(dlvCurrent.group)} não foi encontrado</b> nas abas BENEFICIOS FACÇÕES / BLIPS COORDENADAS${fmt?` (recebidas ${fmt})`:''}. Usando só o cadastro do High OS.`;
+ else html=`<b>Planilha lida</b>${fmt?` · recebida ${fmt}`:''} · ${Object.keys(s.src||{}).length} benefício(s) do Group encontrados.`;
+ if(s.unknown?.length)html+=`<br><small>Itens da planilha não reconhecidos: ${s.unknown.map(esc).join(', ')}</small>`;
+ el.innerHTML=html;
+}
+
+async function fillDeliveryFromGroup(group,{force=false}={}){
  const f=faccoes.find(x=>x.group===group);
-if(!f)return;
-const b=f.beneficios||{};
-
- $('#dInstalled').innerHTML=INSTALLATIONS.map(([k,
-n])=>{const v=installedValue(b,k);return `<div class="install-item"><b>${esc(n)}</b><small>${v?esc(v):'Não cadastrado'}</small></div>`}).join('');
-
- const p=f.perfilEntrega||{},
- defaults=new Set(p.beneficiosPadrao||[]),
- available=INSTALLATIONS.filter(([k])=>isInstalled(b,k));
-
- $('#dActive').innerHTML=available.map(([k,
-n])=>`<label class="install-item install-toggle"><input type="checkbox" data-delivery-benefit="${k}" ${defaults.size?(defaults.has(k)?'checked':''):'checked'}><span><b>${esc(n)}</b><small>${esc(installedValue(b,k))}</small></span></label>`).join('')||'<div class="delivery-no-change">Este Group ainda não possui instalações cadastradas. Cadastre no Perfil Técnico.</div>';
-
- document.querySelectorAll('[data-delivery-benefit]').forEach(x=>x.addEventListener('change',updateNewDeliveryPreview));
-
- $('#dPlano').value=p.planoPadrao||'';
-if(p.observacao&&!$('#dNotes').value)$('#dNotes').value=p.observacao;
-
- $('#dStaff').value=currentProfile?.name||currentUser?.displayName||'';
-updateNewDeliveryPreview();
-
+ const keep=dlvCurrent.group===group?dlvSnapshotForm():null;
+ dlvCurrent={group:f?group:'',stored:f?.beneficios||{},sheet:{b:{},src:{},found:0,unknown:[]},status:f?'loading':''};
+ if(!f){renderDeliveryBenefits();updateNewDeliveryPreview();return}
+ const p=f.perfilEntrega||{};
+ if(!keep){
+  $('#dPlano').value=p.planoPadrao||'';
+  if(p.observacao&&!$('#dNotes').value)$('#dNotes').value=p.observacao;
+  $('#dStaff').value=currentProfile?.name||currentUser?.displayName||'';
+ }
+ renderDeliveryBenefits(keep);updateNewDeliveryPreview();
+ const cache=await dlvLoadSheet(force);
+ if(dlvCurrent.group!==group)return; // trocou de Group enquanto carregava
+ dlvCurrent.sheet=dlvSheetBenefits(group,cache.tabs||[]);dlvCurrent.status='';
+ renderDeliveryBenefits(dlvSnapshotForm());updateNewDeliveryPreview();
 }
 function selectedDeliveryBenefits(){return [...document.querySelectorAll('[data-delivery-benefit]:checked')].map(x=>x.dataset.deliveryBenefit)}
+/* Benefícios usados no extrato e nas solicitações: os do Group + o que foi
+   digitado para os que ainda não existem. */
+function deliveryBenefitState(){
+ const base=dlvMergedBenefits(),active=selectedDeliveryBenefits(),b={...base},isNew=new Set();
+ active.forEach(k=>{if(isInstalled(base,k))return;isNew.add(k);
+  document.querySelectorAll(`[data-dlv-key="${k}"] [data-dlv-field]`).forEach(x=>{const v=x.value.trim();if(v)b[x.dataset.dlvField]=v});
+  if(['vipOrg','chatFaccao','telao','garagemPublica','garagemDeluxe','heliponto','rotaExclusiva','roupasFaccao'].includes(k))b[k]=true});
+ return {b,base,active,isNew};
+}
+function deliveryMissingData(){
+ const {isNew}=deliveryBenefitState(),miss=[];
+ isNew.forEach(k=>{const n=INSTALLATIONS.find(x=>x[0]===k)?.[1]||k;
+  (DLV_NEEDS[k]||[]).forEach(([field,label,,opt])=>{if(opt)return;const el=document.querySelector(`[data-dlv-key="${k}"] [data-dlv-field="${field}"]`);if(!el?.value.trim())miss.push(`${n}: ${label}`)})});
+ return miss;
+}
 function deliveryExtractV5(){
- const f=faccoes.find(x=>x.group===$('#dGroup').value),
- active=selectedDeliveryBenefits();
+ const f=faccoes.find(x=>x.group===$('#dGroup').value);
 if(!f)return '';
 
- const b=f.beneficios||{},
+ const {b,active,isNew}=deliveryBenefitState(),
  lines=['ENTREGA DE ORGANIZAÇÃO — HIGH ILEGAL',
 '',
 `Group: ${f.group}`,
@@ -4829,7 +5058,7 @@ if(!f)return '';
 lines.push('','BENEFÍCIOS / SETAGENS ENTREGUES:');
 
  if(!active.length)lines.push('- Nenhum benefício selecionado');
- else active.forEach(k=>{const n=INSTALLATIONS.find(x=>x[0]===k)?.[1]||k;lines.push(`- ${n}${installedValue(b,k)&&!['vipOrg','chatFaccao','rotaExclusiva','telao','garagemPublica','heliponto'].includes(k)?`: ${installedValue(b,k)}`:''}`)});
+ else active.forEach(k=>{const n=INSTALLATIONS.find(x=>x[0]===k)?.[1]||k;lines.push(`- ${n}${installedValue(b,k)&&!['vipOrg','chatFaccao','rotaExclusiva','telao','garagemPublica','heliponto'].includes(k)?`: ${installedValue(b,k)}`:''}${isNew.has(k)?' (NOVA INSTALAÇÃO • solicitação gerada)':''}`)});
 
  if($('#dNotes').value.trim())lines.push('','PERSONALIZAÇÕES / ALTERAÇÕES:',$('#dNotes').value.trim());
 return lines.join('\n');
@@ -4838,9 +5067,9 @@ return lines.join('\n');
 function currentDeliveryRequests(){
  const f=faccoes.find(x=>x.group===$('#dGroup').value);
 if(!f)return[];
-const b=f.beneficios||{},
-a=selectedDeliveryBenefits(),
+const {b,active:a,isNew}=deliveryBenefitState(),
 has=k=>a.includes(k),
+novo=k=>isNew.has(k)?' (NOVA INSTALAÇÃO)':'',
 R=[],
 add=(tipo,titulo,texto)=>R.push({tipo,
 titulo,
@@ -4858,7 +5087,12 @@ texto});
 'bau',
 'farm',
 'craft',
-'arena'];
+'arena',
+'atm',
+'shopDeluxe',
+'academia',
+'sinuca',
+'roupasFaccao'];
 
  if(a.some(k=>vipKeys.includes(k))){let L=['Assunto: Ativação de benefícios de uma organização e alguns blips',
 '',
@@ -4866,10 +5100,12 @@ texto});
 '',
 '- Ativação de benefícios de uma organização e alguns blips',
 `- Group: ${f.group}`];
-if(has('salario')&&b.salario)L.push('',`- Ativar salário de ${b.salario} (A cada ${b.salarioMinutos||40} minutos)`);
-if(has('radio')&&b.radio)L.push('',`- Ativar Rádio exclusiva: ${b.radio}`);
+if(has('salario')&&b.salario)L.push('',`- Ativar salário${novo('salario')} de ${b.salario} (A cada ${b.salarioMinutos||40} minutos)`);
+if(has('radio')&&b.radio)L.push('',`- Ativar Rádio exclusiva${novo('radio')}: ${b.radio==='SIM'?'{FREQUÊNCIA}':b.radio}`);
 if(has('chatFaccao'))L.push('','- Chat Facção.');
-if(has('garagemVip'))L.push('','- Ativar Garagem VIP:',`- Blip: ${fmtCds(b.garagemVipBlip)}`,`- Spawn: ${fmtCds(b.garagemVipSpawn)}`,b.garagemVipVeiculos?`- Veículos: ${b.garagemVipVeiculos}`:'');
+if(has('vipOrg')&&typeof b.vipOrg==='string'&&b.vipOrg!=='SIM')L.push('',`- VIP: ${b.vipOrg}`);
+if(has('roupasFaccao'))L.push('',`- Roupas de Facção${novo('roupasFaccao')}.`);
+if(has('garagemVip'))L.push('',`- ${isNew.has('garagemVip')?'Adicionar':'Ativar'} Garagem VIP${novo('garagemVip')}:`,`- Blip: ${fmtCds(b.garagemVipBlip)}`,`- Spawn: ${fmtCds(b.garagemVipSpawn)}`,b.garagemVipVeiculos?`- Veículos: ${b.garagemVipVeiculos}`:'');
 [['lojaRoupas',
 'Loja de roupas'],
 ['barbearia',
@@ -4885,11 +5121,19 @@ if(has('garagemVip'))L.push('','- Ativar Garagem VIP:',`- Blip: ${fmtCds(b.garag
 ['craft',
 'Craft'],
 ['arena',
-'Arena']].forEach(([k,
-n])=>{if(has(k)&&b[k])L.push('',`- ${n}: ${fmtCds(b[k])}`)});
+'Arena'],
+['atm',
+'ATM'],
+['shopDeluxe',
+'Shop Deluxe'],
+['academia',
+'Academia'],
+['sinuca',
+'Sinuca']].forEach(([k,
+n])=>{if(has(k))L.push('',`- ${n}${novo(k)}: ${fmtCds(b[k]&&b[k]!=='SIM'?b[k]:'')}`)});
 add('BENEFICIOS','VIP Org / Benefícios e Setagens',L.filter(x=>x!==undefined).join('\n'))}
  if(has('rotaExclusiva')){const pts=(b.rotaBlips||'').split(/\r?\n/).filter(Boolean);
-add('ROTA_FARM','Rota de Farm Exclusiva',['Assunto: Ativação de rota de farm exclusiva',
+add('ROTA_FARM','Rota de Farm Exclusiva'+novo('rotaExclusiva'),['Assunto: Ativação de rota de farm exclusiva',
 '',
 'Solicitação:',
 '',
@@ -4899,7 +5143,7 @@ add('ROTA_FARM','Rota de Farm Exclusiva',['Assunto: Ativação de rota de farm e
 '- Blips da rota nova:',
 '',
 ...(pts.length?pts:['{ CDS },'])].join('\n'))}
- if(has('telao'))add('TELAO','Telão da Organização',['Assunto: Ativação de Telão Hall em uma Organização Ilegal',
+ if(has('telao'))add('TELAO','Telão da Organização'+novo('telao'),['Assunto: Ativação de Telão Hall em uma Organização Ilegal',
 '',
 'Solicitação:',
 '',
@@ -4911,7 +5155,7 @@ add('ROTA_FARM','Rota de Farm Exclusiva',['Assunto: Ativação de rota de farm e
 `- Local/Coordenadas postit: ${fmtCds(b.telaoPostit)}`,
 `- Local/Coordenadas cds: ${fmtCds(b.telaoCds)}`].join('\n'));
 
- if(has('garagemPublica'))add('GARAGEM','Garagem Pública',['Assunto:',
+ if(has('garagemPublica'))add('GARAGEM','Garagem Pública'+novo('garagemPublica'),['Assunto:',
 '',
 '- Solicitaçao de Garagem Publica;',
 '',
@@ -4924,7 +5168,20 @@ add('ROTA_FARM','Rota de Farm Exclusiva',['Assunto: Ativação de rota de farm e
 '',
 `- Permissao : ${f.group}`].join('\n'));
 
- if(has('heliponto'))add('HELIPONTO','Heliponto',['Assunto: Adição de Heliponto',
+ if(has('garagemDeluxe'))add('GARAGEM','Garagem Deluxe'+novo('garagemDeluxe'),['Assunto:',
+'',
+`- ${isNew.has('garagemDeluxe')?'Solicitação':'Ativação'} de Garagem Deluxe;`,
+'',
+'Solicitação:',
+'',
+`- ${isNew.has('garagemDeluxe')?'Adicione':'Ative'} a Garagem Deluxe na CDS abaixo:`,
+'',
+`* Blip: ${fmtCds(b.garagemDeluxeBlip)}`,
+`* Spawn: ${fmtCds(b.garagemDeluxeSpawn)}`,
+'',
+`- Permissão: ${f.group}`].join('\n'));
+
+ if(has('heliponto'))add('HELIPONTO','Heliponto'+novo('heliponto'),['Assunto: Adição de Heliponto',
 '',
 'Solicitação:',
 '- Adicione um Heliponto na cds abaixo;',
@@ -4963,7 +5220,10 @@ const faccao=$('#dFaccao').value.trim();
 if(!faccao)return alert('Informe a facção que está assumindo.');
 // O bot recusa entrega sem líder (passaporte + nome); avisa aqui antes de enviar.
 if(!$('#dLider').value.trim())return alert('Informe o líder (passaporte e nome) da facção que está assumindo.');
-const active=selectedDeliveryBenefits(),
+const pendentes=deliveryMissingData();
+if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que ainda não existem no Group:\n\n• '+pendentes.join('\n• ')+'\n\nPreencha os campos ou desmarque o benefício.');
+const {base:beneficiosGroup,isNew}=deliveryBenefitState(),
+active=selectedDeliveryBenefits(),
 requests=currentDeliveryRequests(),
 extract=deliveryExtractV5();
 
@@ -4980,6 +5240,7 @@ staff:$('#dStaff').value.trim(),
 dataEntrega:$('#dData').value.trim(),
 plano:$('#dPlano').value.trim(),
 beneficiosAtivos:active,
+beneficiosSolicitados:[...isNew],
 personalizacoes:$('#dNotes').value.trim(),
 solicitacoesGeradas:requests,
 extrato:extract,
@@ -4992,13 +5253,15 @@ createdBy:currentUser.email};
   // V12 Discord Storage: ocupação passa a ser persistida no High OS Discord.
   // Não cria/atualiza documentos de facções, entregas, organizações ou histórico no Firestore.
   const previous=entregas.filter(x=>x.group===f.group&&x.status==='ATIVA');
+  // Benefícios lidos da planilha passam a constar no cadastro do Group.
   const deliveredGroup={...f,
+   beneficios:clonePlain(beneficiosGroup),
    status:'ATIVA',
    faccao,
    lider:payload.lider,
    staff:payload.staff,
    dataEntrega:payload.dataEntrega,
-   ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,beneficiosAtivos:active},
+   ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,beneficiosAtivos:active,beneficiosSolicitados:[...isNew]},
    updatedBy:currentUser.email};
 
   await saveFactionToDiscord(deliveredGroup);

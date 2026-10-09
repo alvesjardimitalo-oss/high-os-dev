@@ -651,3 +651,32 @@ body[data-access-mode="custom"] .nav-item[style*="display: none"]{pointer-events
 #page-metricas .metric-day-guide{stroke:#211a27;stroke-width:1;stroke-dasharray:2 5;opacity:.55}
 #page-metricas .metric-x-label{fill:#d9d1de;font-size:10px;font-weight:900;letter-spacing:.01em}
 #page-metricas .metric-week-days{display:none!important}
+
+/* V12.9 · Entrega: benefícios da planilha, todos marcáveis */
+.dlv-panel{border:1px solid #2a2233;border-radius:14px;padding:16px;background:#0f0c14;margin:14px 0}
+.dlv-panel-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.dlv-panel-head h3{margin:2px 0 0}
+.dlv-status{margin:10px 0 4px;font-size:12px;color:#a99db6;line-height:1.5}
+.dlv-status b{color:#e9e2f0}.dlv-status b.warn{color:#f5b84b}.dlv-status small{color:#7f738c}
+.dlv-group-title{display:flex;align-items:center;gap:8px;margin:16px 0 8px;font-size:11px;font-weight:800;letter-spacing:.08em;color:#b48be0}
+.dlv-group-title span{background:#241a30;border-radius:999px;padding:1px 8px;color:#e7dcf3}
+.dlv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;align-items:start}
+.dlv-item{border:1px solid #2c2337;border-radius:11px;background:#15111b;transition:border-color .15s,background .15s}
+.dlv-item.is-on{border-color:#8a3fe0;background:#1c1426}
+.dlv-item.is-missing:not(.is-on){opacity:.82}
+.dlv-toggle{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer;margin:0}
+.dlv-toggle input{width:18px;height:18px;flex:none;margin:0;accent-color:#9a1ee7;cursor:pointer}
+.dlv-text{display:grid;gap:2px;min-width:0;flex:1}
+.dlv-text b{font-size:13px;color:#f1eaf8}
+.dlv-text small{font-size:11px;color:#8d819a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dlv-text small em{font-style:normal;color:#7fd3a4}
+.dlv-tag{flex:none;font-size:9px;font-weight:800;letter-spacing:.08em;padding:3px 7px;border-radius:6px;background:#173323;color:#7fd3a4}
+.dlv-item.is-missing .dlv-tag{background:#33260f;color:#f5b84b}
+.dlv-needs{display:none;padding:0 12px 12px;gap:8px}
+.dlv-item.is-missing.is-on .dlv-needs{display:grid}
+.dlv-needs label{display:grid;gap:4px;font-size:11px;color:#b9adc6;margin:0}
+.dlv-needs label i{font-style:normal;color:#7f738c}
+.dlv-needs input,.dlv-needs textarea{width:100%;box-sizing:border-box;background:#0d0b12;border:1px solid #30263b;color:#fff;border-radius:8px;padding:8px 10px;font-size:13px}
+.dlv-needs textarea{min-height:70px;resize:vertical}
+.dlv-needs p{margin:0;font-size:11px;color:#8d819a}
+@media (max-width:640px){.dlv-grid{grid-template-columns:1fr}}
