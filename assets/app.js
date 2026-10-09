@@ -4971,6 +4971,20 @@ function dlvSnapshotForm(){
  return {checks,fields};
 }
 
+/* CDS de cada benefício instalado, separadas para conferir/testar in game.
+   Garagem/heliponto: Blip e Spawn (na planilha vêm na mesma célula, "blip / spawn").
+   Baú etc.: uma linha por CDS separada por "/". O texto é copiado exatamente como está. */
+const DLV_BLIP_SPAWN=['garagemVip','garagemPublica','garagemDeluxe','heliponto'];
+function dlvCoordParts(v){return String(v||'').split(/\s*\/\s*|\n+/).map(x=>x.trim()).filter(x=>/-?\d+(?:\.\d+)?\s*,\s*-?\d+/.test(x))}
+function dlvCoordRows(k,b){
+ if(DLV_BLIP_SPAWN.includes(k)){
+  let blip=dlvCoordParts(b[k+'Blip']),spawn=dlvCoordParts(b[k+'Spawn']);
+  if(!spawn.length&&blip.length>1){spawn=blip.slice(1);blip=blip.slice(0,1)}
+  return [...blip.map((c,i)=>[blip.length>1?`Blip ${i+1}`:'Blip',c]),...spawn.map((c,i)=>[spawn.length>1?`Spawn ${i+1}`:'Spawn',c])];
+ }
+ const list=dlvCoordParts(k==='telao'?[b.telaoCds,b.telaoPostit].filter(Boolean).join(' / '):k==='rotaExclusiva'?b.rotaBlips:b[k]);
+ return list.map((c,i)=>[list.length>1?`CDS ${i+1}`:'CDS',c]);
+}
 function renderDeliveryBenefits(keep=null){
  const box=$('#dActive');if(!box)return;
  const f=faccoes.find(x=>x.group===dlvCurrent.group);
@@ -4980,12 +4994,14 @@ function renderDeliveryBenefits(keep=null){
  const item=([k,n])=>{
   const installed=isInstalled(b,k),src=dlvCurrent.sheet?.src?.[k];
   const checked=Object.prototype.hasOwnProperty.call(prev.checks,k)?prev.checks[k]:(installed&&(defaults.size?defaults.has(k):true));
-  const detail=installed?(String(installedValue(b,k))==='SIM'||installedValue(b,k)===true?'Instalado':esc(installedValue(b,k))):'Não instalado';
+  const coords=installed?dlvCoordRows(k,b):[];
+  const detail=coords.length?`${coords.length} CDS`:installed?(String(installedValue(b,k))==='SIM'||installedValue(b,k)===true?'Instalado':esc(installedValue(b,k))):'Não instalado';
   const needs=installed?'':(DLV_NEEDS[k]||[]).map(([field,label,ph,opt,multi])=>{const v=esc(prev.fields[field]??'');return `<label>${esc(label)}${opt?' <i>(opcional)</i>':''}${multi?`<textarea data-dlv-field="${field}" placeholder="${esc(ph||'')}">${v}</textarea>`:`<input data-dlv-field="${field}" placeholder="${esc(ph||'')}" value="${v}">`}</label>`}).join('');
   return `<div class="dlv-item ${installed?'is-installed':'is-missing'} ${checked?'is-on':''}" data-dlv-key="${k}">
    <label class="dlv-toggle"><input type="checkbox" data-delivery-benefit="${k}" ${checked?'checked':''} ${Object.prototype.hasOwnProperty.call(prev.checks,k)?'data-touched="1"':''}>
     <span class="dlv-text"><b>${esc(n)}</b><small>${detail}${src?` · <em title="${esc(src)}">planilha</em>`:''}</small></span>
     <span class="dlv-tag">${installed?'INSTALADO':'SOLICITAR'}</span></label>
+   ${coords.length?`<div class="dlv-coords">${coords.map(([l,c])=>`<div class="dlv-coord"><span>${esc(l)}</span><code>${esc(c).replace(/,/g,',<wbr>')}</code><button type="button" class="dlv-copy" data-copy="${esc(c)}">COPIAR</button></div>`).join('')}</div>`:''}
    ${installed?'':`<div class="dlv-needs">${needs||'<p>Sem dados extras: a solicitação de ativação é gerada automaticamente.</p>'}</div>`}
   </div>`};
  const inst=INSTALLATIONS.filter(([k])=>isInstalled(b,k)),miss=INSTALLATIONS.filter(([k])=>!isInstalled(b,k));
@@ -4993,6 +5009,7 @@ function renderDeliveryBenefits(keep=null){
   <div class="dlv-group-title">NÃO INSTALADOS · MARQUE PARA SOLICITAR <span>${miss.length}</span></div><div class="dlv-grid">${miss.map(item).join('')}</div>`;
  box.querySelectorAll('[data-delivery-benefit]').forEach(x=>x.addEventListener('change',()=>{x.dataset.touched='1';x.closest('.dlv-item')?.classList.toggle('is-on',x.checked);updateNewDeliveryPreview()}));
  box.querySelectorAll('[data-dlv-field]').forEach(x=>x.addEventListener('input',updateNewDeliveryPreview));
+ box.querySelectorAll('.dlv-copy').forEach(x=>x.addEventListener('click',()=>copyText(x.dataset.copy,x)));
  dlvRenderStatus();
 }
 
