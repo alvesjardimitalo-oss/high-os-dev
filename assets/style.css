@@ -681,8 +681,9 @@ body[data-access-mode="custom"] .nav-item[style*="display: none"]{pointer-events
 .dlv-needs p{margin:0;font-size:11px;color:#8d819a}
 @media (max-width:640px){.dlv-grid{grid-template-columns:1fr}}
 .dlv-coords{display:grid;gap:5px;padding:0 12px 11px 12px}
-.dlv-coord{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:6px;font-size:11px}
+.dlv-coord{display:grid;grid-template-columns:54px 1fr auto;align-items:center;gap:6px;font-size:11px}
 .dlv-coord span{color:#8d819a;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:10px}
 .dlv-coord code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#e7dcf3;background:#0d0b12;border:1px solid #2a2233;border-radius:6px;padding:4px 7px;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
 .dlv-copy{border:1px solid #3a2d4a;background:#1c1426;color:#d9c7f0;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:800;letter-spacing:.05em;cursor:pointer}
 .dlv-copy:hover{border-color:#8a3fe0;color:#fff}
+.dlv-needs label[hidden]{display:none}
