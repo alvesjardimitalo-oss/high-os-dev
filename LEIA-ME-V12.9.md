@@ -9,7 +9,8 @@ A janela de entrega só deixava marcar benefícios já cadastrados no High OS. D
 - Painel único com **todos os benefícios marcáveis**:
   - **INSTALADO**: vem marcado, mostra a CDS e a origem (planilha).
   - **SOLICITAR**: ao marcar, pede as CDS/dados (blip, spawn, telão, rádio, salário...) e gera a solicitação como NOVA INSTALAÇÃO.
-- Novos itens: ATM, Garagem Deluxe, Shop Deluxe, Academia.
+- Novos itens: ATM, Garagem Deluxe, Shop Deluxe, Academia, Sinuca e Roupas de Facção.
+- BENEFICIOS FACÇÕES: lê as colunas VIP'S (guarda o nível do VIP), ROUPAS DE FACÇÃO, BARBEARIA, SHOP D, RADIO P, LOJA DE R, ROTA FAC, CHAT FAC, SINUCA e a tabela de Benefícios Temporários. Vazio ou "NÃO" = não instalado.
 - Garagem "blip / spawn" na mesma célula é separada automaticamente.
 - Ao concluir, os benefícios lidos da planilha passam a constar no cadastro do Group.
 - Botão **ATUALIZAR DA PLANILHA** força nova leitura (cache de 5 min).

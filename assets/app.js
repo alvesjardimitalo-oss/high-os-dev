@@ -4337,7 +4337,7 @@ const INSTALLATIONS=[
  ['vipOrg','VIP Org'],['chatFaccao','Chat da Facção'],['radio','Rádio Exclusiva'],['salario','Salário'],
  ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaExclusiva','Rota Exclusiva'],
  ['telao','Telão'],['lojaRoupas','Loja de Roupas'],['barbearia','Barbearia'],['tatuagem','Tatuagem'],['shopExclusivo','Shop Exclusivo'],
- ['bau','Baú'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['farm','Farm'],['craft','Craft'],['arena','Arena']
+ ['bau','Baú'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['sinuca','Sinuca'],['roupasFaccao','Roupas de Facção'],['farm','Farm'],['craft','Craft'],['arena','Arena']
 ];
 function renderDefaultDeliveryProfile(f){
  const p=f?.perfilEntrega||{}, b=f?.beneficios||{}, selected=new Set(p.beneficiosPadrao||[]);
@@ -4809,25 +4809,27 @@ const DLV_LABEL_RULES=[
  ['garagemPublica',/garag.*publ/],
  ['heliponto',/heli/],
  ['telao',/telao/],
- ['lojaRoupas',/roupa/],
+ ['roupasFaccao',/roupas? (de |da )?(fac|org)|uniforme/],
+ ['lojaRoupas',/roupa|^loja de r$/],
  ['barbearia',/barbe/],
- ['tatuagem',/tatu/],
+ ['tatuagem',/tatuag|tattoo/],
  ['atm',/\batm\b|caixa eletr/],
- ['shopDeluxe',/shop.*deluxe|loja.*deluxe/],
+ ['shopDeluxe',/shop.*deluxe|loja.*deluxe|^shop d$/],
+ ['sinuca',/sinuca/],
  ['academia',/academia/],
  ['shopExclusivo',/shop|loja (da |de )?(fac|org)|loja exclusiva|lojinha/],
  ['bau',/\bbau\b/],
  ['radio',/radio/],
  ['salario',/salario/],
  ['chatFaccao',/chat/],
- ['rotaExclusiva',/rota exclusiva|rota de farm exclusiva/],
+ ['rotaExclusiva',/rota exclusiva|rota de farm exclusiva|^rota (fac|org)/],
  ['arena',/arena/],
  ['craft',/craft|fabrica/],
  ['farm',/\bfarm\b/],
  ['vipOrg',/\bvip\b/]
 ];
 const DLV_SPAWNABLE={garagemDeluxe:'garagemDeluxeSpawn',garagemVip:'garagemVipSpawn',garagemPublica:'garagemPublicaSpawn',heliponto:'helipontoSpawn'};
-const DLV_IGNORE=/^(group|grupo|local|qg|localizacao|segmento|produto|status|lider|proprietario|organizacao|organizacoes|faccao|staff|entregue por|data|data de entrega|contingente|quantidade contingente|observac|obs|n|no|numero|cds|coordenada|coordenadas|anuncio|coluna \d+|iniciar rota|true|false|completo|pendente)\b/;
+const DLV_IGNORE=/^(group|grupo|local|qg|localizacao|segmento|produto|status|lider|proprietario|organizacao|organizacoes|faccao|staff|entregue por|data|data de entrega|contingente|quantidade contingente|observac|obs|n|no|numero|cds|coordenada|coordenadas|anuncio|coluna \d+|iniciar rota|true|false|completo|pendente|disp|ocup|setado|remover|vencimentos?|legendas?|vips? (esmeralda|prata|ouro|deluxe|obsidian|premium))\b/;
 
 function dlvLabelKey(label){const l=dlvFold(label);for(const [k,re] of DLV_LABEL_RULES)if(re.test(l))return k;return ''}
 
@@ -4876,7 +4878,7 @@ function dlvSheetEntries(tab,group){
 /* Converte as linhas da planilha em campos de benefício do High OS. */
 function dlvSheetBenefits(group,tabs){
  const b={},src={},unknown=[];let found=0,last='';
- const set=(field,value,key,tabName,label)=>{if(b[field])return;b[field]=value;src[key]=`${tabName} › ${label}`};
+ const set=(field,value,key,tabName,label)=>{if(b[field]&&!(b[field]===true||b[field]==='SIM'))return;if(b[field]&&(value===true||value==='SIM'))return;b[field]=value;src[key]=`${tabName} › ${label}`};
  for(const tab of tabs||[]){
   const entries=dlvSheetEntries(tab,group);if(entries.length)found++;
   for(const {label,value} of entries){
@@ -4887,6 +4889,7 @@ function dlvSheetBenefits(group,tabs){
    if(/benef|estrutura|instala|setage/.test(l)&&v&&!dlvLabelKey(label)){
     v.split(/[,;\n•|/]+/).map(x=>x.trim()).filter(Boolean).forEach(item=>{const k=dlvLabelKey(item);if(k&&!b[k])set(k,'SIM',k,tab.name,label);else if(!k)unknown.push(item)});
     continue}
+   if(DLV_IGNORE.test(l))continue;
    const key=dlvLabelKey(label);last=key||last;
    if(!key){if(v&&!dlvNegative(v)&&!DLV_IGNORE.test(l))unknown.push(label);continue}
    if(!v||dlvNegative(v))continue;
@@ -4900,8 +4903,9 @@ function dlvSheetBenefits(group,tabs){
    else if(key==='heliponto'){set(spawn?'helipontoSpawn':'helipontoBlip',v,key,tab.name,label);set('heliponto',true,key,tab.name,label)}
    else if(key==='telao'){if(!dlvAffirmative(v))set('telaoCds',v,key,tab.name,label);set('telao',true,key,tab.name,label)}
    else if(key==='salario'){const n=(v.match(/[\d.]+/)||[''])[0].replace(/\./g,'');set('salario',n||v,key,tab.name,label)}
-   else if(['vipOrg','chatFaccao','rotaExclusiva'].includes(key)){set(key,true,key,tab.name,label);if(key==='rotaExclusiva'&&!dlvAffirmative(v))set('rotaBlips',v,key,tab.name,label)}
-   else set(key,v,key,tab.name,label);
+   else if(key==='vipOrg')set('vipOrg',dlvAffirmative(v)?true:v,key,tab.name,label);
+   else if(['chatFaccao','rotaExclusiva','roupasFaccao'].includes(key)){set(key,true,key,tab.name,label);if(key==='rotaExclusiva'&&!dlvAffirmative(v))set('rotaBlips',v,key,tab.name,label)}
+   else set(key,dlvAffirmative(v)?'SIM':v,key,tab.name,label);
   }
  }
  return {b,src,found,unknown:[...new Set(unknown)].slice(0,12)};
@@ -4932,6 +4936,8 @@ const DLV_NEEDS={
  garagemDeluxe:[['garagemDeluxeBlip','Blip (CDS)','x, y, z'],['garagemDeluxeSpawn','Spawn (CDS)','x, y, z, h']],
  shopDeluxe:[['shopDeluxe','CDS do Shop Deluxe','x, y, z']],
  academia:[['academia','CDS da academia','x, y, z']],
+ sinuca:[['sinuca','CDS da sinuca','x, y, z']],
+ roupasFaccao:[],
  heliponto:[['helipontoBlip','Blip (CDS)','x, y, z'],['helipontoSpawn','Spawn (CDS)','x, y, z, h',true]],
  rotaExclusiva:[['rotaBlips','Pontos da rota (uma CDS por linha)','x, y, z',false,true]],
  telao:[['telaoCds','CDS do telão','x, y, z'],['telaoPostit','CDS do postit','x, y, z',true],['telaoNome','Modelo do telão','',true]],
@@ -5024,7 +5030,7 @@ function deliveryBenefitState(){
  const base=dlvMergedBenefits(),active=selectedDeliveryBenefits(),b={...base},isNew=new Set();
  active.forEach(k=>{if(isInstalled(base,k))return;isNew.add(k);
   document.querySelectorAll(`[data-dlv-key="${k}"] [data-dlv-field]`).forEach(x=>{const v=x.value.trim();if(v)b[x.dataset.dlvField]=v});
-  if(['vipOrg','chatFaccao','telao','garagemPublica','garagemDeluxe','heliponto','rotaExclusiva'].includes(k))b[k]=true});
+  if(['vipOrg','chatFaccao','telao','garagemPublica','garagemDeluxe','heliponto','rotaExclusiva','roupasFaccao'].includes(k))b[k]=true});
  return {b,base,active,isNew};
 }
 function deliveryMissingData(){
@@ -5084,7 +5090,9 @@ texto});
 'arena',
 'atm',
 'shopDeluxe',
-'academia'];
+'academia',
+'sinuca',
+'roupasFaccao'];
 
  if(a.some(k=>vipKeys.includes(k))){let L=['Assunto: Ativação de benefícios de uma organização e alguns blips',
 '',
@@ -5093,8 +5101,10 @@ texto});
 '- Ativação de benefícios de uma organização e alguns blips',
 `- Group: ${f.group}`];
 if(has('salario')&&b.salario)L.push('',`- Ativar salário${novo('salario')} de ${b.salario} (A cada ${b.salarioMinutos||40} minutos)`);
-if(has('radio')&&b.radio)L.push('',`- Ativar Rádio exclusiva${novo('radio')}: ${b.radio}`);
+if(has('radio')&&b.radio)L.push('',`- Ativar Rádio exclusiva${novo('radio')}: ${b.radio==='SIM'?'{FREQUÊNCIA}':b.radio}`);
 if(has('chatFaccao'))L.push('','- Chat Facção.');
+if(has('vipOrg')&&typeof b.vipOrg==='string'&&b.vipOrg!=='SIM')L.push('',`- VIP: ${b.vipOrg}`);
+if(has('roupasFaccao'))L.push('',`- Roupas de Facção${novo('roupasFaccao')}.`);
 if(has('garagemVip'))L.push('',`- ${isNew.has('garagemVip')?'Adicionar':'Ativar'} Garagem VIP${novo('garagemVip')}:`,`- Blip: ${fmtCds(b.garagemVipBlip)}`,`- Spawn: ${fmtCds(b.garagemVipSpawn)}`,b.garagemVipVeiculos?`- Veículos: ${b.garagemVipVeiculos}`:'');
 [['lojaRoupas',
 'Loja de roupas'],
@@ -5117,7 +5127,9 @@ if(has('garagemVip'))L.push('',`- ${isNew.has('garagemVip')?'Adicionar':'Ativar'
 ['shopDeluxe',
 'Shop Deluxe'],
 ['academia',
-'Academia']].forEach(([k,
+'Academia'],
+['sinuca',
+'Sinuca']].forEach(([k,
 n])=>{if(has(k))L.push('',`- ${n}${novo(k)}: ${fmtCds(b[k]&&b[k]!=='SIM'?b[k]:'')}`)});
 add('BENEFICIOS','VIP Org / Benefícios e Setagens',L.filter(x=>x!==undefined).join('\n'))}
  if(has('rotaExclusiva')){const pts=(b.rotaBlips||'').split(/\r?\n/).filter(Boolean);
