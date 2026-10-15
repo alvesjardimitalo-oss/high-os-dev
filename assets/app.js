@@ -1405,7 +1405,7 @@ return ['VIEW',
 'EDIT'].includes(effectivePermissions()[pageModule(module)]||'NONE')}
 function canEditModule(module){if(isAdmin())return true;
 return (effectivePermissions()[pageModule(module)]||'NONE')==='EDIT'}
-function firstAllowedModule(){return SYSTEM_MODULES.find(m=>!['solicitacoes','economia','alvesinho','spotify'].includes(m.id)&&canViewModule(m.id))?.id||''}
+function firstAllowedModule(){return SYSTEM_MODULES.find(m=>!['solicitacoes','economia','alvesinho','spotify','chat'].includes(m.id)&&canViewModule(m.id))?.id||''}
 function applyModuleAccess(role='CONSULTA'){
  const perms=effectivePermissions();
 document.body.classList.toggle('metric-only-access',false);
@@ -12592,7 +12592,8 @@ function subscribeChatConversation(){
  tick();const timer=setInterval(tick,2500);
  chatUnsubscribe=()=>{active=false;clearInterval(timer)};
 }
-function startChat(){if(!currentUser||!canViewModule('chat'))return;
+function startChat(){return; /* V14.5: Chat da Equipe removido */
+if(!currentUser||!canViewModule('chat'))return;
 $('#teamChatLauncher')?.classList.remove('hidden');
 subscribeChatConversation();
 startCallInbox()}
@@ -12801,7 +12802,8 @@ function stopCallInbox(){
  callInboxSubscriptionEmail='';
  $('#incomingCallBar')?.classList.add('hidden');
 }
-function startCallInbox(){if(!currentUser||!canViewModule('chat'))return;
+function startCallInbox(){return; /* V14.5: chamadas da equipe removidas */
+if(!currentUser||!canViewModule('chat'))return;
  const me=String(currentUser.email||'').toLowerCase();
  if(callInboxUnsubscribe&&callInboxSubscriptionEmail===me)return;
  if(callInboxUnsubscribe)callInboxUnsubscribe();
@@ -13411,7 +13413,7 @@ activateAppPage=function(page){if(['organizacoes',
 'disponiveis',
 'entregas'].includes(page))page='faccoes';
 /* V14.5: Solicitações e Economia saíram do menu; acessos antigos vão para o Dashboard */
-if(['solicitacoes','economia','alvesinho','spotify'].includes(page))page='dashboard';
+if(['solicitacoes','economia','alvesinho','spotify','chat'].includes(page))page='dashboard';
 return _activateAppPageV836(page)};
 
 const _loadFaccoesV836=loadFaccoes;
