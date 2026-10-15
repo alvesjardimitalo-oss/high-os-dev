@@ -149,3 +149,33 @@
 #page-dashboard .dash-kpis{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))!important;gap:12px!important}
 #page-dashboard .dash-grid header button{font-size:11.5px!important;padding:8px 12px!important;border:1px solid rgba(154,77,255,.35)!important;background:rgba(154,77,255,.08)!important}
 #page-dashboard .dash-move-kpis span{font-size:11px!important;letter-spacing:.1em!important}
+
+/* ===== V14.9 · CENTRAL DE ALERTAS (dashboard) ===== */
+#page-dashboard .al-center{grid-column:1/-1}
+#page-dashboard .al-center header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#page-dashboard .al-center header>button{border:1px solid rgba(255,100,100,.35);background:rgba(255,100,100,.08);color:#ffb3b3;border-radius:10px;padding:8px 12px;font-weight:800;font-size:12px;letter-spacing:.04em;cursor:pointer}
+.al-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 6px}
+.al-tabs button{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#cfc8d8;border-radius:999px;padding:7px 8px 7px 14px;font:700 12px/1 "Chakra Petch",system-ui,sans-serif;letter-spacing:.04em;cursor:pointer;transition:background .2s,border-color .2s,color .2s}
+.al-tabs button em{font-style:normal;min-width:24px;padding:4px 7px;border-radius:999px;background:rgba(255,255,255,.08);text-align:center}
+.al-tabs button:disabled{opacity:.38;cursor:default}
+.al-tabs button.on{color:#fff;border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.08)}
+.al-tabs .t-crit em{background:rgba(255,90,90,.22);color:#ff9d9d}.al-tabs .t-warn em{background:rgba(255,183,77,.2);color:#ffc977}
+.al-tabs .t-info em{background:rgba(120,170,255,.2);color:#a9c6ff}.al-tabs .t-ok em{background:rgba(92,220,145,.18);color:#86e8b0}
+.al-tabs .t-crit.on{border-color:rgba(255,90,90,.5)}.al-tabs .t-warn.on{border-color:rgba(255,183,77,.5)}.al-tabs .t-info.on{border-color:rgba(120,170,255,.5)}.al-tabs .t-ok.on{border-color:rgba(92,220,145,.45)}
+.al-hint{margin:2px 0 10px;color:var(--muted,#9f98aa);font-size:12.5px}
+.al-list{display:grid;gap:6px}
+.al-row{display:grid;grid-template-columns:minmax(0,1fr) auto;border:1px solid rgba(255,255,255,.07);border-left:3px solid #f1af4c;border-radius:10px;background:rgba(255,255,255,.025);animation:dgUp .3s ease both;transition:background .15s}
+.al-row:hover{background:rgba(255,255,255,.05)}
+.al-row.crit{border-left-color:#ff6464}.al-row.info{border-left-color:#7aa7ff}.al-row.done{opacity:.6;border-left-color:#5cdc91}
+.al-main{display:grid;grid-template-columns:8px minmax(110px,max-content) minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:10px 12px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer;min-width:0}
+.al-main>i{width:8px;height:8px;border-radius:50%;background:#f1af4c}.al-row.crit .al-main>i{background:#ff6464}.al-row.info .al-main>i{background:#7aa7ff}.al-row.done .al-main>i{background:#5cdc91}
+.al-main b{font-size:14px;white-space:nowrap}
+.al-main .al-g{color:#cfc8d8;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-main .al-meta{color:var(--muted,#9f98aa);font-size:12px;white-space:nowrap}
+.al-main strong{font:800 14px/1 "Chakra Petch",system-ui,sans-serif;min-width:58px;text-align:right}
+.al-row.crit strong{color:#ff8a8a}.al-row.warn strong{color:#ffc46b}.al-row.info strong{color:#a9c6ff}
+.al-act{display:flex;align-items:center;gap:4px;padding:0 8px;border-left:1px solid rgba(255,255,255,.06)}
+.al-act button{width:30px;height:30px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:transparent;color:#cfc8d8;font-weight:900;cursor:pointer}
+.al-act button:hover{background:rgba(255,255,255,.08);color:#fff}
+.al-more{margin-top:8px;width:100%;padding:9px;border-radius:10px;border:1px dashed rgba(255,255,255,.15);background:transparent;color:#cfc8d8;font:700 12px "Chakra Petch",system-ui,sans-serif;letter-spacing:.05em;cursor:pointer}
+@media(max-width:720px){.al-main{grid-template-columns:8px minmax(0,1fr) auto}.al-main .al-g,.al-main .al-meta{display:none}}
