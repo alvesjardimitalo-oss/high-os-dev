@@ -512,6 +512,9 @@ z:0.00,
 h:351.50,
 label:'Centro do Gás / Marco Zero'},
 radius:1000,
+centerPending:true,
+/* V12.18: rascunho de 25 spawns gerado pelo planejador (terra firme, fora de QG) — PENDENTES até validar a CDS no jogo */
+draftPoints:[[4787.64,-4414.00],[5343.01,-5811.86],[4011.08,-4771.25],[5523.19,-5175.69],[4813.33,-5885.55],[4329.79,-4417.29],[5437.49,-5495.53],[4240.69,-4657.52],[4511.93,-4467.59],[5468.48,-5681.93],[5501.78,-5328.05],[5317.07,-5661.27],[4150.25,-4782.00],[4355.03,-4554.56],[5539.39,-5423.62],[5240.77,-5729.98],[5383.08,-5582.61],[4890.07,-4421.16],[5520.35,-5607.85],[5409.15,-5750.18],[4412.06,-4443.64],[4273.41,-4537.16],[4124.41,-4702.65],[4890.07,-5878.84],[5516.48,-5252.43]],
 points:[]}
   ];
 
@@ -735,7 +738,7 @@ event:eventName,
 panel:p.panel,
 mode:p.mode,
 category,
-center:{...p.center,
+center:p.centerPending?{...p.center,z:0,status:'planned',validatedAt:null}:{...p.center,
 status:'validated',
 validatedAt:nowIso()},
 circleRadius:p.radius,
@@ -744,14 +747,15 @@ startAngle:0,
 spawnRadius:100,
 createdAt:nowIso(),
 updatedAt:nowIso(),
-points:p.points.map((v,i)=>normalizePoint({x:v[0],
+points:(!p.points.length&&Array.isArray(p.draftPoints))?p.draftPoints.map((v,i)=>normalizePoint({x:v[0],y:v[1],z:0,h:0,status:'planned',validatedAt:null},i,'planned')):p.points.map((v,i)=>normalizePoint({x:v[0],
 y:v[1],
 z:v[2],
 h:v[3],
 status:'validated',
 validatedAt:nowIso()},i,'validated')),
 requestText:'',
-requestKind:'alter-zone',
+requestKind:(!p.points.length&&p.draftPoints)?'create-zone':'alter-zone',
+...((!p.points.length&&p.draftPoints)?{draftApplied:true}:{}),
 official:true};
   }
   function newMission(eventId=null,eventName=null,category=null){
@@ -1087,6 +1091,8 @@ qs('#mpCloudStateTop')].filter(Boolean);if(!els.length)return;
 'name',
 'category',
 'panel'].forEach(k=>{if(existing[k]!==fresh[k]){existing[k]=fresh[k];changed=true;}});
+        /* V12.18: zona oficial ainda vazia recebe o rascunho de spawns do preset (pendentes) */
+        if(!(existing.points||[]).length&&Array.isArray(p.draftPoints)&&p.draftPoints.length&&!existing.draftApplied){existing.points=fresh.points;existing.draftApplied=true;if(!existing.request)existing.requestKind='create-zone';if(existing.request?.baseline&&!existing.request?.appliedAt)delete existing.request;existing.updatedAt=nowIso();changed=true;}
         return;
       }
       state.missions.push(presetMission(p));
@@ -2207,7 +2213,7 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     return ['EVENTO: '+m.event,'ZONA: '+m.name,'STATUS: '+(a.issues.length?'BLOQUEADO':a.warns.length?'PRONTO COM AVISOS':'PRONTO'),'SPAWNS: '+(m.points||[]).filter(isValidated).length+'/'+(m.points||[]).length,'RAIO: '+Math.round(effectiveEventRadius(m))+'m',...(tl.length?['SAFE: '+tl.map(x=>x.label+' @ '+x.at+'s / '+Math.round(x.radius)+'m').join(' | ')]:[]),...(a.issues.length?['BLOQUEIOS: '+a.issues.join(' • ')]:[]),...(a.warns.length?['AVISOS: '+a.warns.join(' • ')]:[])].join('\n');
   }
   function exportMission(format='lua'){
-    const m=active();if(!m)return '';if(format==='high')return highRequestExport();if(format==='summary')return technicalSummary();const pts=(m.points||[]).filter(isValidated);
+    const m=active();if(!m)return '';if(format==='high'){/* V12.18: mesma solicitação padronizada da aba Solicitação */if(generateRequest({silent:true}))return m.requestText;return `RASCUNHO — NÃO ENVIAR À CIDADE AINDA\nMotivo: ${state.lastRequestError||'zona com pendências'}\nResolva as pendências na etapa Solicitação para gerar o texto oficial padronizado.\n\n----- PRÉVIA TÉCNICA -----\n\n`+highRequestExport();}if(format==='summary')return technicalSummary();const pts=(m.points||[]).filter(isValidated);
     if(format==='json')return JSON.stringify({event:m.event,zone:m.name,center:m.center,radius:effectiveEventRadius(m),spawns:pts,safeRoute:m.safeRoute||null,eventDurationSeconds:hasDynamicSafe(m)?safeTotalSeconds(m):null,endCondition:hasDynamicSafe(m)?'SAFE_RADIUS_ZERO':null},null,2);
     if(format==='plain')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - '+f(p.x)+', '+f(p.y)+', '+f(p.z)+', '+f(p.h)).join('\n');
     if(format==='vec3')return pts.map((p,i)=>String(p.id||i+1).padStart(2,'0')+' - vec3('+f(p.x)+', '+f(p.y)+', '+f(p.z)+')').join('\n');
@@ -2898,11 +2904,26 @@ ${lines.map(l=>`- ${l}`).join('\n')}
   function faccaoOptions(){
     const l=faccoesAtivas()||[];return [...new Set(l.map(f=>f.faccao||f.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   }
+  /* V12.18 — partidas a partir do Diário Operacional (registros /highos registrar no Discord) */
+  const normEv=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  function diarioId(r){return String(r?.id||`${r?.date}|${r?.time}|${r?.title||r?.scheduleName}`);}
+  async function diarioEventos(force=false){
+    const c=window.HighOSMissionCloud;if(!c?.diarioEventos)return null;
+    if(!force&&state._diario&&Date.now()-state._diario.at<120000)return state._diario.list;
+    try{const list=await c.diarioEventos();state._diario={at:Date.now(),list:Array.isArray(list)?list:[]};return state._diario.list;}catch(e){return null;}
+  }
+  function diarioDoEvento(eventId,list){
+    const zones=zonesOfEvent(eventId),k=normEv(zones[0]?.event);if(!k||!Array.isArray(list))return [];
+    const feitos=new Set(zones.flatMap(z=>partidasDe(z).map(p=>p.diarioId).filter(Boolean)));
+    return list.filter(r=>{const tt=normEv(`${r.title||''} ${r.scheduleName||''}`);return tt.includes(k)&&String(r.winner||'').trim()&&!feitos.has(diarioId(r));})
+      .sort((a,b)=>`${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`)).slice(0,12);
+  }
   function openPartidasModal(eventId,zoneId=null){
     const zones=zonesOfEvent(eventId);if(!zones.length)return;
     const ev=zones[0].event||'Evento';
     let modal=qs('#mpPartidasModal');if(modal)modal.remove();
     modal=document.createElement('div');modal.id='mpPartidasModal';modal.className='mp-replicate-backdrop';
+    let diario=null,pendDiario=null,pref=null;
     const draw=()=>{
       const ins=eventInsights(eventId),lista=partidasEvento(eventId).slice(0,25),since=CATALOG()?.tempoDesde||(()=>'');
       const zSel=qs('#mppZona',modal)?.value||zoneId||ins.sugestao?.z.id||zones[0].id;
@@ -2912,30 +2933,35 @@ ${lines.map(l=>`- ${l}`).join('\n')}
       if(ins.dominante)dicas.push(`<b>${esc(ins.dominante.nome)}</b> venceu ${ins.dominante.q} das últimas ${ins.dominante.de}`);
       if(ins.partMax)dicas.push(`Participação: média ${ins.partMed} · pico ${ins.partMax} facções`);
       zones.forEach(z=>{const zi=zoneInsights(z);zi.hot.forEach(h=>dicas.push(`<span class="w">${esc(z.name)}: spawn ${pad2(h.n)} venceu ${h.w} de ${zi.comSpawn}</span>`));if(zi.setor)dicas.push(`<span class="w">${esc(z.name)}: lado ${zi.setor.nome} venceu ${zi.setor.q} de ${zi.comSpawn}</span>`);});
+      const dl=diarioDoEvento(eventId,diario);
+      const diarioHtml=diario===null?(window.HighOSMissionCloud?.diarioEventos?'<div class="mpp-diario"><span>DIÁRIO OPERACIONAL · carregando…</span></div>':''):(dl.length?`<div class="mpp-diario"><span>NO DIÁRIO OPERACIONAL (DISCORD) · ${dl.length} resultado${dl.length===1?'':'s'} para registrar</span>${dl.map((r,i)=>`<div><b>${esc(String(r.date||'').split('-').reverse().join('/'))} ${esc(r.time||'')}</b><em>${esc(r.winner)}</em><small>${esc(r.title||r.scheduleName||'Evento')}${r.result?` · ${esc(String(r.result).slice(0,60))}`:''}</small><button type="button" data-dusar="${i}">USAR</button></div>`).join('')}<small class="mpp-dnote">USAR preenche o formulário; escolha a zona (e o spawn, se souber) e clique em REGISTRAR.</small></div>`:'');
       modal.innerHTML=`<div class="mp-replicate-modal mpk-modal"><div class="mp-replicate-head"><div><b>PARTIDAS · ${esc(ev)}</b><small>${ins.total} partida${ins.total===1?'':'s'} registrada${ins.total===1?'':'s'} • o registro alimenta a análise de zonas, spawns e facções</small></div><button data-close>×</button></div>
         ${dicas.length?`<div class="mpp-dicas">${dicas.map(d=>`<span>${d}</span>`).join('')}</div>`:''}
+        ${diarioHtml}
         <div class="mpp-form">
           <label>ZONA<select id="mppZona">${zones.map(z=>`<option value="${esc(z.id)}" ${z.id===zAtual.id?'selected':''}>${esc(z.name||'Zona')}${ins.sugestao?.z.id===z.id?' ★':''}</option>`).join('')}</select></label>
-          <label>DATA/HORA<input id="mppAt" type="datetime-local" value="${new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}"></label>
+          <label>DATA/HORA<input id="mppAt" type="datetime-local" value="${pref?.at||new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}"></label>
           <label>FACÇÕES<input id="mppPart" type="number" min="1" max="99" placeholder="nº"></label>
-          <label class="wide">CAMPEÃ<input id="mppCampea" list="mppFacs" placeholder="Facção ou Group"><datalist id="mppFacs">${faccaoOptions().map(f=>`<option value="${esc(f)}">`).join('')}</datalist></label>
+          <label class="wide">CAMPEÃ<input id="mppCampea" list="mppFacs" placeholder="Facção ou Group" value="${esc(pref?.campea||'')}"><datalist id="mppFacs">${faccaoOptions().map(f=>`<option value="${esc(f)}">`).join('')}</datalist></label>
           <label>SPAWN DA CAMPEÃ<select id="mppSpawn"><option value="">—</option>${(zAtual.points||[]).map((p,i)=>`<option value="${i}">${pad2(i+1)}</option>`).join('')}</select></label>
-          <label class="wide">OBS.<input id="mppObs" placeholder="opcional"></label>
+          <label class="wide">OBS.<input id="mppObs" placeholder="opcional" value="${esc(pref?.obs||'')}"></label>
           <button type="button" class="primary" id="mppSalvar">REGISTRAR PARTIDA</button>
         </div>
         <div class="mpp-lista">${lista.length?lista.map(p=>`<div><b>${esc(fmtLogDate(p.at))}</b><span>${esc(p.zona)}</span><em>${esc(p.campea||'—')}</em><small>${p.participantes?`${p.participantes} fac.`:''}${p.spawnN?` · spawn ${pad2(p.spawnN)}`:''}${p.obs?` · ${esc(p.obs)}`:''}</small><button type="button" data-del="${esc(p.zoneId)}|${esc(p.id)}" title="Excluir">×</button></div>`).join(''):'<div class="mpc-empty">Nenhuma partida registrada ainda.</div>'}</div>
         <div class="mp-replicate-actions"><button data-close>FECHAR</button></div></div>`;
       qsa('[data-close]',modal).forEach(b=>b.onclick=()=>modal.remove());
-      qs('#mppZona',modal).onchange=()=>{zoneId=qs('#mppZona',modal).value;draw();};
+      const keepForm=()=>{if(pendDiario||qs('#mppCampea',modal)?.value)pref={at:qs('#mppAt',modal)?.value,campea:qs('#mppCampea',modal)?.value,obs:qs('#mppObs',modal)?.value};};
+      qs('#mppZona',modal).onchange=()=>{keepForm();zoneId=qs('#mppZona',modal).value;draw();};
+      qsa('[data-dusar]',modal).forEach(b=>b.onclick=()=>{const r=dl[Number(b.dataset.dusar)];if(!r)return;pendDiario=diarioId(r);pref={at:r.date?`${r.date}T${String(r.time||'20:00').slice(0,5)}`:'',campea:r.winner,obs:`Diário: ${r.title||r.scheduleName||'evento'}${r.createdByName?` · ${r.createdByName}`:''}`};draw();qs('#mppCampea',modal)?.focus();});
       qs('#mppSalvar',modal).onclick=()=>{
         if(!canMarkRequests()){alert('Seu acesso ao Planejador é somente leitura.');return;}
         const z=zones.find(x=>x.id===qs('#mppZona',modal).value);if(!z)return;
         const campea=qs('#mppCampea',modal).value.trim();if(!campea){alert('Informe a facção campeã.');return;}
         const si=qs('#mppSpawn',modal).value,sp=si!==''?z.points[Number(si)]:null;
         const at=new Date(qs('#mppAt',modal).value||Date.now());
-        const reg={id:uid(),at:(Number.isFinite(at.getTime())?at:new Date()).toISOString(),by:cloudUser(),campea,participantes:Number(qs('#mppPart',modal).value)||null,obs:qs('#mppObs',modal).value.trim(),spawnN:sp?Number(si)+1:null,spawn:sp?{x:r2(sp.x),y:r2(sp.y)}:null};
+        const reg={id:uid(),...(pendDiario?{diarioId:pendDiario}:{}),at:(Number.isFinite(at.getTime())?at:new Date()).toISOString(),by:cloudUser(),campea,participantes:Number(qs('#mppPart',modal).value)||null,obs:qs('#mppObs',modal).value.trim(),spawnN:sp?Number(si)+1:null,spawn:sp?{x:r2(sp.x),y:r2(sp.y)}:null};
         z.partidas=[reg,...partidasDe(z)].slice(0,80);
-        saveStore();zoneId=z.id;draw();render();renderCentralV954();
+        pendDiario=null;pref=null;saveStore();zoneId=z.id;draw();render();renderCentralV954();
       };
       qsa('[data-del]',modal).forEach(b=>b.onclick=()=>{
         if(!canMarkRequests())return;const [zid,pid]=b.dataset.del.split('|');const z=zones.find(x=>x.id===zid);if(!z||!confirm('Excluir esta partida do registro?'))return;
@@ -2944,6 +2970,8 @@ ${lines.map(l=>`- ${l}`).join('\n')}
     };
     document.body.appendChild(modal);draw();
     modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+    diarioEventos().then(l=>{diario=l||[];if(document.body.contains(modal)){keepFormOuter();draw();}});
+    function keepFormOuter(){if(qs('#mppCampea',modal)?.value)pref={at:qs('#mppAt',modal)?.value,campea:qs('#mppCampea',modal)?.value,obs:qs('#mppObs',modal)?.value};}
   }
 
   /* V12.15 — MONTAGEM INTELIGENTE
@@ -2988,6 +3016,13 @@ ${lines.map(l=>`- ${l}`).join('\n')}
     sr.stages=st;
     /* garante fuga a pé com margem PvP em todas as transições */
     for(let k=0;k<3;k++){let mudou=false;safeWalkAnalysis(m).forEach((a,i)=>{if(a.pvpExtraNeeded>0){const s=m.safeRoute.stages[i===0?0:i-1];if(s){s.moveSeconds=q(Number(s.moveSeconds)+a.pvpExtraNeeded+7);mudou=true;}}});if(!mudou)break;}
+    /* a fuga a pé pode ter alongado os movimentos: devolve o tempo encurtando
+       as esperas (mín. 30 s) e o fechamento final (mín. 60 s) até chegar perto do alvo */
+    for(let k=0;k<6;k++){
+      const tot=safeTotalSeconds(m);if(tot<=T*1.04)break;
+      const s2=m.safeRoute.stages,minOf=i=>i<s2.length-1?30:60,folga=s2.reduce((a,s,i)=>a+Math.max(0,Number(s.closeSeconds)-minOf(i)),0);if(folga<=0)break;
+      const f2=Math.min(1,(tot-T)/folga);s2.forEach((s,i)=>{s.closeSeconds=Math.max(minOf(i),Math.round((Number(s.closeSeconds)-(Number(s.closeSeconds)-minOf(i))*f2)/15)*15);});
+    }
     state.safeEditorStage=0;
     commit(`SAFE automática: ${n} etapas • ${formatDuration(safeTotalSeconds(m))} até raio 0`);
     renderSafeRouteUi();
@@ -3074,6 +3109,22 @@ ${lines.map(l=>`- ${l}`).join('\n')}
       if(!moved)step/=2;}
     const atual=validCoord(m.center?.x)?spreadOf(pts,Number(m.center.x),Number(m.center.y)):null;
     return {...best,atual,deslocamento:atual?Math.hypot(best.x-Number(m.center.x),best.y-Number(m.center.y)):null};
+  }
+  /* V12.18 — cobrir os spawns: raio mínimo para todos nascerem dentro da safe inicial, mantendo o centro */
+  function coverRadius(m){
+    const c=m?.center;if(!validCoord(c?.x)||!validCoord(c?.y))return 0;
+    const d=(m.points||[]).filter(p=>validCoord(p.x)&&validCoord(p.y)).map(p=>Math.hypot(Number(p.x)-Number(c.x),Number(p.y)-Number(c.y)));
+    return d.length?Math.ceil((Math.max(...d)+40)/50)*50:0;
+  }
+  function coverSpawns(){
+    const m=active();if(!m)return;
+    if(!canMarkRequests()){alert('Seu acesso ao Planejador é somente leitura.');return;}
+    const R=coverRadius(m),atual=Math.round(effectiveEventRadius(m));if(!R||R<=atual){alert('Todos os spawns já cabem na safe inicial.');return;}
+    const fc=fairCenterOf(m),alt=fc?Math.ceil(fc.max*1.05/50)*50:null;
+    if(!confirm(`Aumentar a safe inicial de ${atual} m para ${R} m, mantendo o centro, para todos os spawns nascerem dentro?${alt&&alt<R-100?`\n\nDica: com CENTRO JUSTO bastaria ~${alt} m (o centro muda e precisa ser validado de novo).`:''}${hasDynamicSafe(m)?'\n\nOs raios da SAFE dinâmica foram calculados para o raio antigo — rode ⚡ AUTO de novo depois.':''}`))return;
+    if(!state.editing)startEdit();
+    m.eventRadius=R;
+    commit(`Safe inicial ${atual} m → ${R} m para cobrir os spawns`);
   }
   function applyFairCenter(){
     const m=active();if(!m)return;
@@ -3163,7 +3214,7 @@ ${lines.map(l=>`- ${l}`).join('\n')}
     out.push({label:all.length?`Spawns validados (${val}/${all.length})`:'Spawns cadastrados',ok:all.length>0&&val===all.length,block:true});
     if(type.gas){
       const cc=zoneCoverageCounts(m);
-      out.push({label:cc.outside?`${cc.outside} spawn(s) fora da safe inicial`:`Spawns dentro da safe (${Math.round(cc.radius)} m)`,ok:cc.outside===0&&cc.total>0,block:true});
+      out.push({label:cc.outside?`${cc.outside} spawn(s) fora da safe inicial (${Math.round(cc.radius)} m)`:`Spawns dentro da safe (${Math.round(cc.radius)} m)`,ok:cc.outside===0&&cc.total>0,block:true,fix:cc.outside?[{id:'cover',label:`AUMENTAR RAIO P/ ${coverRadius(m)} m`},...((m.points||[]).length>=3?[{id:'fair',label:'CENTRO JUSTO'}]:[])]:null});
       const dyn=hasDynamicSafe(m),sem=dyn?m.safeRoute.stages.filter(s=>!safeStageValid(s)).length:0;
       out.push({label:dyn?(sem?`SAFE dinâmica: ${sem} etapa(s) sem posição`:`SAFE dinâmica (${m.safeRoute.stages.length} etapas • ${formatDuration(safeTotalSeconds(m))} até raio 0)`):'SAFE dinâmica não configurada — use ⚡ AUTO',ok:dyn&&!sem,block:false,warn:dyn&&sem>0});
       if(dyn){const esc2=safeWalkAnalysis(m).filter(a=>a.riskLevel==='unsafe'||a.riskLevel==='critical');if(esc2.length)out.push({label:`Escape a pé ${esc2.map(a=>a.from+'→'+a.to).join(', ')} crítico — aumente o movimento ou reduza o deslocamento`,ok:false,block:false,warn:true});}
@@ -3248,7 +3299,7 @@ ${lines.map(l=>`- ${l}`).join('\n')}
   function baselineOfficialZones(){
     /* V12.8: eventos ficam no painel in-game /evento; o antigo padrão /ilegal era só o canal do ticket */
     state.missions.forEach(m=>{if(!m.panelMigrated128){if(!m.panel||m.panel==='/ilegal')m.panel=defaultPanel();m.panelMigrated128=true;}});
-    state.missions.forEach(m=>{if(m.official&&!m.request&&(m.points||[]).length)m.request={status:'applied',hash:geomHash(m),baseline:true,appliedAt:null};});
+    state.missions.forEach(m=>{if(m.official&&!m.request&&!m.draftApplied&&(m.points||[]).length)m.request={status:'applied',hash:geomHash(m),baseline:true,appliedAt:null};});
     /* V12.9: registros antigos guardavam só o hash; se a geografia ainda é a
        mesma, a cópia detalhada pode ser criada agora sem perda. */
     state.missions.forEach(m=>{const r=m.request;if(r&&!r.geom&&r.hash&&r.hash===geomHash(m))r.geom=geomSnap(m);});
@@ -3440,8 +3491,10 @@ ${P.regras.map(l=>`- ${l}`).join('\n\n')}${t.zonasIguais?`
     modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
   }
 
-  function generateRequest(){
+  function generateRequest(opts={}){
     const m=active();if(!m)return false;
+    /* silencioso: usado pelo exportar HIGH — guarda o motivo em vez de abrir alerta */
+    const alert=opts.silent?(msg=>{state.lastRequestError=msg;}):window.alert.bind(window);state.lastRequestError='';
     const type=eventTypeOf(m),all=m.points||[],pts=all.filter(isValidated),pending=all.length-pts.length;
     if(type.gas&&!requireSafePreflight(m,'gerar a solicitação'))return false;
     if(dominationZoneMode(m)==='polygon'){const g=dominationZoneGeometry(m);if(g.mode!=='polygon'){alert('O polígono da Zona de Dominação está incompleto ou inválido. Conclua o contorno (mínimo 3 vértices) antes de gerar a solicitação.');return false;}}
@@ -3592,7 +3645,7 @@ ${closingText(first)}`;
 
   /* V12.16: problemas primeiro; o que está OK fica recolhido */
   function checksHtml(checks){
-    const li=c=>`<li class="${c.ok?'ok':(c.block?'bad':(c.warn?'warn':'opt'))}"><i>${c.ok?'✓':(c.block?'✕':(c.warn?'!':'○'))}</i><span>${esc(c.label)}</span></li>`;
+    const li=c=>`<li class="${c.ok?'ok':(c.block?'bad':(c.warn?'warn':'opt'))}"><i>${c.ok?'✓':(c.block?'✕':(c.warn?'!':'○'))}</i><span>${esc(c.label)}${!c.ok&&c.fix?`<span class="mpk-fixes">${c.fix.map(x=>`<button type="button" class="mpk-fix" data-fix="${x.id}">${esc(x.label)}</button>`).join('')}</span>`:''}</span></li>`;
     const bad=checks.filter(c=>!c.ok&&c.block),warn=checks.filter(c=>!c.ok&&!c.block&&c.warn),opt=checks.filter(c=>!c.ok&&!c.block&&!c.warn),ok=checks.filter(c=>c.ok);
     return `<div class="mpk-checkwrap">${bad.length?`<div class="mpk-ckgroup bad"><b>PENDÊNCIAS QUE BLOQUEIAM (${bad.length})</b><ul class="mpk-checks">${bad.map(li).join('')}</ul></div>`:''}${warn.length?`<div class="mpk-ckgroup warn"><b>AVISOS (${warn.length})</b><ul class="mpk-checks">${warn.map(li).join('')}</ul></div>`:''}${opt.length?`<ul class="mpk-checks">${opt.map(li).join('')}</ul>`:''}${ok.length?`<details class="mpk-ckok"><summary>✓ ${ok.length} verificaç${ok.length===1?'ão':'ões'} OK</summary><ul class="mpk-checks">${ok.map(li).join('')}</ul></details>`:''}</div>`;
   }
@@ -3635,6 +3688,7 @@ ${closingText(first)}`;
     box.innerHTML=`<div class="mpk-stage ${stale?'bad':info.tom}"><b>${info.label}${stale?' · ATRASADA':''}</b><small>${when}</small></div>${diffHtml}
       ${checksHtml(checks)}
       <div class="mp-actions">${actions.join('')}</div>${logHtml}`;
+    qsa('[data-fix]',box).forEach(b=>b.onclick=()=>{if(b.dataset.fix==='cover')coverSpawns();else if(b.dataset.fix==='fair')applyFairCenter();});
     qsa('[data-req]',box).forEach(b=>b.onclick=async()=>{
       const m=active();if(!m)return;
       if(b.dataset.req==='sent'){if(!generateRequest())return;const multi=splitDiscord(m.requestText).length>1;if(!multi)await copyText(m.requestText);if(markZoneSent(m)){saveStore();render();if(multi)openPartsModal(`SOLICITAÇÃO · ${m.event||'Evento'} › ${m.name||'Zona'}`,m.requestText);}}
@@ -3700,6 +3754,7 @@ z=zones[0];if(!z)return false;
 
   function renderCentralV954(){
     const host=ensureCentralV954();if(!host)return;
+    if(!state._diarioReq&&window.HighOSMissionCloud?.diarioEventos){state._diarioReq=true;diarioEventos().then(l=>{if(l&&l.length)renderCentralV954();});}
     const filter=centralCategory(),query=String(state.centralSearch||'').trim().toLowerCase(),allEvents=[],conflicts=syncConflicts();
     ['dominacao','gas'].forEach(cat=>eventsOfCategory(cat).forEach(e=>allEvents.push({...e,category:cat})));
     const stages=state.missions.map(zoneStage);
@@ -3728,7 +3783,7 @@ z=zones[0];if(!z)return false;
         if(type.zonasSeparadas)zoneOverlaps(e.id).forEach(o=>warns.push(`${o.a} × ${o.b}: áreas sobrepostas (${Math.round(o.d)} m entre centros, mínimo ${Math.round(o.lim)} m)`));
         const sugest=ei.sugestao?`<div class="mpp-sug">★ PRÓXIMA ZONA SUGERIDA: <b>${esc(ei.sugestao.z.name||'Zona')}</b><small>${ei.sugestao.last?`última partida ${since(ei.sugestao.last)}`:'sem partida registrada'}${ei.dominante?` • ${esc(ei.dominante.nome)} venceu ${ei.dominante.q} das últimas ${ei.dominante.de}`:''}</small></div>`:'';
         const preview=`<div class="mpk-preview"><span>NO ${esc(panelLabel(zones[0]).toUpperCase())}</span><b>${esc(e.name)}</b><i>›</i>${live.length?live.map(z=>`<em>${esc(z.name||'Zona')}</em>`).join(''):'<small>nenhuma zona confirmada no jogo</small>'}</div>`;
-        return `<article class="mpc-event"><header><div><span>${esc(type.label)}</span><h3>${esc(e.name)}</h3><small>${zones.length} zona${zones.length===1?'':'s'} • ${live.length} no jogo${toSend?` • ${toSend} para enviar`:''}${(()=>{const c=eventCapacities(e.id).map(o=>o.cap);if(!c.length)return '';const a=Math.min(...c),b=Math.max(...c);return ` • ${a===b?`até ${a}`:`${a}–${b}`} facções`;})()}</small></div><div class="mpc-event-actions"><button data-package="${esc(e.id)}" class="${toSend?'hot':''}">SOLICITAÇÃO${toSend?` (${toSend})`:''}</button><button data-partidas="${esc(e.id)}" title="Registrar resultado e ver análise">PARTIDAS${partidasEvento(e.id).length?` (${partidasEvento(e.id).length})`:''}</button><button data-meta="${esc(e.id)}" title="Quantas facções o evento precisa comportar">META${eventTarget(e.id)?` ${eventTarget(e.id).n}`:''}</button>${type.padrao?`<button data-padrao="${esc(e.id)}">PADRÃO GÁS</button>`:''}<button data-newzone="${esc(e.id)}">+ NOVA ZONA</button><button class="danger mpk-icon" data-delevent="${esc(e.id)}" title="Excluir evento" aria-label="Excluir evento">🗑</button></div></header>${preview}${sugest}${warns.length?`<div class="mpk-warns">${warns.map(w=>`<span>⚠ ${esc(w)}</span>`).join('')}</div>`:''}<div class="mpc-zones">${zones.map(z=>{const st=zoneStage(z),info=stageInfo(st),total=z.points?.length||0,val=(z.points||[]).filter(isValidated).length,extra=st==='enviada'?` • ${isStale(z)?'⚠ sem retorno ':''}${since(z.request?.sentAt)}`:'';const pct=total?Math.round(val/total*100):0;return `<button class="mpc-zone" data-openzone="${esc(z.id)}"><span><b>${esc(z.name||'Zona sem nome')}</b><small>${total?`${val}/${total} validados`:'Sem pontos'}${extra}${partidasDe(z).length?` • ${partidasDe(z).length} partida${partidasDe(z).length===1?'':'s'}`:''}</small><i class="mpk-bar"><u style="width:${pct}%"></u></i></span><em class="mpk-badge ${isStale(z)?'bad':info.tom}">${info.label}</em></button>`}).join('')||'<div class="mpc-empty">Nenhuma zona cadastrada.</div>'}</div></article>`;
+        return `<article class="mpc-event"><header><div><span>${esc(type.label)}</span><h3>${esc(e.name)}</h3><small>${zones.length} zona${zones.length===1?'':'s'} • ${live.length} no jogo${toSend?` • ${toSend} para enviar`:''}${(()=>{const c=eventCapacities(e.id).map(o=>o.cap);if(!c.length)return '';const a=Math.min(...c),b=Math.max(...c);return ` • ${a===b?`até ${a}`:`${a}–${b}`} facções`;})()}</small></div><div class="mpc-event-actions"><button data-package="${esc(e.id)}" class="${toSend?'hot':''}">SOLICITAÇÃO${toSend?` (${toSend})`:''}</button><button data-partidas="${esc(e.id)}" title="Registrar resultado e ver análise">PARTIDAS${partidasEvento(e.id).length?` (${partidasEvento(e.id).length})`:''}${(()=>{const n=state._diario?diarioDoEvento(e.id,state._diario.list).length:0;return n?` <i class="mpk-new">+${n} no diário</i>`:'';})()}</button><button data-meta="${esc(e.id)}" title="Quantas facções o evento precisa comportar">META${eventTarget(e.id)?` ${eventTarget(e.id).n}`:''}</button>${type.padrao?`<button data-padrao="${esc(e.id)}">PADRÃO GÁS</button>`:''}<button data-newzone="${esc(e.id)}">+ NOVA ZONA</button><button class="danger mpk-icon" data-delevent="${esc(e.id)}" title="Excluir evento" aria-label="Excluir evento">🗑</button></div></header>${preview}${sugest}${warns.length?`<div class="mpk-warns">${warns.map(w=>`<span>⚠ ${esc(w)}</span>`).join('')}</div>`:''}<div class="mpc-zones">${zones.map(z=>{const st=zoneStage(z),info=stageInfo(st),total=z.points?.length||0,val=(z.points||[]).filter(isValidated).length,extra=st==='enviada'?` • ${isStale(z)?'⚠ sem retorno ':''}${since(z.request?.sentAt)}`:'';const pct=total?Math.round(val/total*100):0;return `<button class="mpc-zone" data-openzone="${esc(z.id)}"><span><b>${esc(z.name||'Zona sem nome')}</b><small>${total?`${val}/${total} validados`:'Sem pontos'}${extra}${partidasDe(z).length?` • ${partidasDe(z).length} partida${partidasDe(z).length===1?'':'s'}`:''}</small><i class="mpk-bar"><u style="width:${pct}%"></u></i></span><em class="mpk-badge ${isStale(z)?'bad':info.tom}">${info.label}</em></button>`}).join('')||'<div class="mpc-empty">Nenhuma zona cadastrada.</div>'}</div></article>`;
       }).join(''):'<div class="mpc-empty big">Nenhum evento neste filtro.</div>'}</div>`;
     qsa('[data-conflict-local]',host).forEach(btn=>btn.onclick=()=>resolveSyncConflict(btn.dataset.conflictLocal,'local'));
     qsa('[data-conflict-cloud]',host).forEach(btn=>btn.onclick=()=>resolveSyncConflict(btn.dataset.conflictCloud,'firebase'));

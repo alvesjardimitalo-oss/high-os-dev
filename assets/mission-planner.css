@@ -368,6 +368,16 @@
 #page-planejador.mp-gas-operational .mp-workspace-brand b{font-size:9px;letter-spacing:.12em;white-space:nowrap}
 
 
+/* V12.18 — modais do planejador (replicar, solicitação do evento, partidas, padrão gás, testes): estilo base que faltava no dev */
+.mp-replicate-backdrop{position:fixed;inset:0;z-index:99999;background:rgba(4,5,9,.78);backdrop-filter:blur(6px);display:grid;place-items:center;padding:22px}
+.mp-replicate-modal{width:min(720px,96vw);max-height:90vh;overflow:auto;background:#111219;border:1px solid rgba(181,74,255,.35);border-radius:16px;box-shadow:0 28px 90px rgba(0,0,0,.55);padding:18px;color:#eee}
+.mp-replicate-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;border-bottom:1px solid rgba(255,255,255,.08);padding-bottom:12px}.mp-replicate-head>div{display:grid;gap:4px}.mp-replicate-head b{font-size:14px}.mp-replicate-head small{color:#9ca4b2}.mp-replicate-head button{border:0;background:transparent;color:#bbb;font-size:24px;cursor:pointer}
+.mp-replicate-origin{display:grid;gap:4px;margin:14px 0;padding:12px;border-radius:11px;background:rgba(150,63,196,.10);border:1px solid rgba(181,74,255,.18)}.mp-replicate-origin span{font-size:9px;letter-spacing:.12em;color:#a8a0b2;font-weight:900}.mp-replicate-origin small{color:#9ca4b2}
+.mp-replicate-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mp-replicate-grid label{display:grid;gap:6px;font-size:10px;color:#aaa;font-weight:800}.mp-replicate-grid input,.mp-replicate-grid select{height:38px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#191a22;color:#eee;padding:0 10px}
+.mp-replicate-status{display:grid;gap:6px;margin-top:14px;padding:12px;border-radius:11px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.08)}.mp-replicate-status b{color:#d7a9ef}.mp-replicate-status span{font-size:10px;color:#aeb6c3}.mp-replicate-status .ok{color:#8fe2ae}.mp-replicate-status .bad{color:#ff8d95}
+.mp-replicate-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}.mp-replicate-actions button{height:38px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:#1a1b23;color:#eee;padding:0 14px;font-weight:900}.mp-replicate-actions .primary{background:#70258f;border-color:#a452c8}.mp-replicate-actions button:disabled{opacity:.35;cursor:not-allowed}
+@media(max-width:650px){.mp-replicate-grid{grid-template-columns:1fr}}
+
 /* ================================================================
    V12.8 — PAINEL /EVENTO: ciclo da solicitação, prévia e pacote
    ================================================================ */
@@ -512,11 +522,28 @@
 .mpz{display:inline-block;margin-top:4px;font-size:9.5px;color:#9ed7ff;line-height:1.35}
 .mpz.low{color:var(--mpk-warn,#ffc35c)}
 /* V12.17 dev — ações do card do evento quebram linha em vez de vazar */
-#page-planejador .mpc-event header{flex-wrap:wrap;gap:10px}
-#page-planejador .mpc-event-actions{flex-wrap:wrap;justify-content:flex-end;max-width:100%}
+#page-planejador .mpc-event>header{flex-wrap:wrap!important;gap:10px!important}
+#page-planejador .mpc-event-actions{flex-wrap:wrap!important;justify-content:flex-end;max-width:100%;min-width:0}
+#page-planejador .mpc-event-actions button.mpk-icon{width:auto!important;padding:0 10px!important;white-space:nowrap}
 @media(max-width:760px){
   /* no celular a barra quebra em várias linhas: fica no fluxo para não cobrir o painel */
   #page-planejador:not(.mp-library-mode) .mp-workspace-bar{position:static!important;top:auto!important;box-shadow:none}
   #page-planejador:not(.mp-library-mode) .mp-workspace-bar{height:auto!important;max-height:none!important;flex-wrap:wrap!important;overflow:visible!important}
   #page-planejador:not(.mp-library-mode) .mp-workspace-bar .mp-editor-actions{flex-wrap:wrap!important;margin-left:0!important;width:100%}
+}
+/* V12.18 — correções rápidas no checklist, diário nas partidas, barra do editor */
+.mpk-fixes{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.mpk-fix{min-height:28px;padding:4px 10px;border-radius:8px;border:1px solid rgba(157,78,221,.55);background:rgba(124,58,237,.18);color:#e9d8ff;font-weight:700;font-size:10px;line-height:1.2;letter-spacing:.04em;cursor:pointer}
+.mpk-fix:hover{background:rgba(124,58,237,.34)}
+.mpk-new{font-style:normal;color:#64e6aa;font-size:.85em;margin-left:4px}
+.mpp-diario{display:flex;flex-direction:column;gap:6px;margin:0 0 12px;padding:10px 12px;border:1px solid rgba(100,230,170,.28);border-radius:10px;background:rgba(100,230,170,.06)}
+.mpp-diario>span{font-weight:800;font-size:10px;line-height:1.2;letter-spacing:.08em;color:#64e6aa}
+.mpp-diario>div{display:grid;grid-template-columns:auto auto 1fr auto;gap:8px;align-items:center;font-size:12px}
+.mpp-diario>div em{font-style:normal;color:#fff;font-weight:700}
+.mpp-diario>div small{opacity:.7;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mpp-diario>div button{padding:4px 12px;border-radius:7px;background:rgba(100,230,170,.12);border:1px solid rgba(100,230,170,.4);color:#c9ffe6;font-weight:700;font-size:11px;cursor:pointer}
+.mpp-dnote{opacity:.6;font-size:11px}
+@media(max-width:600px){.mpp-diario>div{grid-template-columns:1fr auto}.mpp-diario>div small{grid-column:1/-1}}
+@media(min-width:761px){
+  #page-planejador:not(.mp-library-mode) .mp-workspace-bar{height:auto!important;min-height:46px!important;flex-wrap:wrap!important;padding:6px 8px!important;background:#0d0b12!important;backdrop-filter:blur(10px)}
 }

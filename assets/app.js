@@ -15079,6 +15079,8 @@ window.HighOSMissionCloud={
  /* QGs/favelas com CDS: spawn de evento não pode cair dentro; Z ajuda a estimar a altura do TP de teste */
  qgs:()=>(faccoes||[]).map(f=>{const n=String(f.cds||'').match(/-?\d+(?:\.\d+)?/g)||[];return {group:f.group,qg:f.qg||'',faccao:f.faccao||'',x:Number(n[0]),y:Number(n[1]),z:Number(n[2])};}).filter(q=>Number.isFinite(q.x)&&Number.isFinite(q.y)&&q.x!==0&&!/sem local/i.test(q.qg)),
  user:()=>currentUser?.email||'',
+ /* Planejador V12.18: resultados de eventos lançados no Diário Operacional (/highos registrar) */
+ diarioEventos:async()=>(await highOsStoreList('diario_operacional')).filter(x=>String(x.type||'').toLowerCase()==='evento'),
  pull:pullMissionsFromCloud,
  ensureMigrated:ensureMissionsMigrated,
  saveZones:itens=>writeMissionZones(itens,false),

@@ -21,6 +21,15 @@
 - META de facções, gerar spawns que faltam (fora de água/QG), sugerir locais, centro justo, otimizar spawns, partidas e análise de vitórias.
 - TP de teste com **Z estimado** pelas CDS já validadas próximas (evita limbo/NC).
 
+**Planejador V12.18**
+- ⚡ AUTO devolve o tempo extra da fuga a pé encurtando as esperas: fecha perto dos 20 min sem perder a margem PvP.
+- Pendência "spawns fora da safe inicial" com correção em um clique: AUMENTAR RAIO (mantém o centro) ou CENTRO JUSTO.
+- Exportar HIGH usa a mesma solicitação padronizada da etapa Solicitação; com pendência sai como RASCUNHO, com o motivo.
+- Partidas puxam do Diário Operacional (/highos registrar no Discord) os resultados ainda não registrados: USAR preenche data, campeã e obs.
+- Cayo Perico (Fac x Fac) recebe rascunho de 25 spawns em terra firme, PENDENTES até validar a CDS no jogo.
+- Barra do editor opaca e sem sobrepor os cartões; modais do planejador com o estilo que faltava; botão excluir do evento sem vazar.
+- `tools/referencia-funcoes.json` atualizado: `verificar-integridade` volta a servir de trava antes de publicar.
+
 ## V9.5.0 (atual)
 - Planejador abre em **Central de Missões compacta**; formulário e mapa só aparecem depois de escolher uma zona.
 - Editor ganhou breadcrumb `MISSÕES > EVENTO > ZONA`, mantendo as abas ZONA / PONTOS / VALIDAÇÃO / ENTREGA.
