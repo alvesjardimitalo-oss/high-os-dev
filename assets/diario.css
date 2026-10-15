@@ -97,3 +97,55 @@
 @keyframes dgFill{from{width:0}}
 @keyframes dgFlow{to{background-position:-200% 0}}
 @media (max-width:900px){#page-diario .dg-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#page-diario .dg-item{grid-template-columns:58px 44px 1fr}#page-diario .dg-status{grid-column:3}#page-diario .dg-timeline::before{left:79px}#page-diario .dg-time{font-size:19px}}
+
+/* =========================================================
+   DASHBOARD no mesmo tema do Diário (V14.6.1)
+   ========================================================= */
+#page-dashboard{--d-s:#151019;--d-s2:#1c1523;--d-l:rgba(255,255,255,.07);--d-l2:rgba(255,255,255,.13);--d-t:#f4f0f8;--d-t2:#b9aec6;--d-t3:#8a7f99;--d-b:#9a4dff;--d-b2:#c08bff;--d-ok:#22c55e;--d-w:#f59e0b;--d-r:#ef4444}
+#page-dashboard .page-head h2{font-family:"Chakra Petch",system-ui,sans-serif!important;font-size:34px!important;letter-spacing:.02em!important}
+#page-dashboard .page-head .page-subtitle{font-size:14.5px!important}
+/* faixa de abertura */
+#page-dashboard .dash-command-hero{position:relative;overflow:hidden;border-radius:20px!important;border:1px solid rgba(154,77,255,.35)!important;
+  background:linear-gradient(115deg,rgba(141,53,255,.28),rgba(21,16,25,.95) 55%),#151019!important;padding:22px 24px!important;animation:dgUp .5s ease both}
+#page-dashboard .dash-command-hero::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.06) 50%,transparent 60%);transform:translateX(-100%);animation:dashSweep 6s ease-in-out 1s infinite;pointer-events:none}
+#page-dashboard .dash-hero-kicker{font-size:11px!important;letter-spacing:.16em!important;color:var(--d-b2)!important}
+#page-dashboard .dash-command-hero h3{font-family:"Chakra Petch",system-ui,sans-serif!important;font-size:30px!important;letter-spacing:.02em!important;margin:6px 0!important}
+#page-dashboard .dash-command-hero p{font-size:15px!important;color:var(--d-t2)!important}
+#page-dashboard .dash-hero-actions button{height:44px!important;border-radius:12px!important;font-size:12.5px!important;font-weight:800!important;letter-spacing:.06em!important;transition:transform .15s,box-shadow .15s!important}
+#page-dashboard .dash-hero-actions button:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(141,53,255,.35)}
+/* indicadores grandes */
+#page-dashboard .dash-kpis>*{border-radius:18px!important;border:1px solid var(--d-l)!important;background:var(--d-s)!important;padding:16px 18px!important;text-align:left;
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease!important;animation:dgUp .45s ease both}
+#page-dashboard .dash-kpis>*:nth-child(1){animation-delay:.05s}#page-dashboard .dash-kpis>*:nth-child(2){animation-delay:.1s}#page-dashboard .dash-kpis>*:nth-child(3){animation-delay:.15s}#page-dashboard .dash-kpis>*:nth-child(4){animation-delay:.2s}
+#page-dashboard .dash-kpis button:hover{transform:translateY(-3px);border-color:var(--d-b)!important;box-shadow:0 10px 26px rgba(141,53,255,.22)}
+#page-dashboard .dash-kpis span{font-size:11px!important;font-weight:800!important;letter-spacing:.12em!important;color:var(--d-t3)!important}
+#page-dashboard .dash-kpis b{display:block;font-family:"Chakra Petch",system-ui,sans-serif!important;font-size:42px!important;line-height:1.1!important;margin:6px 0 2px!important;color:var(--d-t)!important}
+#page-dashboard .dash-kpis small{font-size:13px!important;color:var(--d-t3)!important}
+#page-dashboard .dash-kpis .warn b{color:var(--d-w)!important}
+#page-dashboard .dash-kpis .health b{color:var(--d-ok)!important}
+#page-dashboard .dash-kpis .health.atencao b,#page-dashboard .dash-kpis .health.atenção b{color:var(--d-w)!important}
+#page-dashboard .dash-kpis .health.critica b,#page-dashboard .dash-kpis .health.crítica b{color:var(--d-r)!important}
+/* painéis */
+#page-dashboard .dash-grid>section,#page-dashboard .dash-panel{border-radius:18px!important;border:1px solid var(--d-l)!important;background:var(--d-s)!important;animation:dgUp .5s ease both;transition:border-color .2s ease,box-shadow .2s ease}
+#page-dashboard .dash-grid>section:hover{border-color:rgba(154,77,255,.35)!important;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+#page-dashboard .dash-grid>section:nth-child(1){animation-delay:.15s}#page-dashboard .dash-grid>section:nth-child(2){animation-delay:.22s}#page-dashboard .dash-grid>section:nth-child(3){animation-delay:.29s}#page-dashboard .dash-grid>section:nth-child(4){animation-delay:.36s}#page-dashboard .dash-grid>section:nth-child(5){animation-delay:.43s}#page-dashboard .dash-grid>section:nth-child(6){animation-delay:.5s}
+#page-dashboard .dash-grid header h3,#page-dashboard .dash-panel header h3{font-family:"Chakra Petch",system-ui,sans-serif!important;font-size:19px!important;letter-spacing:.02em!important}
+#page-dashboard .dash-grid header span{font-size:11px!important;letter-spacing:.12em!important}
+#page-dashboard .dash-grid header button{border-radius:10px!important;transition:transform .15s,border-color .15s!important}
+#page-dashboard .dash-grid header button:hover{transform:translateX(3px)}
+#page-dashboard .dash-grid b,#page-dashboard .dash-grid p,#page-dashboard .dash-grid small{font-size:inherit}
+#page-dashboard .dash-activity-row,#page-dashboard .dash-week-alert,#page-dashboard .dash-anomaly-row,#page-dashboard .pd-row{animation:dgUp .4s ease both;transition:background .15s ease,transform .15s ease}
+#page-dashboard .dash-activity-row:hover,#page-dashboard .pd-row:hover{background:rgba(154,77,255,.07);transform:translateX(3px)}
+#page-dashboard .dash-activity-row b,#page-dashboard .dash-week-alert b,#page-dashboard .pd-row b{font-size:14.5px!important}
+#page-dashboard .dash-activity-row span,#page-dashboard .dash-activity-row small{font-size:12.5px!important}
+#page-dashboard .dash-activity-row>i{box-shadow:0 0 0 0 rgba(154,77,255,.5);animation:dashDot 2.4s ease-in-out infinite}
+#page-dashboard .dash-move-kpis b{font-family:"Chakra Petch",system-ui,sans-serif!important;font-size:34px!important}
+#page-dashboard .dash-seg-row div i,#page-dashboard .pd-bar i,#page-dashboard .po-seg i{animation:dgFill 1s cubic-bezier(.2,.8,.2,1) both}
+#page-dashboard .dash-week-alert.critical{animation:dgUp .4s ease both,dashCrit 2.2s ease-in-out 1s infinite}
+@keyframes dashSweep{0%,70%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes dashDot{50%{box-shadow:0 0 0 6px rgba(154,77,255,0)}}
+@keyframes dashCrit{50%{box-shadow:inset 3px 0 0 #ef4444,0 0 0 1px rgba(239,68,68,.35)}}
+@media (prefers-reduced-motion:reduce){#page-dashboard *{animation:none!important;transition:none!important}}
+#page-dashboard .dash-kpis{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))!important;gap:12px!important}
+#page-dashboard .dash-grid header button{font-size:11.5px!important;padding:8px 12px!important;border:1px solid rgba(154,77,255,.35)!important;background:rgba(154,77,255,.08)!important}
+#page-dashboard .dash-move-kpis span{font-size:11px!important;letter-spacing:.1em!important}
