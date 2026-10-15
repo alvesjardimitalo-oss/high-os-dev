@@ -15548,7 +15548,7 @@ function rh15BlocoGrafico(dias,e){
 }
 /* pico de pessoas online no Ilegal por horário de coleta, segunda a sexta */
 function rh15SemanaHorario(B,L){
- const slots=B.slotKeys,dn=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'],wds=[1,2,3,4,5];
+ const slots=B.slotKeys,dn=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'],wds=[1,2,3,4,5,6,0];
  if(!slots.length)return rh15Vazio('Sem coletas no período','');
  const cel={};wds.forEach(w=>slots.forEach(s=>cel[w+'|'+s]={vals:[],pico:null,dia:null}));
  B.dias.forEach(d=>{const w=d.getDay();if(!wds.includes(w))return;const dk=rh15DK(d);
@@ -15557,16 +15557,16 @@ function rh15SemanaHorario(B,L){
  const max=Math.max(1,...Object.values(cel).map(c=>c.pico||0));
  let best=null;Object.entries(cel).forEach(([k,c])=>{if(c.pico!==null&&(!best||c.pico>best.c.pico))best={k,c}});
  /* gráfico: um grupo por dia útil, uma barra por horário */
- const W=900,H=280,Lm=40,Rm=12,T=22,Bm=46,iw=W-Lm-Rm,ih=H-T-Bm,gw=iw/wds.length,bw=Math.min(34,(gw-24)/slots.length);
+ const W=1260,H=300,Lm=40,Rm=12,T=22,Bm=62,iw=W-Lm-Rm,ih=H-T-Bm,gw=iw/wds.length,bw=Math.min(34,(gw-24)/slots.length);
  const passo=max<=20?5:max<=60?10:max<=150?25:50,topo=Math.ceil(max/passo)*passo,y=v=>T+ih-(v/topo)*ih;
  let g='';for(let v=0;v<=topo;v+=passo)g+=`<line x1="${Lm}" x2="${W-Rm}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${Lm-6}" y="${y(v)+3}" class="ax" text-anchor="end">${v}</text>`;
  wds.forEach((w,wi)=>{const x0=Lm+wi*gw+(gw-bw*slots.length-(slots.length-1)*4)/2;
-  g+=`<text x="${Lm+wi*gw+gw/2}" y="${H-Bm+30}" class="axw" text-anchor="middle">${dn[w]}</text>`;
+  g+=`<text x="${Lm+wi*gw+gw/2}" y="${H-Bm+46}" class="axw" text-anchor="middle">${dn[w]}</text>`;
   slots.forEach((s,si)=>{const c=cel[w+'|'+s],x=x0+si*(bw+4);g+=`<text x="${x+bw/2}" y="${H-Bm+14}" class="ax sm" text-anchor="middle">${esc(s)}</text>`;
-   if(c.pico===null)return;const h=Math.max(2,c.pico/topo*ih),m=c.vals.reduce((a,b)=>a+b,0)/c.vals.length;
-   g+=`<rect x="${x}" y="${y(c.pico)}" width="${bw}" height="${h}" rx="3" class="hb s${si%6}${best&&best.k===w+'|'+s?' best':''}"><title>${dn[w]} ${s} — pico ${c.pico} (${rh15Br(c.dia)})\nmédia ${rh15N(m)} em ${c.vals.length} ${c.vals.length>1?'dias':'dia'}</title></rect><text x="${x+bw/2}" y="${y(c.pico)-5}" class="val" text-anchor="middle">${c.pico}</text>`})});
+   if(c.pico===null)return;g+=`<text x="${x+bw/2}" y="${H-Bm+27}" class="ax sm dt" text-anchor="middle">${rh15Dm(c.dia)}</text>`;const h=Math.max(2,c.pico/topo*ih),m=c.vals.reduce((a,b)=>a+b,0)/c.vals.length;
+   g+=`<rect x="${x}" y="${y(c.pico)}" width="${bw}" height="${h}" rx="3" class="hb s${si%6}${best&&best.k===w+'|'+s?' best':''}"><title>${dn[w]} ${rh15Br(c.dia)} ${s} — pico ${c.pico}\nmédia ${rh15N(m)} em ${c.vals.length} ${c.vals.length>1?'dias':'dia'}</title></rect><text x="${x+bw/2}" y="${y(c.pico)-5}" class="val" text-anchor="middle">${c.pico}</text>`})});
  const tab=`<table class="rh15-table compact rh15-wh"><thead><tr><th>HORÁRIO</th>${wds.map(w=>`<th>${dn[w].toUpperCase()}</th>`).join('')}</tr></thead><tbody>${slots.map(s=>`<tr><td><b>${esc(s)}</b></td>${wds.map(w=>{const c=cel[w+'|'+s];if(c.pico===null)return '<td>—</td>';const m=c.vals.reduce((a,b)=>a+b,0)/c.vals.length;return `<td class="${best&&best.k===w+'|'+s?'best':''}" style="--a:${(.08+.5*c.pico/max).toFixed(2)}"><b>${c.pico}</b><small>média ${rh15N(m)} · pico em ${rh15Dm(c.dia)}</small></td>`}).join('')}</tr>`).join('')}</tbody></table>`;
- return `<section class="rh15-card"><header><b>Pico de pessoas online no Ilegal — segunda a sexta</b><small>Soma de todas as facções em cada horário de coleta · maior valor do período${best?` · recorde: ${dn[+best.k.split('|')[0]]} ${esc(best.k.split('|')[1])} com ${best.c.pico}`:''}</small></header>
+ return `<section class="rh15-card"><header><b>Pico de pessoas online no Ilegal — segunda a domingo</b><small>${B.dias.length?`Período ${rh15Br(B.dias[0])} a ${rh15Br(B.dias[B.dias.length-1])} · `:''}soma de todas as facções em cada horário de coleta · maior valor do período, com a data em que aconteceu${best?` · recorde: ${dn[+best.k.split('|')[0]]} ${esc(best.k.split('|')[1])} com ${best.c.pico} em ${rh15Br(best.c.dia)}`:''}</small></header>
 <div class="rh15-gbox rh15-wh-chart"><svg class="rh15-mes" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pico do Ilegal por horário">${g}</svg><div class="rh15-gleg">${slots.map((s,si)=>`<span><i class="hb-leg s${si%6}"></i>${esc(s)}</span>`).join('')}<span><i class="hb-leg best"></i>maior pico da semana</span></div></div>
 <div class="rh15-table-wrap" style="margin-top:12px">${tab}</div></section>`;
 }

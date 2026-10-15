@@ -273,3 +273,4 @@
 #page-metricas .rh15-wh td[style]{background:rgba(154,77,255,var(--a))}
 #page-metricas .rh15-wh td b{font-size:16px}
 #page-metricas .rh15-wh td.best{box-shadow:inset 0 0 0 2px #fff}
+.rh15-wh-chart .ax.dt{fill:#c9b8e8;font-size:9.5px;font-weight:700}
