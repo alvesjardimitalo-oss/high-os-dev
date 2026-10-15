@@ -15261,7 +15261,8 @@ if(rh15.ord==='presenca')rh15.ord='aprov';
 const rh15Meta=()=>{const a=Math.max(1,+rh15.metaMin||15),b=Math.max(a,+rh15.metaMax||20);return {min:a,max:b}};
 const rh15MetaTxt=()=>{const m=rh15Meta();return m.min===m.max?`${m.max}`:`${m.min} a ${m.max}`};
 rh15.rep={agrupar:'grafico',ex:true,fac:'',...(rh15.rep||{})};
-const rh15Salvar=()=>rh15LS.set(RH15_KEY,{tab:rh15.tab,per:rh15.per,ini:rh15.ini,fim:rh15.fim,seg:rh15.seg,heatSlot:rh15.heatSlot,fac:rh15.fac,ord:rh15.ord,metaMin:rh15.metaMin,metaMax:rh15.metaMax,rep:rh15.rep});
+if(!rh15.v144){rh15.rep.agrupar='grafico';rh15.v144=1}
+const rh15Salvar=()=>rh15LS.set(RH15_KEY,{tab:rh15.tab,per:rh15.per,ini:rh15.ini,fim:rh15.fim,seg:rh15.seg,heatSlot:rh15.heatSlot,fac:rh15.fac,ord:rh15.ord,v144:rh15.v144,metaMin:rh15.metaMin,metaMax:rh15.metaMax,rep:rh15.rep});
 
 /* ---------- utilidades ---------- */
 const rh15K=s=>alvesNorm(s).replace(/[^a-z0-9]/g,'');
@@ -15496,7 +15497,7 @@ function rh15GraficoMes(dias,e,{print=false}={}){
  const max=Math.max(M.max+2,...vals,1),passo=max<=10?2:max<=30?5:max<=60?10:20,topo=Math.ceil(max/passo)*passo;
  const y=v=>T+ih-(v/topo)*ih,cx=i=>L+i*bw+bw/2;
  let g='';for(let v=0;v<=topo;v+=passo)g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L-6}" y="${y(v)+3}" class="ax" text-anchor="end">${v}</text>`;
- g+=`<rect x="${L}" y="${y(M.max)}" width="${iw}" height="${y(M.min)-y(M.max)}" class="meta"/><text x="${L+6}" y="${y(M.max)-5}" class="metat">meta ${rh15MetaTxt()}</text>`;
+ g+=`<rect x="${L}" y="${y(M.max)}" width="${iw}" height="${y(M.min)-y(M.max)}" class="meta"/>`;
  dias.forEach((d,i)=>{const v=serie[i],x=L+i*bw+bw*.16,w=Math.max(2,bw*.68),fut=d>hoje,wk=[0,6].includes(d.getDay());
   g+=`<text x="${cx(i)}" y="${H-Bm+14}" class="ax${wk?' wk':''}" text-anchor="middle">${d.getDate()}</text><text x="${cx(i)}" y="${H-Bm+26}" class="ax sm" text-anchor="middle">${'DSTQQSS'[d.getDay()]}</text>`;
   if(fut)return;
@@ -15648,8 +15649,8 @@ function rh15PrintSpark(dias,e){
  return `<svg class="spark" viewBox="0 0 ${w} 22" width="${Math.min(150,w)}" height="22">${dias.map((d,i)=>{const v=e.dias.get(rh15DK(d))?.pico;if(d>hoje)return '';if(v===undefined)return `<rect x="${i*5}" y="20" width="4" height="2" class="na"/>`;const h=Math.max(2,v/max*21);return `<rect x="${i*5}" y="${22-h}" width="4" height="${h}" class="${rh15Faixa(v)}"/>`}).join('')}</svg>`;
 }
 function rh15Situacao(st){const M=rh15Meta();if(!st.comDados)return ['bad','SEM COLETA'];if(st.media>=M.min)return ['ok','NA META'];if(st.media>=M.min*.7)return ['warn','PRÓXIMO DA META'];return ['bad','ABAIXO DA META']}
-function rh15ImprimirGraficos(B,L){
- const dias=rh15DiasMes(B),sel=rh15.rep.fac||'',M=rh15Meta(),hoje=rh15Hoje();
+function rh15ImprimirGraficos(B,L,selFixa){
+ const dias=rh15DiasMes(B),sel=selFixa!==undefined?selFixa:(rh15.rep.fac||''),M=rh15Meta(),hoje=rh15Hoje();
  const ord=[...L].filter(e=>e.st.comDados&&(!sel||e.k===sel)).sort((a,b)=>(b.st.media??-1)-(a.st.media??-1));
  if(!ord.length)return alert('Nenhuma facção com coleta no período.');
  const resumo=!sel&&ord.length>1;let pag=0,total=0;
@@ -15669,7 +15670,7 @@ ${bl.map((e,ii)=>{const st=e.st,[c,t]=rh15Situacao(st);return `<tr><td>${bi*POR+
   html+=`<section class="pg">${rh15PrintTopo('Relatório mensal por facção',sub)}<div class="in">
 <div class="fh"><div><h2>${esc(e.faccao)}</h2><div class="s">${esc(e.group)} • ${esc(e.segmento)}${e.ex?' • saiu do Group no período':''}${st.ultima?` • última presença ${rh15Br(st.ultima)}`:''}</div></div><span class="badge ${c}">${t}</span></div>
 <div class="kp"><div><span>Média de pico</span><b>${rh15N(st.media)}</b><small>meta ${rh15MetaTxt()}</small></div><div><span>Maior pico</span><b>${rh15N(st.pico)}</b><small>menor ${rh15N(st.minimo)}</small></div><div class="${st.diasMeta>=st.total/2?'ok':'warn'}"><span>Dias na meta</span><b>${st.diasMeta}/${st.total}</b><small>pico ≥ ${M.min}</small></div><div class="${abaixo?'warn':''}"><span>Dias abaixo</span><b>${abaixo}</b><small>pico &lt; ${M.min}</small></div><div><span>Aproveitamento</span><b>${rh15Pct(st.aprov)}</b><small>média ÷ ${M.max}</small></div><div><span>Constância</span><b>${rh15Pct(st.regularidade)}</b><small>${st.forte?`mais forte às ${esc(st.forte)}`:'&nbsp;'}</small></div></div>
-<div class="chart">${rh15GraficoMes(dias,e,{print:true})}<div class="leg"><span><i style="background:#16a34a"></i>pico no topo da meta (≥ ${M.max})</span><span><i style="background:#4ade80"></i>pico na meta</span><span><i style="background:#fbbf24"></i>abaixo da meta</span><span><i class="ln"></i>constância (liga os picos)</span><span><i class="av"></i>média do período</span><span><i style="background:#e5e0ec"></i>sem coleta</span></div></div>
+<div class="chart">${rh15GraficoMes(dias,e,{print:true})}<div class="leg"><span><i style="background:rgba(22,163,74,.15);border:1px dashed #16a34a"></i>faixa da meta (${rh15MetaTxt()})</span><span><i style="background:#16a34a"></i>pico no topo da meta (≥ ${M.max})</span><span><i style="background:#4ade80"></i>pico na meta</span><span><i style="background:#fbbf24"></i>abaixo da meta</span><span><i class="ln"></i>constância (liga os picos)</span><span><i class="av"></i>média do período</span><span><i style="background:#e5e0ec"></i>sem coleta</span></div></div>
 ${strip}</div>${rh15PrintRodape(pag,total)}</section>`});
  rh15PrintAbrir(`Relatório mensal por facção — ${B.r.rotulo}`,html.split('__TOTAL__').join(String(total)));
 }
@@ -15691,7 +15692,8 @@ function rh15Exportar(tipo){
  if(tipo.startsWith('fac')){const e=B.lista.find(x=>x.k===rh15.fac);if(!e)return;
   const T=rh15RelTabela(B,[e],{agrupar:'faccaodia'});
   if(tipo==='fac-csv')return org15Csv(`metricas_${rh15K(e.faccao)}_${stamp}.csv`,T.cab,T.linhas);
-  return rh15Imprimir(`${e.faccao} — ${B.r.rotulo}`,`${e.group} • ${e.segmento} • aproveitamento ${rh15Pct(e.st.aprov)} (meta ${rh15MetaTxt()}) • ${e.st.diasMeta}/${e.st.total} dias na meta • média ${rh15N(e.st.media)}${e.ant?.media?` (anterior ${rh15N(e.ant.media)}, ${rh15VarTxt(e.st.media,e.ant.media)})`:''} • pico ${rh15N(e.st.pico)}`,T.cab,T.linhas);}
+  return rh15ImprimirGraficos(B,[e],e.k);}
+ if(tipo==='rep-pdf'&&rh15.rep.agrupar==='faccao')return rh15ImprimirGraficos(B,rh15RelLista(B,rh15.rep),'');
  if(tipo.startsWith('rep')&&rh15.rep.agrupar==='grafico'){const L=rh15RelLista(B,rh15.rep).filter(e=>!rh15.rep.fac||e.k===rh15.rep.fac);
   if(tipo==='rep-pdf')return rh15ImprimirGraficos(B,L);
   const T=rh15RelTabela(B,L,{agrupar:'faccaodia'});return org15Csv(`picos_mensais_por_faccao_${stamp}.csv`,T.cab,T.linhas)}
