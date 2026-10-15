@@ -5862,10 +5862,10 @@ function metricGroupOccupied(group){return faccoes.some(f=>!f.removido&&alvesNor
    metricasCache = linhas BRUTAS (Discord/Sheets). metricas = versão ATRIBUÍDA:
    cada coleta vai para a facção que ocupava o Group naquele horário, já no
    Group atual dela. Coleta em Group vago vai para metricSemOcupante. */
-let metricTransferencias=[],metricSemOcupante=[],metricTimeline=null;
+let metricTransferencias=[],metricSemOcupante=[],metricOcupTL=null;
 function metricasAtribuidas(rows=[]){
  try{
-  const tl=montarLinhaDoTempo({faccoes,entregas,transferencias:metricTransferencias});metricTimeline=tl;
+  const tl=montarLinhaDoTempo({faccoes,entregas,transferencias:metricTransferencias});metricOcupTL=tl;
   const r=atribuirLinhas(rows,tl,{faccoes,dataDe:metricDateValue,slotsDe:metricSlots});
   metricSemOcupante=r.semOcupante;return r.linhas;
  }catch(e){console.warn('[MÉTRICAS] atribuição por facção falhou; exibindo por Group',e);metricSemOcupante=[];return rows.slice()}
@@ -11126,7 +11126,7 @@ date:d,
 value:mx,
 row:r})});
 
- return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const gkF=v=>alvesNorm(v).replace(/[^a-z0-9]/g,'').replace(/mecanic/g,'mechanic').replace(/0*(\d+)$/,'$1'),gk=gkF(x.group),cands=faccoes.filter(z=>!z.removido&&gkF(z.group)===gk),f=cands.find(z=>ocupadoV14(z))||cands[0];const ini=metricTimeline?.inicioAtual?.(x.group);const assumido=f&&ocupadoV14(f)?{faccao:f.faccao,desde:ini&&ini.faccao&&Number.isFinite(ini.t)&&ini.t>0?new Date(ini.t):null}:null;const lastDelivery=historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
+ return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const gkF=v=>alvesNorm(v).replace(/[^a-z0-9]/g,'').replace(/mecanic/g,'mechanic').replace(/0*(\d+)$/,'$1'),gk=gkF(x.group),cands=faccoes.filter(z=>!z.removido&&gkF(z.group)===gk),f=cands.find(z=>ocupadoV14(z))||cands[0];const ini=metricOcupTL?.inicioAtual?.(x.group);const assumido=f&&ocupadoV14(f)?{faccao:f.faccao,desde:ini&&ini.faccao&&Number.isFinite(ini.t)&&ini.t>0?new Date(ini.t):null}:null;const lastDelivery=historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
 qg:f?.qg||'',
 staff:f?.staff||'',
 assumido,
