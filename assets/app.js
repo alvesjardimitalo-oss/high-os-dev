@@ -1771,10 +1771,16 @@ function discordPlain(v){
  if(typeof v==='object'){const o={};for(const [k,x] of Object.entries(v)){const y=discordPlain(x);if(y!==undefined)o[k]=y}return o}
  return String(v);
 }
+/* V15.1: o registro vindo do bot traz os nomes nativos (location, highOsFaction,
+   responsible…) e o painel edita os nomes em português (qg, faccao, lider…).
+   O bot lê primeiro o nome nativo, então um {...old, qg:''} reenviava o QG
+   antigo em "location" e a edição era desfeita. O campo em português manda. */
+const FACTION_PT_NATIVE=[['segmento','segment'],['qg','location'],['faccao','highOsFaction'],['lider','responsible'],['dataEntrega','deliveryDate'],['dataAssuncao','assumedAt'],['fabricacao','fabrication'],['producao','production'],['craft','craftDescription'],['autorizacao','authorization'],['beneficiosAssumir','assumeBenefits'],['motivoRecolhimento','collectionReason'],['dataRecolhimento','collectedAt'],['recolhidoPor','collectedBy'],['contingenteMin','contingentMin'],['contingenteMax','contingentMax'],['beneficios','benefits'],['observacoes','observations'],['observacao','observations']];
 async function discordFactionPatch(id,patch={}){
  // O backend faz merge atômico com o registro atual. Evita um GET extra
  // em cada alteração feita pelo painel Web.
  const p=discordPlain(patch);
+ for(const [pt,nat] of FACTION_PT_NATIVE)if(Object.prototype.hasOwnProperty.call(p,pt))delete p[nat];
  return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify({...p,group:id})});
 }
 const setDoc=async(ref,data,opts={})=>{
