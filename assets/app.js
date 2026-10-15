@@ -15146,7 +15146,7 @@ function org15Detalhe(id){
 <h2>${esc(f.faccao||f.group)}</h2><p class="org15-sub">${esc(f.group)} · ${esc(f.__orgSegment)}${f.qg?` · ${esc(f.qg)}`:''}</p>
 <div class="org15-drawer-periodo">${ORG15_PERIODOS.map(([v,l])=>`<button type="button" class="${org15.periodo===v?'active':''}" data-org15-dperiodo="${v}">${l}</button>`).join('')}</div>
 <div class="org15-kpis"><div><span>PICO MÁXIMO</span><b>${org15Num(r.pico)}</b></div><div><span>MÉDIA DOS PICOS</span><b>${org15Num(r.media)}</b></div><div><span>DIAS PRESENTES</span><b>${r.presentes}/${r.total}</b><small>${pct}% do período</small></div><div><span>ÚLTIMA PRESENÇA</span><b>${r.ultima?org15DiaBr(r.ultima):'—'}</b></div></div>
-${r.comDados?org15Grafico(dias,r):'<div class="placeholder"><b>◌</b><h3>SEM COLETAS NO PERÍODO</h3><p>Não há métrica registrada para esta facção no intervalo escolhido.</p></div>'}
+${r.comDados?rh15BlocoGrafico(dias,{faccao:f.faccao||f.group,dias:r.mapa}):'<div class="placeholder"><b>◌</b><h3>SEM COLETAS NO PERÍODO</h3><p>Não há métrica registrada para esta facção no intervalo escolhido.</p></div>'}
 ${r.comDados?`<details class="org15-days"><summary>Coletas por dia (${r.comDados})</summary><div class="org15-days-wrap"><table><thead><tr><th>DIA</th>${slotKeys.map(k=>`<th>${esc(k)}</th>`).join('')}<th>PICO</th><th>MÉDIA</th></tr></thead><tbody>${tabela}</tbody></table></div></details>`:''}
 <div class="org15-drawer-actions"><button type="button" class="btn-secondary" data-org15-csvone="${esc(f.id||f.group)}">EXPORTAR CSV</button><button type="button" class="btn-primary org-v92-open" data-id="${esc(f.id||f.group)}">ABRIR PERFIL</button></div></div>`;
  box.querySelectorAll('[data-org15-dperiodo]').forEach(b=>b.onclick=()=>{org15.periodo=b.dataset.org15Dperiodo;org15Save();renderFaccoes();org15Detalhe(id)});
@@ -15481,7 +15481,7 @@ ${[['Aproveitamento',st.aprov,an.aprov,rh15Pct],['Dias na meta',st.diasMeta,an.d
 <div><span>PICO MÁXIMO</span><b>${rh15N(st.pico)}</b><small>mínimo ${rh15N(st.minimo)} · última presença ${st.ultima?rh15Dm(st.ultima):'—'}</small></div>
 <div><span>MÉDIA POR COLETA</span><b>${rh15N(st.mediaColetas)}</b><small>${st.coletas} coleta(s)${st.forte?` · mais forte às ${esc(st.forte)}`:''}</small></div>
 <div><span>REGULARIDADE</span><b>${rh15Pct(st.regularidade)}</b><small>quanto o movimento se mantém dia a dia</small></div></div>
-<section class="rh15-card"><header><b>Pico diário</b><small>${esc(e.group)} · ${esc(e.segmento)} · ${esc(B.r.rotulo)}</small></header>${st.comDados?org15Grafico(dias,{serie:st.serie,mapa,media:st.media}):rh15Vazio('Sem coletas no período','')}</section>
+<section class="rh15-card"><header><b>Pico diário</b><small>${esc(e.group)} · ${esc(e.segmento)} · ${esc(B.r.rotulo)}</small></header>${st.comDados?rh15BlocoGrafico(rh15DiasMes(B),e):rh15Vazio('Sem coletas no período','')}</section>
 ${st.comDados&&B.slotKeys.length?`<section class="rh15-card"><header><b>Por horário de coleta</b><small>Média: ${B.slotKeys.map(s=>`${esc(s)} ${rh15N(st.porSlot[s])}`).join(' · ')}</small></header>${rh15Linhas(dias,serieSlots,{altura:210})}</section>`:''}
 ${comp}
 <section class="rh15-card"><header><b>Coletas dia a dia</b></header><div class="rh15-table-wrap tall"><table class="rh15-table compact"><thead><tr><th>DIA</th>${B.slotKeys.map(k=>`<th>${esc(k)}</th>`).join('')}<th>PICO</th><th>MÉDIA</th><th>% DA META</th><th>SITUAÇÃO</th></tr></thead><tbody>${tabela}</tbody></table></div></section>`;
@@ -15491,7 +15491,7 @@ function rh15RelLista(B,cfg){return rh15Filtrar(B.lista,{ex:cfg.ex}).filter(e=>e
 /* ---------- gráfico mensal por facção: todos os dias do mês, barra = pico do dia, linha = constância ---------- */
 function rh15DiasMes(B){return rh15Dias({ini:B.r.ini,fim:B.r.fimReal||B.r.fim})}
 function rh15GraficoMes(dias,e,{print=false}={}){
- const M=rh15Meta(),W=900,H=print?330:300,L=36,R=12,T=20,Bm=40,iw=W-L-R,ih=H-T-Bm,n=Math.max(1,dias.length),bw=iw/n,hoje=rh15Hoje();
+ const M=rh15Meta(),W=900,H=print?330:300,L=36,R=74,T=20,Bm=40,iw=W-L-R,ih=H-T-Bm,n=Math.max(1,dias.length),bw=iw/n,hoje=rh15Hoje();
  const serie=dias.map(d=>{const x=e.dias.get(rh15DK(d));return x?x.pico:null});
  const vals=serie.filter(v=>v!==null),media=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
  const max=Math.max(M.max+2,...vals,1),passo=max<=10?2:max<=30?5:max<=60?10:20,topo=Math.ceil(max/passo)*passo;
@@ -15508,15 +15508,21 @@ function rh15GraficoMes(dias,e,{print=false}={}){
  let path='';serie.forEach((v,i)=>{if(v===null||dias[i]>hoje)return;path+=(path?'L':'M')+cx(i).toFixed(1)+' '+y(v).toFixed(1)});
  g+=`<path d="${path}" class="line" fill="none"/>`;
  serie.forEach((v,i)=>{if(v!==null&&dias[i]<=hoje)g+=`<circle cx="${cx(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" class="dot"/>`});
- if(media!==null){const ty=Math.abs(y(media)-y(M.max))<16?y(media)+18:y(media)-6;g+=`<line x1="${L}" x2="${W-R}" y1="${y(media)}" y2="${y(media)}" class="avg"/><rect x="${W-R-88}" y="${ty-12}" width="86" height="16" rx="8" class="avgbg"/><text x="${W-R-45}" y="${ty}" class="avgt" text-anchor="middle">média ${rh15N(media)}</text>`}
+ if(media!==null){g+=`<line x1="${L}" x2="${W-R+4}" y1="${y(media)}" y2="${y(media)}" class="avg"/><rect x="${W-R+6}" y="${y(media)-9}" width="66" height="18" rx="9" class="avgbg"/><text x="${W-R+39}" y="${y(media)+4}" class="avgt" text-anchor="middle">méd. ${rh15N(media)}</text>`}
  return `<svg class="rh15-mes${print?' print':''}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pico diário de ${esc(e.faccao)}">${g}</svg>`;
+}
+/* bloco de tela: gráfico + legenda + tira dia a dia (mesmo modelo do PDF) */
+function rh15BlocoGrafico(dias,e){
+ const hoje=rh15Hoje(),M=rh15Meta();
+ const strip=`<div class="rh15-strip" style="grid-template-columns:repeat(${dias.length},minmax(0,1fr))">${dias.map(d=>{const v=e.dias.get(rh15DK(d))?.pico;const cls=d>hoje?'s-fut':v===undefined?'s-nd':'s-'+rh15Faixa(v);return `<div class="${cls}" title="${rh15Br(d)}${v!==undefined?` — pico ${v}`:''}"><em>${d.getDate()}</em>${d>hoje?'&nbsp;':v===undefined?'–':v}</div>`}).join('')}</div>`;
+ return `<div class="rh15-gbox">${rh15GraficoMes(dias,e)}<div class="rh15-gleg"><span><i class="lg-meta"></i>faixa da meta (${rh15MetaTxt()})</span><span><i class="lg-top"></i>pico no topo (≥ ${M.max})</span><span><i class="lg-ok"></i>pico na meta</span><span><i class="lg-low"></i>abaixo da meta</span><span><i class="lg-line"></i>constância (liga os picos)</span><span><i class="lg-avg"></i>média do período</span><span><i class="lg-nd"></i>sem coleta</span></div>${strip}</div>`;
 }
 function rh15CardMes(dias,e){
  const st=e.st,M=rh15Meta(),vals=dias.map(d=>e.dias.get(rh15DK(d))?.pico).filter(v=>v!==undefined);
  const abaixo=vals.filter(v=>v<M.min).length;
  return `<section class="rh15-card rh15-mes-card"><header><div><b>${esc(e.faccao)}</b><small>${esc(e.group)} · ${esc(e.segmento)}${e.ex?' · saiu do Group':''}</small></div>
 <div class="rh15-mes-kpis"><span><em>MÉDIA</em><b>${rh15N(st.media)}</b></span><span><em>PICO</em><b>${rh15N(st.pico)}</b></span><span><em>NA META</em><b>${st.diasMeta}/${st.total}</b></span><span><em>ABAIXO</em><b class="${abaixo?'warn':''}">${abaixo}</b></span><span><em>APROV.</em><b>${rh15Pct(st.aprov)}</b></span><span><em>CONSTÂNCIA</em><b>${rh15Pct(st.regularidade)}</b></span></div></header>
-${st.comDados?rh15GraficoMes(dias,e):rh15Vazio('Sem coletas no período','')}</section>`;
+${st.comDados?rh15BlocoGrafico(dias,e):rh15Vazio('Sem coletas no período','')}</section>`;
 }
 function rh15RelGraficos(B,L){
  const dias=rh15DiasMes(B),sel=rh15.rep.fac||'';

@@ -212,21 +212,29 @@
 #page-metricas .rh15-mes-kpis b{font-size:16px;color:var(--r-text);font-variant-numeric:tabular-nums}
 #page-metricas .rh15-mes-kpis b.warn{color:var(--r-warn)}
 #page-metricas .rh15-mes{width:100%;height:auto;display:block}
-#page-metricas .rh15-mes .grid{stroke:rgba(255,255,255,.06)}
-#page-metricas .rh15-mes .ax{fill:var(--r-text-3);font-size:10.5px}
-#page-metricas .rh15-mes .ax.sm{font-size:8.5px;opacity:.7}
-#page-metricas .rh15-mes .ax.wk{fill:var(--r-brand-2);font-weight:700}
-#page-metricas .rh15-mes .meta{fill:rgba(79,220,143,.07);stroke:rgba(79,220,143,.35);stroke-dasharray:4 4}
-#page-metricas .rh15-mes .metat{fill:var(--r-ok);font-size:10.5px;font-weight:700}
-#page-metricas .rh15-mes .b{fill:rgba(154,77,255,.55)}
-#page-metricas .rh15-mes .b.f-ok{fill:rgba(79,220,143,.55)}
-#page-metricas .rh15-mes .b.f-top{fill:rgba(79,220,143,.8)}
-#page-metricas .rh15-mes .b.f-low,#page-metricas .rh15-mes .b.f-zero{fill:rgba(255,195,92,.6)}
-#page-metricas .rh15-mes .b:hover{fill:var(--r-brand-2)}
-#page-metricas .rh15-mes .nd{fill:rgba(255,255,255,.12)}
-#page-metricas .rh15-mes .val{fill:var(--r-text-2);font-size:10px;font-weight:700}
-#page-metricas .rh15-mes .line{stroke:#f4f0f8;stroke-width:2;stroke-linejoin:round}
-#page-metricas .rh15-mes .dot{fill:#f4f0f8}
-#page-metricas .rh15-mes .avg{stroke:var(--r-warn);stroke-dasharray:6 4;stroke-width:1.4}
-#page-metricas .rh15-mes .avgt{fill:var(--r-warn);font-size:10.5px;font-weight:700}
-#page-metricas .rh15-mes .avgbg{fill:rgba(18,13,24,.9);stroke:rgba(255,195,92,.45)}
+
+/* gráfico diário de pico e constância (tela) — usado em Métricas e Organizações */
+.rh15-gbox{--g-ok:#22c55e;--g-top:#16a34a;--g-low:#f59e0b;--g-zero:#ef4444;--g-avg:#f87171;--g-tx:#b9aec6;--g-tx2:#8a7f99}
+.rh15-gbox svg.rh15-mes{width:100%;height:auto;display:block}
+.rh15-gbox .grid{stroke:rgba(255,255,255,.06)}
+.rh15-gbox .ax{fill:var(--g-tx2);font-size:10.5px}
+.rh15-gbox .ax.sm{font-size:8.5px;opacity:.75}
+.rh15-gbox .ax.wk{fill:#c08bff;font-weight:700}
+.rh15-gbox .meta{fill:rgba(34,197,94,.08);stroke:rgba(34,197,94,.45);stroke-dasharray:5 4}
+.rh15-gbox .b{fill:#a78bfa}.rh15-gbox .b.f-ok{fill:var(--g-ok)}.rh15-gbox .b.f-top{fill:var(--g-top)}.rh15-gbox .b.f-low{fill:var(--g-low)}.rh15-gbox .b.f-zero{fill:var(--g-zero)}
+.rh15-gbox .b:hover{opacity:.8}
+.rh15-gbox .nd{fill:rgba(255,255,255,.14)}
+.rh15-gbox .val{fill:#f4f0f8;font-size:10px;font-weight:800}
+.rh15-gbox .line{stroke:#f4f0f8;stroke-width:2;stroke-linejoin:round}
+.rh15-gbox .dot{fill:#120d18;stroke:#f4f0f8;stroke-width:1.6}
+.rh15-gbox .avg{stroke:var(--g-avg);stroke-dasharray:7 5;stroke-width:1.4}
+.rh15-gbox .avgt{fill:var(--g-avg);font-size:10.5px;font-weight:800}
+.rh15-gbox .avgbg{fill:#120d18;stroke:rgba(248,113,113,.5)}
+.rh15-gleg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:var(--g-tx);margin:8px 2px 0}
+.rh15-gleg i{display:inline-block;width:12px;height:8px;border-radius:2px;margin-right:6px;vertical-align:0}
+.rh15-gleg .lg-meta{background:rgba(34,197,94,.15);border:1px dashed #22c55e}.rh15-gleg .lg-top{background:var(--g-top)}.rh15-gleg .lg-ok{background:var(--g-ok)}.rh15-gleg .lg-low{background:var(--g-low)}.rh15-gleg .lg-nd{background:rgba(255,255,255,.14)}
+.rh15-gleg .lg-line{height:2px;background:#f4f0f8;vertical-align:3px}.rh15-gleg .lg-avg{height:0;border-top:2px dashed var(--g-avg);vertical-align:3px}
+.rh15-strip{display:grid;gap:3px;margin-top:10px}
+.rh15-strip div{text-align:center;border-radius:5px;padding:4px 0;font-size:11px;font-weight:800;background:rgba(255,255,255,.04);color:var(--g-tx2);font-variant-numeric:tabular-nums}
+.rh15-strip div em{display:block;font-style:normal;font-size:8.5px;font-weight:600;opacity:.75}
+.rh15-strip .s-ok{background:rgba(34,197,94,.18);color:#86efac}.rh15-strip .s-top{background:rgba(22,163,74,.35);color:#bbf7d0}.rh15-strip .s-low{background:rgba(245,158,11,.18);color:#fcd34d}.rh15-strip .s-zero{background:rgba(239,68,68,.18);color:#fca5a5}.rh15-strip .s-fut{opacity:.35}
