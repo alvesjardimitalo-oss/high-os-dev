@@ -15254,13 +15254,13 @@ const RH15_FACCOES=()=>faccoes;
 const ocupadoRH15=f=>ocupadoV14(f);
 const RH15_KEY='highos.rh15';
 const rh15LS={get(k,d){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v===null||v===undefined?d:v}catch(_){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
-const rh15={...{tab:'painel',per:'mes:atual',ini:'',fim:'',seg:'',q:'',heatSlot:'pico',fac:'',ord:'media',metaMin:15,metaMax:20,rep:{agrupar:'faccao',ex:true}},...rh15LS.get(RH15_KEY,{})};
+const rh15={...{tab:'painel',per:'mes:atual',ini:'',fim:'',seg:'',q:'',heatSlot:'pico',fac:'',ord:'media',metaMin:15,metaMax:20,rep:{agrupar:'grafico',ex:true,fac:''}},...rh15LS.get(RH15_KEY,{})};
 if(rh15.tab==='pagamentos')rh15.tab='ranking';
 if(rh15.ord==='presenca')rh15.ord='aprov';
 /* meta de pico da facção: o aproveitamento é o pico em relação ao topo da meta */
 const rh15Meta=()=>{const a=Math.max(1,+rh15.metaMin||15),b=Math.max(a,+rh15.metaMax||20);return {min:a,max:b}};
 const rh15MetaTxt=()=>{const m=rh15Meta();return m.min===m.max?`${m.max}`:`${m.min} a ${m.max}`};
-rh15.rep={agrupar:'faccao',ex:true,...(rh15.rep||{})};
+rh15.rep={agrupar:'grafico',ex:true,fac:'',...(rh15.rep||{})};
 const rh15Salvar=()=>rh15LS.set(RH15_KEY,{tab:rh15.tab,per:rh15.per,ini:rh15.ini,fim:rh15.fim,seg:rh15.seg,heatSlot:rh15.heatSlot,fac:rh15.fac,ord:rh15.ord,metaMin:rh15.metaMin,metaMax:rh15.metaMax,rep:rh15.rep});
 
 /* ---------- utilidades ---------- */
@@ -15485,18 +15485,62 @@ ${st.comDados&&B.slotKeys.length?`<section class="rh15-card"><header><b>Por hor�
 ${comp}
 <section class="rh15-card"><header><b>Coletas dia a dia</b></header><div class="rh15-table-wrap tall"><table class="rh15-table compact"><thead><tr><th>DIA</th>${B.slotKeys.map(k=>`<th>${esc(k)}</th>`).join('')}<th>PICO</th><th>MÉDIA</th><th>% DA META</th><th>SITUAÇÃO</th></tr></thead><tbody>${tabela}</tbody></table></div></section>`;
 }
-const RH15_AGRUP=[['faccao','Facção'],['group','Group'],['segmento','Segmento'],['dia','Dia'],['semana','Dia da semana'],['horario','Horário de coleta'],['faccaodia','Facção × dia']];
+const RH15_AGRUP=[['grafico','Gráfico mensal por facção'],['faccao','Resumo por facção'],['group','Group'],['segmento','Segmento'],['dia','Dia'],['semana','Dia da semana'],['horario','Horário de coleta'],['faccaodia','Facção × dia']];
 function rh15RelLista(B,cfg){return rh15Filtrar(B.lista,{ex:cfg.ex}).filter(e=>e.st.comDados||cfg.agrupar==='faccao')}
+/* ---------- gráfico mensal por facção: todos os dias do mês, barra = pico do dia, linha = constância ---------- */
+function rh15DiasMes(B){return rh15Dias({ini:B.r.ini,fim:B.r.fimReal||B.r.fim})}
+function rh15GraficoMes(dias,e,{print=false}={}){
+ const M=rh15Meta(),W=900,H=300,L=36,R=12,T=20,Bm=40,iw=W-L-R,ih=H-T-Bm,n=Math.max(1,dias.length),bw=iw/n,hoje=rh15Hoje();
+ const serie=dias.map(d=>{const x=e.dias.get(rh15DK(d));return x?x.pico:null});
+ const vals=serie.filter(v=>v!==null),media=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
+ const max=Math.max(M.max+2,...vals,1),passo=max<=10?2:max<=30?5:max<=60?10:20,topo=Math.ceil(max/passo)*passo;
+ const y=v=>T+ih-(v/topo)*ih,cx=i=>L+i*bw+bw/2;
+ let g='';for(let v=0;v<=topo;v+=passo)g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L-6}" y="${y(v)+3}" class="ax" text-anchor="end">${v}</text>`;
+ g+=`<rect x="${L}" y="${y(M.max)}" width="${iw}" height="${y(M.min)-y(M.max)}" class="meta"/><text x="${W-R-4}" y="${y(M.max)-4}" class="metat" text-anchor="end">meta ${rh15MetaTxt()}</text>`;
+ dias.forEach((d,i)=>{const v=serie[i],x=L+i*bw+bw*.16,w=Math.max(2,bw*.68),fut=d>hoje,wk=[0,6].includes(d.getDay());
+  g+=`<text x="${cx(i)}" y="${H-Bm+14}" class="ax${wk?' wk':''}" text-anchor="middle">${d.getDate()}</text><text x="${cx(i)}" y="${H-Bm+26}" class="ax sm" text-anchor="middle">${'DSTQQSS'[d.getDay()]}</text>`;
+  if(fut)return;
+  if(v===null){g+=`<rect x="${x}" y="${T+ih-2}" width="${w}" height="2" class="nd"><title>${rh15Br(d)} — sem coleta</title></rect>`;return}
+  const h=Math.max(2,(v/topo)*ih),x2=e.dias.get(rh15DK(d)),det=x2?Object.entries(x2.slots).sort((a,b)=>rh15SlotMin(a[0])-rh15SlotMin(b[0])).map(([k,q])=>`${k}: ${q}`).join(' · '):'';
+  g+=`<rect x="${x}" y="${T+ih-h}" width="${w}" height="${h}" rx="2" class="b f-${rh15Faixa(v)}"><title>${rh15Br(d)} — pico ${v}\n${det}</title></rect><text x="${cx(i)}" y="${T+ih-h-9}" class="val" text-anchor="middle">${v}</text>`});
+ /* linha de constância: liga os picos dos dias com coleta */
+ let path='';serie.forEach((v,i)=>{if(v===null||dias[i]>hoje)return;path+=(path?'L':'M')+cx(i).toFixed(1)+' '+y(v).toFixed(1)});
+ g+=`<path d="${path}" class="line" fill="none"/>`;
+ serie.forEach((v,i)=>{if(v!==null&&dias[i]<=hoje)g+=`<circle cx="${cx(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" class="dot"/>`});
+ if(media!==null)g+=`<line x1="${L}" x2="${W-R}" y1="${y(media)}" y2="${y(media)}" class="avg"/><text x="${L+6}" y="${y(media)-5}" class="avgt">média ${rh15N(media)}</text>`;
+ return `<svg class="rh15-mes${print?' print':''}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pico diário de ${esc(e.faccao)}">${g}</svg>`;
+}
+function rh15CardMes(dias,e){
+ const st=e.st,M=rh15Meta(),vals=dias.map(d=>e.dias.get(rh15DK(d))?.pico).filter(v=>v!==undefined);
+ const abaixo=vals.filter(v=>v<M.min).length;
+ return `<section class="rh15-card rh15-mes-card"><header><div><b>${esc(e.faccao)}</b><small>${esc(e.group)} · ${esc(e.segmento)}${e.ex?' · saiu do Group':''}</small></div>
+<div class="rh15-mes-kpis"><span><em>MÉDIA</em><b>${rh15N(st.media)}</b></span><span><em>PICO</em><b>${rh15N(st.pico)}</b></span><span><em>NA META</em><b>${st.diasMeta}/${st.total}</b></span><span><em>ABAIXO</em><b class="${abaixo?'warn':''}">${abaixo}</b></span><span><em>APROV.</em><b>${rh15Pct(st.aprov)}</b></span><span><em>CONSTÂNCIA</em><b>${rh15Pct(st.regularidade)}</b></span></div></header>
+${st.comDados?rh15GraficoMes(dias,e):rh15Vazio('Sem coletas no período','')}</section>`;
+}
+function rh15RelGraficos(B,L){
+ const dias=rh15DiasMes(B),sel=rh15.rep.fac||'';
+ const ord=[...L].filter(e=>e.st.comDados).sort((a,b)=>a.faccao.localeCompare(b.faccao,'pt-BR'));
+ const mostrar=sel?ord.filter(e=>e.k===sel):ord;
+ return `<div class="rh15-subbar"><label class="rh15-select wide"><span>FACÇÃO</span><select id="rh15RepFac"><option value="">Todas (${ord.length})</option>${ord.map(e=>`<option value="${esc(e.k)}" ${e.k===sel?'selected':''}>${esc(e.faccao)} — ${esc(e.group)}</option>`).join('')}</select></label></div>
+<p class="rh15-hint">Cada barra é o pico do dia. A linha liga os picos e mostra a constância; a faixa verde é a meta de ${rh15MetaTxt()} e a linha tracejada é a média. Barra amarela = abaixo da meta.</p>
+${mostrar.length?mostrar.map(e=>rh15CardMes(dias,e)).join(''):rh15Vazio('Sem coletas no período','')}`;
+}
+function rh15ImprimirGraficos(B,L){
+ const dias=rh15DiasMes(B),sel=rh15.rep.fac||'',ord=[...L].filter(e=>e.st.comDados&&(!sel||e.k===sel)).sort((a,b)=>a.faccao.localeCompare(b.faccao,'pt-BR'));
+ const w=window.open('','_blank');if(!w)return alert('O navegador bloqueou a janela do relatório. Libere pop-ups para o High OS.');
+ const css=`@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#241c28;margin:0;font-size:10px}header.h{border-bottom:4px solid #6f2e8f;padding-bottom:8px;margin-bottom:10px}.k{font-size:9px;letter-spacing:1.6px;color:#713f86;font-weight:700}h1{font-size:19px;margin:4px 0}.m{color:#776d7b}.fac{page-break-inside:avoid;border:1px solid #e3dbe7;border-radius:8px;padding:8px 10px;margin-bottom:10px}.fac h2{font-size:14px;margin:0}.fac .s{color:#776d7b;margin:2px 0 6px}.kp{display:flex;gap:16px;margin-bottom:4px}.kp span{font-size:9px;color:#776d7b}.kp b{display:block;font-size:13px;color:#241c28}svg{width:100%;height:auto}.grid{stroke:#eee}.ax{fill:#888;font-size:10px}.ax.sm{font-size:8px}.ax.wk{fill:#6f2e8f;font-weight:700}.meta{fill:rgba(46,160,90,.10);stroke:rgba(46,160,90,.5);stroke-dasharray:4 4}.metat{fill:#2e8b57;font-size:10px;font-weight:700}.b{fill:#8e4fd6}.b.f-low,.b.f-zero{fill:#e3a62f}.b.f-top{fill:#2e9b5c}.nd{fill:#ddd}.val{fill:#555;font-size:9px;font-weight:700}.line{stroke:#241c28;stroke-width:1.8}.dot{fill:#241c28}.avg{stroke:#c0392b;stroke-dasharray:6 4;stroke-width:1.3}.avgt{fill:#c0392b;font-size:10px;font-weight:700}.np{position:fixed;right:16px;top:16px;background:#5d2876;color:#fff;border:0;border-radius:7px;padding:8px 12px;font-weight:bold;cursor:pointer}@media print{.np{display:none}}`;
+ w.document.open();w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Relatório mensal por facção — ${esc(B.r.rotulo)}</title><style>${css}</style></head><body><button class="np" onclick="window.print()">IMPRIMIR / SALVAR PDF</button><header class="h"><div class="k">HIGH OS • CENTRAL RH DE MÉTRICAS</div><h1>Relatório mensal por facção — ${esc(B.r.rotulo)}</h1><div class="m">${ord.length} facção(ões) • meta de pico ${rh15MetaTxt()} • barra = pico do dia, linha = constância, tracejado = média • gerado em ${new Date().toLocaleString('pt-BR')}</div></header>${ord.map(e=>{const st=e.st;return `<div class="fac"><h2>${esc(e.faccao)}</h2><div class="s">${esc(e.group)} · ${esc(e.segmento)}</div><div class="kp"><span>Média<b>${rh15N(st.media)}</b></span><span>Pico<b>${rh15N(st.pico)}</b></span><span>Dias na meta<b>${st.diasMeta}/${st.total}</b></span><span>Aproveitamento<b>${rh15Pct(st.aprov)}</b></span><span>Constância<b>${rh15Pct(st.regularidade)}</b></span><span>Última presença<b>${st.ultima?rh15Br(st.ultima):'—'}</b></span></div>${rh15GraficoMes(dias,e,{print:true})}</div>`}).join('')}</body></html>`);w.document.close();
+}
 function rh15Relatorio(B){
- const cfg=rh15.rep,T=rh15RelTabela(B,rh15RelLista(B,cfg),cfg);
+ const cfg=rh15.rep,graf=cfg.agrupar==='grafico',T=graf?null:rh15RelTabela(B,rh15RelLista(B,cfg),cfg);
  return `<div class="rh15-presets"><span>MODELOS PRONTOS</span>
-<button type="button" data-rh15-preset="mensal-faccao">Mensal por facção</button><button type="button" data-rh15-preset="mensal-segmento">Mensal por segmento</button><button type="button" data-rh15-preset="mensal-group">Mensal por Group</button><button type="button" data-rh15-preset="picos-diarios">Picos diários (facção × dia)</button><button type="button" data-rh15-preset="horarios">Movimento por horário</button><button type="button" data-rh15-preset="semana">Dia da semana</button><button type="button" data-rh15-preset="ilegal-dia">Total do Ilegal por dia</button></div>
+<button type="button" data-rh15-preset="grafico-mensal">Gráfico mensal por facção</button><button type="button" data-rh15-preset="mensal-faccao">Resumo por facção</button><button type="button" data-rh15-preset="mensal-segmento">Mensal por segmento</button><button type="button" data-rh15-preset="mensal-group">Mensal por Group</button><button type="button" data-rh15-preset="picos-diarios">Picos diários (facção × dia)</button><button type="button" data-rh15-preset="horarios">Movimento por horário</button><button type="button" data-rh15-preset="semana">Dia da semana</button><button type="button" data-rh15-preset="ilegal-dia">Total do Ilegal por dia</button></div>
 <div class="rh15-subbar"><label class="rh15-select"><span>AGRUPAR POR</span><select id="rh15RepAgrupar">${RH15_AGRUP.map(([v,l])=>`<option value="${v}" ${cfg.agrupar===v?'selected':''}>${l}</option>`).join('')}</select></label>
 <label class="rh15-check"><input type="checkbox" id="rh15RepEx" ${cfg.ex?'checked':''}> Incluir facções que saíram do Group</label>
 <div class="rh15-actions"><button type="button" class="rh15-btn" data-rh15-exp="rep-csv">BAIXAR CSV</button><button type="button" class="rh15-btn primary" data-rh15-exp="rep-pdf">IMPRIMIR / PDF</button></div></div>
-<section class="rh15-card"><header><b>${esc(T.titulo)}</b><small>${esc(B.r.rotulo)}${rh15.seg?` · ${esc(rh15.seg)}`:''} · ${T.linhas.length} linha(s)</small></header>
+${graf?rh15RelGraficos(B,rh15RelLista(B,cfg)):`<section class="rh15-card"><header><b>${esc(T.titulo)}</b><small>${esc(B.r.rotulo)}${rh15.seg?` · ${esc(rh15.seg)}`:''} · ${T.linhas.length} linha(s)</small></header>
 ${T.grafico||''}
-<div class="rh15-table-wrap tall"><table class="rh15-table compact"><thead><tr>${T.cab.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${T.linhas.map(l=>`<tr>${l.map((c,i)=>`<td>${i===0?`<b>${esc(c)}</b>`:esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`;
+<div class="rh15-table-wrap tall"><table class="rh15-table compact"><thead><tr>${T.cab.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${T.linhas.map(l=>`<tr>${l.map((c,i)=>`<td>${i===0?`<b>${esc(c)}</b>`:esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></section>`}`;
 }
 function rh15RelTabela(B,L,cfg){
  const dias=B.dias,ag=cfg.agrupar;
@@ -15558,6 +15602,9 @@ function rh15Exportar(tipo){
   const T=rh15RelTabela(B,[e],{agrupar:'faccaodia'});
   if(tipo==='fac-csv')return org15Csv(`metricas_${rh15K(e.faccao)}_${stamp}.csv`,T.cab,T.linhas);
   return rh15Imprimir(`${e.faccao} — ${B.r.rotulo}`,`${e.group} • ${e.segmento} • aproveitamento ${rh15Pct(e.st.aprov)} (meta ${rh15MetaTxt()}) • ${e.st.diasMeta}/${e.st.total} dias na meta • média ${rh15N(e.st.media)}${e.ant?.media?` (anterior ${rh15N(e.ant.media)}, ${rh15VarTxt(e.st.media,e.ant.media)})`:''} • pico ${rh15N(e.st.pico)}`,T.cab,T.linhas);}
+ if(tipo.startsWith('rep')&&rh15.rep.agrupar==='grafico'){const L=rh15RelLista(B,rh15.rep).filter(e=>!rh15.rep.fac||e.k===rh15.rep.fac);
+  if(tipo==='rep-pdf')return rh15ImprimirGraficos(B,L);
+  const T=rh15RelTabela(B,L,{agrupar:'faccaodia'});return org15Csv(`picos_mensais_por_faccao_${stamp}.csv`,T.cab,T.linhas)}
  if(tipo.startsWith('rep')){const cfg=rh15.rep,T=rh15RelTabela(B,rh15RelLista(B,cfg),cfg);
   if(tipo==='rep-csv')return org15Csv(`${rh15K(T.titulo)}_${stamp}.csv`,T.cab,T.linhas);
   return rh15Imprimir(`${T.titulo} — ${B.r.rotulo}`,`${rh15.seg||'Todos os segmentos'} • ${T.linhas.length} linha(s)`,T.cab,T.linhas);}
@@ -15599,9 +15646,10 @@ function rh15Render(){
  host.querySelector('#rh15Ord')?.addEventListener('change',e=>{rh15.ord=e.target.value;rh15Salvar();rh15Render()});
  host.querySelector('#rh15FacSel')?.addEventListener('change',e=>{rh15.fac=e.target.value;rh15Salvar();rh15Render()});
  host.querySelector('#rh15RepAgrupar')?.addEventListener('change',e=>{rh15.rep.agrupar=e.target.value;rh15Salvar();rh15Render()});
+ host.querySelector('#rh15RepFac')?.addEventListener('change',e=>{rh15.rep.fac=e.target.value;rh15Salvar();rh15Render()});
  host.querySelector('#rh15RepEx')?.addEventListener('change',e=>{rh15.rep.ex=e.target.checked;rh15Salvar();rh15Render()});
- const presets={'mensal-faccao':'faccao','mensal-segmento':'segmento','mensal-group':'group','picos-diarios':'faccaodia','horarios':'horario','semana':'semana','ilegal-dia':'dia'};
- host.querySelectorAll('[data-rh15-preset]').forEach(b=>b.onclick=()=>{const p=b.dataset.rh15Preset;rh15.rep.agrupar=presets[p];if(p.startsWith('mensal')&&!String(rh15.per).startsWith('mes:'))rh15.per='mes:atual';rh15Salvar();rh15Render()});
+ const presets={'grafico-mensal':'grafico','mensal-faccao':'faccao','mensal-segmento':'segmento','mensal-group':'group','picos-diarios':'faccaodia','horarios':'horario','semana':'semana','ilegal-dia':'dia'};
+ host.querySelectorAll('[data-rh15-preset]').forEach(b=>b.onclick=()=>{const p=b.dataset.rh15Preset;rh15.rep.agrupar=presets[p];if((p.startsWith('mensal')||p==='grafico-mensal')&&!String(rh15.per).startsWith('mes:'))rh15.per='mes:atual';rh15Salvar();rh15Render()});
 }
 function rh15Ligar(){
  document.querySelectorAll('[data-rh15-tab]').forEach(b=>b.onclick=()=>{rh15.tab=b.dataset.rh15Tab;rh15Salvar();rh15Render()});
