@@ -15282,6 +15282,7 @@ const ocupadoRH15=f=>ocupadoV14(f);
 const RH15_KEY='highos.rh15';
 const rh15LS={get(k,d){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v===null||v===undefined?d:v}catch(_){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
 const rh15={...{tab:'painel',per:'mes:atual',ini:'',fim:'',seg:'',q:'',heatSlot:'pico',fac:'',ord:'media',metaMin:15,metaMax:20,rep:{agrupar:'grafico',ex:true,fac:''}},...rh15LS.get(RH15_KEY,{})};
+rh15.semOff=0;
 if(rh15.tab==='pagamentos')rh15.tab='ranking';
 if(rh15.ord==='presenca')rh15.ord='aprov';
 /* meta de pico da facção: o aproveitamento é o pico em relação ao topo da meta */
@@ -15439,7 +15440,7 @@ function rh15Painel(B){
 <div><span>PICO DO ILEGAL</span><b>${rh15N(picoGeral)}</b><small>${rh15Var(picoGeral,picoAnt)} ${iPico>=0?`em ${rh15Dm(dias[iPico])}`:''}</small></div>
 <div><span>APROVEITAMENTO MÉDIO</span><b>${rh15Pct(presMed)}</b><small>${rh15Var(presMed,presAnt,{base:0.05})} média dos picos ÷ ${rh15Meta().max} (meta ${rh15MetaTxt()})</small></div>
 <div><span>COLETAS NO PERÍODO</span><b>${ativas.reduce((a,e)=>a+e.st.coletas,0)}</b><small>${B.slotKeys.length} horário(s): ${esc(B.slotKeys.join(', ')||'—')}</small></div></div>
-${rh15SemanaHorario(B,L)}
+${rh15SemanaHorario(B)}
 ${porFac.length?`<section class="rh15-card"><header><b>Pico diário por facção</b><small>Pico de cada dia · verde na meta, amarelo abaixo · clique para abrir o gráfico da facção</small></header><div class="rh15-mini-grid">${porFac.map(e=>`<button type="button" class="rh15-mini ${e.k===sel.k?'on':''}" data-rh15-fac="${esc(e.k)}"><div class="t"><b>${esc(e.faccao)}</b><span>${rh15N(e.st.media)}</span></div>${rh15MiniBarras(dias,e)}<div class="f"><small>${esc(e.segmento)}</small><small>${e.st.diasMeta}/${e.st.total} na meta</small></div></button>`).join('')}</div></section>`:rh15Vazio('Sem coletas no período','')}
 <div class="rh15-grid2">
 <section class="rh15-card"><header><b>Por facção · pico diário</b><small>Último dia com coleta · clique para abrir a facção</small></header>
@@ -15547,29 +15548,38 @@ function rh15BlocoGrafico(dias,e){
  return `<div class="rh15-gbox">${rh15GraficoMes(dias,e)}<div class="rh15-gleg"><span><i class="lg-meta"></i>faixa da meta (${rh15MetaTxt()})</span><span><i class="lg-top"></i>pico no topo (≥ ${M.max})</span><span><i class="lg-ok"></i>pico na meta</span><span><i class="lg-low"></i>abaixo da meta</span><span><i class="lg-line"></i>constância (liga os picos)</span><span><i class="lg-avg"></i>média do período</span><span><i class="lg-nd"></i>sem coleta</span></div>${strip}</div>`;
 }
 /* pico de pessoas online no Ilegal por horário de coleta, segunda a sexta */
-function rh15SemanaHorario(B,L){
- const slots=B.slotKeys,dn=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'],wds=[1,2,3,4,5,6,0];
- if(!slots.length)return rh15Vazio('Sem coletas no período','');
- const cel={};wds.forEach(w=>slots.forEach(s=>cel[w+'|'+s]={vals:[],pico:null,dia:null}));
- B.dias.forEach(d=>{const w=d.getDay();if(!wds.includes(w))return;const dk=rh15DK(d);
-  slots.forEach(s=>{let t=0,tem=false;L.forEach(e=>{const v=+e.dias.get(dk)?.slots?.[s];if(Number.isFinite(v)){t+=v;tem=true}});
-   if(!tem)return;const c=cel[w+'|'+s];c.vals.push(t);if(c.pico===null||t>c.pico){c.pico=t;c.dia=d}})});
- const max=Math.max(1,...Object.values(cel).map(c=>c.pico||0));
- let best=null;Object.entries(cel).forEach(([k,c])=>{if(c.pico!==null&&(!best||c.pico>best.c.pico))best={k,c}});
- /* gráfico: um grupo por dia útil, uma barra por horário */
- const W=1260,H=300,Lm=40,Rm=12,T=22,Bm=62,iw=W-Lm-Rm,ih=H-T-Bm,gw=iw/wds.length,bw=Math.min(34,(gw-24)/slots.length);
+/* V15.3 · pico do Ilegal na SEMANA (segunda a domingo), progressivo:
+   cada barra é a soma das facções naquele dia/horário. Dias e horários que
+   ainda não chegaram aparecem como "aguardando". ◀ ▶ navega entre semanas. */
+function rh15SemanaHorario(B){
+ const dn=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'],off=Math.min(0,Math.round(+rh15.semOff||0));
+ const hoje=rh15Hoje(),dow=(hoje.getDay()+6)%7,seg=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate()-dow+off*7);
+ const semana=[...Array(7)].map((_,i)=>new Date(seg.getFullYear(),seg.getMonth(),seg.getDate()+i)),dom=semana[6];
+ const A=rh15Coletar({ini:seg,fim:dom<hoje?dom:hoje},true),L=rh15Filtrar(A.lista);
+ const slots=[...new Set([...(A.slotKeys||[]),...(B.slotKeys||[]),...(B.slotKeys?.length||A.slotKeys?.length?[]:['14H','16H','21H','23H'])])].sort((x,y)=>rh15SlotMin(x)-rh15SlotMin(y));
+ const agora=new Date(),minAgora=agora.getHours()*60+agora.getMinutes();
+ const cel=semana.map(d=>{const dk=rh15DK(d);return slots.map(s=>{let t=0,tem=false;L.forEach(e=>{const v=+e.dias.get(dk)?.slots?.[s];if(Number.isFinite(v)){t+=v;tem=true}});
+  const futuro=d>hoje||(d.getTime()===hoje.getTime()&&!tem&&rh15SlotMin(s)+20>minAgora);
+  return {v:tem?t:null,futuro}})});
+ let best=null,max=1,soma=0,n=0;cel.forEach((c,di)=>c.forEach((x,si)=>{if(x.v===null)return;max=Math.max(max,x.v);soma+=x.v;n++;if(!best||x.v>best.v)best={v:x.v,di,si}}));
+ const W=1260,H=310,Lm=40,Rm=12,T=24,Bm=60,iw=W-Lm-Rm,ih=H-T-Bm,gw=iw/7,bw=Math.min(34,(gw-24)/Math.max(1,slots.length));
  const passo=max<=20?5:max<=60?10:max<=150?25:50,topo=Math.ceil(max/passo)*passo,y=v=>T+ih-(v/topo)*ih;
  let g='';for(let v=0;v<=topo;v+=passo)g+=`<line x1="${Lm}" x2="${W-Rm}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${Lm-6}" y="${y(v)+3}" class="ax" text-anchor="end">${v}</text>`;
- wds.forEach((w,wi)=>{const x0=Lm+wi*gw+(gw-bw*slots.length-(slots.length-1)*4)/2;
-  g+=`<text x="${Lm+wi*gw+gw/2}" y="${H-Bm+46}" class="axw" text-anchor="middle">${dn[w]}</text>`;
-  slots.forEach((s,si)=>{const c=cel[w+'|'+s],x=x0+si*(bw+4);g+=`<text x="${x+bw/2}" y="${H-Bm+14}" class="ax sm" text-anchor="middle">${esc(s)}</text>`;
-   if(c.pico===null)return;g+=`<text x="${x+bw/2}" y="${H-Bm+27}" class="ax sm dt" text-anchor="middle">${rh15Dm(c.dia)}</text>`;const h=Math.max(2,c.pico/topo*ih),m=c.vals.reduce((a,b)=>a+b,0)/c.vals.length;
-   g+=`<rect x="${x}" y="${y(c.pico)}" width="${bw}" height="${h}" rx="3" class="hb s${si%6}${best&&best.k===w+'|'+s?' best':''}"><title>${dn[w]} ${rh15Br(c.dia)} ${s} — pico ${c.pico}\nmédia ${rh15N(m)} em ${c.vals.length} ${c.vals.length>1?'dias':'dia'}</title></rect><text x="${x+bw/2}" y="${y(c.pico)-5}" class="val" text-anchor="middle">${c.pico}</text>`})});
- const tab=`<table class="rh15-table compact rh15-wh"><thead><tr><th>HORÁRIO</th>${wds.map(w=>`<th>${dn[w].toUpperCase()}</th>`).join('')}</tr></thead><tbody>${slots.map(s=>`<tr><td><b>${esc(s)}</b></td>${wds.map(w=>{const c=cel[w+'|'+s];if(c.pico===null)return '<td>—</td>';const m=c.vals.reduce((a,b)=>a+b,0)/c.vals.length;return `<td class="${best&&best.k===w+'|'+s?'best':''}" style="--a:${(.08+.5*c.pico/max).toFixed(2)}"><b>${c.pico}</b><small>média ${rh15N(m)} · pico em ${rh15Dm(c.dia)}</small></td>`}).join('')}</tr>`).join('')}</tbody></table>`;
- return `<section class="rh15-card"><header><b>Pico de pessoas online no Ilegal — segunda a domingo</b><small>${B.dias.length?`Período ${rh15Br(B.dias[0])} a ${rh15Br(B.dias[B.dias.length-1])} · `:''}soma de todas as facções em cada horário de coleta · maior valor do período, com a data em que aconteceu${best?` · recorde: ${dn[+best.k.split('|')[0]]} ${esc(best.k.split('|')[1])} com ${best.c.pico} em ${rh15Br(best.c.dia)}`:''}</small></header>
-<div class="rh15-gbox rh15-wh-chart"><svg class="rh15-mes" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pico do Ilegal por horário">${g}</svg><div class="rh15-gleg">${slots.map((s,si)=>`<span><i class="hb-leg s${si%6}"></i>${esc(s)}</span>`).join('')}<span><i class="hb-leg best"></i>maior pico da semana</span></div></div>
+ semana.forEach((d,di)=>{const gx=Lm+di*gw,x0=gx+(gw-bw*slots.length-(slots.length-1)*4)/2,ehHoje=d.getTime()===hoje.getTime();
+  if(ehHoje)g+=`<rect x="${gx+2}" y="${T-14}" width="${gw-4}" height="${ih+Bm+8}" rx="10" class="hoje"/><text x="${gx+gw/2}" y="${T-3}" class="hoje-t" text-anchor="middle">HOJE</text>`;
+  g+=`<text x="${gx+gw/2}" y="${H-Bm+30}" class="axw${d>hoje?' fut':''}" text-anchor="middle">${dn[d.getDay()]}</text><text x="${gx+gw/2}" y="${H-Bm+46}" class="ax dt" text-anchor="middle">${rh15Dm(d)}</text>`;
+  slots.forEach((s,si)=>{const c=cel[di][si],x=x0+si*(bw+4);g+=`<text x="${x+bw/2}" y="${H-Bm+14}" class="ax sm" text-anchor="middle">${esc(s)}</text>`;
+   if(c.v===null){g+=`<rect x="${x}" y="${T+ih-22}" width="${bw}" height="22" rx="3" class="hb ${c.futuro?'wait':'miss'}"><title>${dn[d.getDay()]} ${rh15Br(d)} ${s} — ${c.futuro?'aguardando a coleta':'sem coleta'}</title></rect>`;return}
+   const h=Math.max(2,c.v/topo*ih),eb=best&&best.di===di&&best.si===si;
+   g+=`<rect x="${x}" y="${y(c.v)}" width="${bw}" height="${h}" rx="3" class="hb grow s${si%6}${eb?' best':''}" style="animation-delay:${(di*slots.length+si)*25}ms"><title>${dn[d.getDay()]} ${rh15Br(d)} ${s} — ${c.v} online</title></rect><text x="${x+bw/2}" y="${y(c.v)-5}" class="val" text-anchor="middle">${c.v}</text>`})});
+ const tab=`<table class="rh15-table compact rh15-wh"><thead><tr><th>HORÁRIO</th>${semana.map(d=>`<th>${dn[d.getDay()].toUpperCase()}<br><small>${rh15Dm(d)}</small></th>`).join('')}</tr></thead><tbody>${slots.map((s,si)=>`<tr><td><b>${esc(s)}</b></td>${semana.map((d,di)=>{const c=cel[di][si];if(c.v===null)return `<td class="${c.futuro?'wait':''}">${c.futuro?'<small>aguardando</small>':'—'}</td>`;return `<td class="${best&&best.di===di&&best.si===si?'best':''}" style="--a:${(.08+.5*c.v/max).toFixed(2)}"><b>${c.v}</b></td>`}).join('')}</tr>`).join('')}</tbody></table>`;
+ const rot=off===0?'Esta semana':off===-1?'Semana passada':`${-off} semanas atrás`;
+ return `<section class="rh15-card"><header><div><b>Pico de pessoas online no Ilegal — semana</b><small>${rot} · ${rh15Br(seg)} a ${rh15Br(dom)} · soma de todas as facções em cada horário de coleta${n?` · média ${rh15N(soma/n)}`:''}${best?` · maior: ${dn[semana[best.di].getDay()]} ${rh15Dm(semana[best.di])} ${esc(slots[best.si])} com ${best.v}`:''}</small></div>
+<div class="rh15-wh-nav"><button type="button" data-rh15-sem="-1" title="Semana anterior">◀</button><button type="button" data-rh15-sem="0" ${off===0?'disabled':''}>Esta semana</button><button type="button" data-rh15-sem="1" ${off===0?'disabled':''} title="Próxima semana">▶</button></div></header>
+<div class="rh15-gbox rh15-wh-chart"><svg class="rh15-mes" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pico do Ilegal na semana">${g}</svg><div class="rh15-gleg">${slots.map((s,si)=>`<span><i class="hb-leg s${si%6}"></i>${esc(s)}</span>`).join('')}<span><i class="hb-leg best"></i>maior pico da semana</span><span><i class="hb-leg wait"></i>aguardando coleta</span></div></div>
 <div class="rh15-table-wrap" style="margin-top:12px">${tab}</div></section>`;
 }
+document.addEventListener('click',ev=>{const b=ev.target.closest?.('[data-rh15-sem]');if(!b)return;const d=+b.dataset.rh15Sem;rh15.semOff=d===0?0:Math.min(0,(+rh15.semOff||0)+d);rh15Render()});
 function rh15MiniBarras(dias,e){
  const hoje=rh15Hoje(),n=dias.length,M=rh15Meta(),max=Math.max(M.max,...dias.map(d=>e.dias.get(rh15DK(d))?.pico||0)),W=n*6;
  return `<svg class="rh15-minisvg" viewBox="0 0 ${W} 34" preserveAspectRatio="none"><rect x="0" y="${34-M.max/max*32}" width="${W}" height="${(M.max-M.min)/max*32}" class="mm"/>${dias.map((d,i)=>{if(d>hoje)return '';const v=e.dias.get(rh15DK(d))?.pico;if(v===undefined)return `<rect x="${i*6+.5}" y="32" width="5" height="2" class="nd"/>`;const h=Math.max(1.5,v/max*32);return `<rect x="${i*6+.5}" y="${34-h}" width="5" height="${h}" class="${rh15Faixa(v)}"/>`}).join('')}</svg>`;

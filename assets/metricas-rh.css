@@ -274,3 +274,17 @@
 #page-metricas .rh15-wh td b{font-size:16px}
 #page-metricas .rh15-wh td.best{box-shadow:inset 0 0 0 2px #fff}
 .rh15-wh-chart .ax.dt{fill:#c9b8e8;font-size:9.5px;font-weight:700}
+/* V15.3 · semana progressiva */
+.rh15-card>header:has(.rh15-wh-nav){display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.rh15-wh-nav{display:flex;gap:6px}
+.rh15-wh-nav button{height:34px;min-width:34px;padding:0 12px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#e9e2f5;font-weight:800;cursor:pointer}
+.rh15-wh-nav button:hover:not(:disabled){border-color:rgba(168,85,247,.5);background:rgba(168,85,247,.12)}
+.rh15-wh-nav button:disabled{opacity:.4;cursor:default}
+.rh15-wh-chart .hoje{fill:rgba(168,85,247,.07);stroke:rgba(168,85,247,.35);stroke-dasharray:4 4}
+.rh15-wh-chart .hoje-t{fill:#c084fc;font-size:10px;font-weight:900;letter-spacing:.12em}
+.rh15-wh-chart .axw.fut{fill:#8d849c}
+.rh15-wh-chart .hb.wait,.rh15-gleg .hb-leg.wait{fill:transparent;stroke:rgba(255,255,255,.22);stroke-dasharray:3 3;background:transparent;border:1px dashed rgba(255,255,255,.35)}
+.rh15-wh-chart .hb.miss{fill:rgba(255,255,255,.05);stroke:rgba(248,113,113,.35);stroke-dasharray:2 3}
+.rh15-wh-chart .hb.grow{transform-box:fill-box;transform-origin:bottom;animation:rh15Grow .6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rh15Grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.rh15-wh td.wait{color:#8d849c}
