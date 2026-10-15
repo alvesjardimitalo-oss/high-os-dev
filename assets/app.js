@@ -26,7 +26,7 @@ import { getFirestore,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta } from './modules/metricas-motor.js';
-import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js';
+import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
 authDomain:'high-os.firebaseapp.com',
@@ -15999,3 +15999,49 @@ window.HighOSMissionCloud={
 
 console.info('HIGH OS V9.5.6 · sistema carregado');
 
+
+/* ===== HIGH OS V14.7 · ANÚNCIOS DAS FACÇÕES LIVRES =====
+   - "Postado / não postado" passa a ser salvo no bot (store anuncios_livres).
+     Antes ia junto do registro do Group, mas o bot descartava o campo e a marca
+     sumia ao recarregar. Marcas antigas são recuperadas do Histórico.
+   - Botão ANÚNCIO: além de copiar, posta texto + fotos do QG no canal
+     📋 anúncios-para-copiar do Discord do High OS. */
+let anunciosLivresMap=new Map();
+function anuncioDataMs(v){const s=String(v||'').trim();const br=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(br){let y=+br[3];if(y<100)y+=2000;return new Date(y,+br[2]-1,+br[1]).getTime()}const t=Date.parse(s);return Number.isFinite(t)?t:NaN}
+function anuncioValido(r,f){
+ /* marca feita antes do último recolhimento não vale para a nova liberação do Group */
+ const quando=anuncioDataMs(r.postadoEm||r.naoPostadoEm||r.dataHora),rec=anuncioDataMs(f?.collectedAt||f?.ultimoRecolhimento?.createdAtText);
+ return !(Number.isFinite(quando)&&Number.isFinite(rec)&&quando<rec);
+}
+async function carregarAnunciosLivres(){
+ try{
+  const rows=await highOsStoreList('anuncios_livres');
+  const m=new Map(rows.map(r=>[String(r.group||r.id||'').toLowerCase(),r]));
+  try{
+   const hist=await highOsStoreList('historico'),ult=new Map();
+   hist.forEach((h,i)=>{if(!/^ANUNCIO_DISCORD_(POSTADO|NAO_POSTADO)$/.test(String(h.tipo||''))||!h.group)return;const k=String(h.group).toLowerCase(),t=anuncioDataMs(h.createdAtText||h.data)||i;const p=ult.get(k);if(!p||t>=p.t)ult.set(k,{t,h})});
+   ult.forEach(({h},k)=>{if(m.has(k))return;const postado=h.tipo==='ANUNCIO_DISCORD_POSTADO';m.set(k,{group:h.group,confirmado:true,postado,recuperado:true,dataHora:h.createdAtText||'',postadoEm:postado?(h.createdAtText||''):undefined,naoPostadoEm:postado?undefined:(h.createdAtText||'x'),texto:h.texto||'',imagemUrl:h.imagemUrl||''})});
+  }catch(_){}
+  anunciosLivresMap=m;
+  try{renderCommandDashboard()}catch(_){}try{renderAvailableFaccoes()}catch(_){}
+ }catch(e){console.warn('[ANÚNCIOS] não foi possível carregar o status salvo',e)}
+}
+{const _base=availableDiscordState;availableDiscordState=function(f){
+  if(f&&!f.anuncioDiscordStatus){const r=anunciosLivresMap.get(String(f.group||'').toLowerCase());if(r&&anuncioValido(r,f))return _base({...f,anuncioDiscordStatus:r})}
+  return _base(f)}}
+{const _set=setAvailableDiscordState;setAvailableDiscordState=async function(group,postado){
+  const f=faccoes.find(x=>x.group===group),antes=f?.anuncioDiscordStatus;
+  await _set(group,postado);
+  if(f&&f.anuncioDiscordStatus&&f.anuncioDiscordStatus!==antes){
+   const rec={group,...f.anuncioDiscordStatus};
+   try{await highOsStorePut('anuncios_livres',group,rec);anunciosLivresMap.set(group.toLowerCase(),rec)}
+   catch(e){alert('Marcado nesta tela, mas não foi salvo no bot: '+(e.message||e))}
+  }}}
+async function postarAnuncioLivre(f){
+ if(!f)throw new Error('Group não encontrado');
+ const imagens=[f.imagemAnuncio,...(Array.isArray(f.discordImageUrls)?f.discordImageUrls:[])].filter(u=>/^https:\/\//i.test(String(u||'')));
+ return highOsDiscordRequest('/v1/anuncios/livre',{method:'POST',body:JSON.stringify({group:f.group,text:availableAnnouncementText(f),imageUrls:imagens})});
+}
+{const _deps=painelDepsV14;painelDepsV14=function(){return {..._deps(),postarAnuncio:f=>postarAnuncioLivre(f)}}}
+{const _lf=loadFaccoes;loadFaccoes=async function(...a){const r=await _lf.apply(this,a);carregarAnunciosLivres();return r}}
+setTimeout(()=>{if(currentUser)carregarAnunciosLivres()},1500);
