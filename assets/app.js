@@ -25,7 +25,7 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
-import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta } from './modules/metricas-motor.js';
+import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta } from './modules/metricas-motor.js?v=14.8.0';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
@@ -5862,10 +5862,10 @@ function metricGroupOccupied(group){return faccoes.some(f=>!f.removido&&alvesNor
    metricasCache = linhas BRUTAS (Discord/Sheets). metricas = versão ATRIBUÍDA:
    cada coleta vai para a facção que ocupava o Group naquele horário, já no
    Group atual dela. Coleta em Group vago vai para metricSemOcupante. */
-let metricTransferencias=[],metricSemOcupante=[];
+let metricTransferencias=[],metricSemOcupante=[],metricTimeline=null;
 function metricasAtribuidas(rows=[]){
  try{
-  const tl=montarLinhaDoTempo({faccoes,entregas,transferencias:metricTransferencias});
+  const tl=montarLinhaDoTempo({faccoes,entregas,transferencias:metricTransferencias});metricTimeline=tl;
   const r=atribuirLinhas(rows,tl,{faccoes,dataDe:metricDateValue,slotsDe:metricSlots});
   metricSemOcupante=r.semOcupante;return r.linhas;
  }catch(e){console.warn('[MÉTRICAS] atribuição por facção falhou; exibindo por Group',e);metricSemOcupante=[];return rows.slice()}
@@ -11126,9 +11126,10 @@ date:d,
 value:mx,
 row:r})});
 
- return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const f=faccoes.find(z=>alvesNorm(z.group)===alvesNorm(x.group));const lastDelivery=historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
+ return [...by.values()].filter(x=>!anomalyIsCleared(x.group,x.date)).map(x=>{const gkF=v=>alvesNorm(v).replace(/[^a-z0-9]/g,'').replace(/mecanic/g,'mechanic').replace(/0*(\d+)$/,'$1'),gk=gkF(x.group),cands=faccoes.filter(z=>!z.removido&&gkF(z.group)===gk),f=cands.find(z=>ocupadoV14(z))||cands[0];const ini=metricTimeline?.inicioAtual?.(x.group);const assumido=f&&ocupadoV14(f)?{faccao:f.faccao,desde:ini&&ini.faccao&&Number.isFinite(ini.t)&&ini.t>0?new Date(ini.t):null}:null;const lastDelivery=historico.filter(h=>h.tipo==='ENTREGA_GROUP'&&alvesNorm(h.group)===alvesNorm(x.group)).sort((a,b)=>historyMillis(b)-historyMillis(a))[0];return {...x,
 qg:f?.qg||'',
 staff:f?.staff||'',
+assumido,
 hasExtract:!!lastDelivery};}).sort((a,b)=>b.date-a.date);
 
 }
@@ -11187,7 +11188,7 @@ v])=>`<div class="dash-seg-row"><span>${esc(k)}</span><div><i style="width:${v.a
 
  const attention=visibleWeekly.length?visibleWeekly.map(x=>`<article class="dash-week-alert ${x.level==='CRÍTICO'?'critical':''} ${x.state==='CONCLUIDO'?'done':''}"><button type="button" class="dash-alert-main" data-alert-group="${esc(x.group)}"><i></i><span><b>${esc(x.faccao)} • ${esc(x.group)}</b><small>${x.level} • queda ${x.drop.toFixed(1)}% • semana atual ${x.currentAvg.toFixed(1)} vs anterior ${x.previousAvg.toFixed(1)} • ${x.pairs} coletas comparáveis</small></span><strong>${x.state==='CONCLUIDO'?'CONCLUÍDO':x.level}</strong></button><div class="dash-alert-actions"><button type="button" title="Marcar como concluído" data-alert-state="CONCLUIDO" data-group="${esc(x.group)}" data-week="${esc(x.weekKey)}">✓</button><button type="button" title="Reabrir alerta" data-alert-state="PENDENTE" data-group="${esc(x.group)}" data-week="${esc(x.weekKey)}">↺</button><button type="button" class="clear" title="Limpar este alerta do Dashboard nesta semana" data-alert-state="LIMPO" data-group="${esc(x.group)}" data-week="${esc(x.weekKey)}">LIMPAR</button></div></article>`).join(''):'<div class="dash-empty good-text">Nenhuma queda semanal relevante entre as facções ocupadas.</div>';
 
- const anomalyHtml=anomalies.length?anomalies.map(x=>`<article class="dash-anomaly-row"><button type="button" class="dash-anomaly-main" data-anomaly-group="${esc(x.group)}"><span><b>⚠ ${esc(x.group)} SEM OCUPAÇÃO COM MÉTRICA ${x.value}</b><small>${esc(x.qg||'QG')} • ${x.date.toLocaleString('pt-BR')} • ${x.hasExtract?'há histórico de entrega, mas o Group está vago':'não consta extrato de entrega/assunção compatível'}</small><em>Confirme a ocupação. Se não houve assunção, peça ao staff/player que estiver neste Group para sair ou remova-o.</em></span><strong>VER →</strong></button><div class="dash-anomaly-actions"><button type="button" class="dash-anomaly-deliver" data-deliver-anomaly="${esc(x.group)}">ENTREGA DE FACÇÃO</button><button type="button" class="dash-anomaly-clear" data-clear-anomaly="${esc(x.group)}" data-anomaly-date="${esc(x.date.toISOString())}">LIMPAR ALERTA</button></div></article>`).join(''):'<div class="dash-empty good-text">Nenhuma presença indevida detectada em Groups vagos nos últimos 7 dias.</div>';
+ const anomalyHtml=anomalies.length?anomalies.map(x=>`<article class="dash-anomaly-row"><button type="button" class="dash-anomaly-main" data-anomaly-group="${esc(x.group)}"><span><b>⚠ ${esc(x.group)} ${x.assumido?'COLETA ANTES DA ASSUNÇÃO':'SEM OCUPAÇÃO COM MÉTRICA'} ${x.value}</b><small>${esc(x.qg||'QG')} • coleta de ${x.date.toLocaleString('pt-BR')} • ${x.assumido?`hoje assumido por <b>${esc(x.assumido.faccao)}</b>${x.assumido.desde?` desde ${x.assumido.desde.toLocaleDateString('pt-BR')}`:''}`:(x.hasExtract?'há histórico de entrega, mas o Group estava vago':'não consta extrato de entrega/assunção compatível')}</small><em>${x.assumido?`Na data da coleta o Group ainda constava vago. Se ${esc(x.assumido.faccao)} já estava lá, corrija a DATA DE ENTREGA no perfil da facção — a métrica passa para ela automaticamente.`:'Confirme a ocupação. Se não houve assunção, peça ao staff/player que estiver neste Group para sair ou remova-o.'}</em></span><strong>VER →</strong></button><div class="dash-anomaly-actions"><button type="button" class="dash-anomaly-deliver" data-deliver-anomaly="${esc(x.group)}">ENTREGA DE FACÇÃO</button><button type="button" class="dash-anomaly-clear" data-clear-anomaly="${esc(x.group)}" data-anomaly-date="${esc(x.date.toISOString())}">LIMPAR ALERTA</button></div></article>`).join(''):'<div class="dash-empty good-text">Nenhuma presença indevida detectada em Groups vagos nos últimos 7 dias.</div>';
 
  const activity=movements.map(h=>`<div class="dash-activity-row"><i></i><div><b>${esc(historyTitle(h))}</b><span>${esc([h.group,h.faccao].filter(Boolean).join(' • ')||h.descricao||'Operação administrativa')}</span><small>${esc(formatHistoryDate(h))}${h.usuario?' • '+esc(h.usuario):''}</small></div></div>`).join('')||'<div class="dash-empty">Nenhuma movimentação registrada.</div>';
 

@@ -34,9 +34,16 @@ export function msDe(v) {
   if (typeof v?.toMillis === 'function') return v.toMillis();
   if (typeof v?.seconds === 'number') return v.seconds * 1000;
   if (v instanceof Date) return v.getTime();
-  const br = String(v).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?$/);
-  if (br) { let y = +br[3]; if (y < 100) y += 2000; return new Date(y, +br[2] - 1, +br[1], +(br[4] || 0), +(br[5] || 0)).getTime(); }
-  const t = Date.parse(v); return t;
+  const txt = String(v).trim();
+  /* dd/mm/aaaa (+ hora opcional, com segundos, vírgula ou "às") — sempre dia/mês.
+     Date.parse leria "10/05/2026, 14:00:00" como 5 de outubro (formato americano). */
+  const br = txt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[^\d]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (br) { let y = +br[3]; if (y < 100) y += 2000; return new Date(y, +br[2] - 1, +br[1], +(br[4] || 0), +(br[5] || 0), +(br[6] || 0)).getTime(); }
+  /* aaaa-mm-dd sem hora = meia-noite LOCAL (Date.parse usaria UTC → 21h do dia anterior) */
+  const iso = txt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]).getTime();
+  if (/^\d{1,2}\/\d{1,2}/.test(txt)) return NaN;
+  return Date.parse(txt);
 }
 const slotMin = h => { const m = String(h).toUpperCase().match(/^(\d{1,2})(?::(\d{2}))?H?$/); return m ? (+m[1]) * 60 + (+(m[2] || 0)) : 0; };
 
@@ -64,8 +71,20 @@ export function montarLinhaDoTempo({ faccoes = [], entregas = [], transferencias
     push(h.groupDestino, t, h.depois?.destino?.faccao || null, 'transferencia');
   });
   ev.forEach(l => l.sort((a, b) => a.t - b.t || (a.faccao === null) - (b.faccao === null)));
-  /* situação atual: o último ocupante conhecido precisa bater com o cadastro */
-  faccoes.filter(f => f && !f.removido).forEach(f => {
+  /* situação atual: o último ocupante conhecido precisa bater com o cadastro.
+     Um cadastro por Group: se houver registros duplicados com a mesma chave
+     (Armas07 / ARMAS7 / Armas 07), vale o ASSUMIDO — antes, um duplicado vago
+     processado depois do assumido empurrava "vago" por cima da facção atual,
+     jogando todas as coletas recentes em "Group vago com player". */
+  const porGroup = new Map();
+  faccoes.filter(f => f && !f.removido && f.group).forEach(f => {
+    const k = chaveGroup(f.group), cur = porGroup.get(k);
+    if (!cur) { porGroup.set(k, f); return; }
+    const oc = ocupado(f), ocCur = ocupado(cur);
+    if (oc && !ocCur) porGroup.set(k, f);
+    else if (oc && ocCur && (msDe(f.dataEntrega) || 0) > (msDe(cur.dataEntrega) || 0)) porGroup.set(k, f);
+  });
+  porGroup.forEach(f => {
     const k = chaveGroup(f.group), l = ev.get(k) || [], ult = l[l.length - 1];
     if (ocupado(f)) {
       if (!ult || chave(ult.faccao) !== chave(f.faccao)) {
@@ -92,6 +111,13 @@ export function montarLinhaDoTempo({ faccoes = [], entregas = [], transferencias
       const l = ev.get(chaveGroup(group)); if (!l || !l.length) return undefined;
       let atual; for (const e of l) { if (e.t <= t) atual = e.faccao; else break; }
       return atual;
+    },
+    /** desde quando o ocupante atual (último evento) está no Group */
+    inicioAtual(group) {
+      const l = ev.get(chaveGroup(group)); if (!l || !l.length) return null;
+      const u = l[l.length - 1]; let i = l.length - 1;
+      while (i > 0 && chave(l[i - 1].faccao) === chave(u.faccao)) i--;
+      return { faccao: u.faccao, t: l[i].t, fonte: l[i].fonte };
     }
   };
 }
