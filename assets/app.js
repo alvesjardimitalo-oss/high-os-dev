@@ -1091,8 +1091,8 @@ const SEED=[{"numero": 1,
  "cds": "227.44,-1388.25,32.45,36.86",
  "anuncio": "",
  "qg": "IML Centro",
- "group": "IlegalMedic1",
- "groupOriginal": "IlegalMedic1",
+ "group": "IlegalMedic01",
+ "groupOriginal": "IlegalMedic01",
  "segmento": "APOIO",
  "produto": "Bandagem Infectada, Metadona, Adrenalina Clandestina",
  "faccao": "",
@@ -1119,8 +1119,8 @@ const SEED=[{"numero": 1,
  "cds": "{2355.39,-605.06,96.58,257.96}",
  "anuncio": "",
  "qg": "Favela da DP",
- "group": "IlegalMecanic01",
- "groupOriginal": "IlegalMecanic01",
+ "group": "IlegalMechanic01",
+ "groupOriginal": "IlegalMechanic01",
  "segmento": "APOIO",
  "produto": "Nitro, Tablet de Corrida,  Cartao Descartavel, Cartão Descartável ++",
  "faccao": "Comando Central",
@@ -6085,7 +6085,8 @@ if(!raw)return '';
 
  const n=alvesNorm(raw).replace(/\s+/g,'');
 
- const known=(faccoes||[]).find(f=>alvesNorm(f.group).replace(/\s+/g,'')===n);
+ const gk=x=>alvesNorm(x).replace(/[^a-z0-9]/g,'').replace(/mecanic/g,'mechanic').replace(/0*(\d+)$/,'$1');
+ const known=(faccoes||[]).find(f=>alvesNorm(f.group).replace(/\s+/g,'')===n)||(faccoes||[]).find(f=>gk(f.group)===gk(raw));
 if(known)return known.group;
 
  const compact=raw.replace(/\s+/g,'');
@@ -12063,8 +12064,10 @@ async function applyCoreSegmentMap(){
  const rules={Manicomio:'DROGAS',
 Contrabando01:'CONTRABANDO',
 Contrabando02:'CONTRABANDO',
+IlegalMedic01:'APOIO',
 IlegalMedic1:'APOIO',
 IlegalMedic2:'APOIO',
+IlegalMechanic01:'APOIO',
 IlegalMecanic01:'APOIO'};
 const needs=faccoes.filter(f=>rules[f.group]&&segmentKey(f.segmento)!==segmentKey(rules[f.group]));
 if(!needs.length)return;
@@ -12080,7 +12083,7 @@ faccoes=faccoes.map(f=>rules[f.group]?{...f,
 segmento:rules[f.group]}:f);
 await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'SEGMENTOS_PADRAO_V813',
-descricao:'Correção estrutural: Manicomio=DROGAS, Contrabando=CONTRABANDO, IlegalMedic/IlegalMecanic=APOIO',
+descricao:'Correção estrutural: Manicomio=DROGAS, Contrabando=CONTRABANDO, IlegalMedic/IlegalMechanic=APOIO',
 usuario:currentUser.email,
 data:serverTimestamp()})}catch(e){console.warn('Falha na correção dos segmentos padrão',e)}
 }
@@ -14991,6 +14994,7 @@ setTimeout(()=>{if($('#page-faccoes'))renderFaccoes()},0);
    quando ela troca de Group. */
 const ORG15_METRICAS=()=>metricas;
 const ORG15_REVISAR=all=>{try{return inconsistenciasV14().length}catch(_){return all.filter(f=>f.__orgStatus==='REVISAR').length}};
+const org15GK=x=>alvesNorm(x).replace(/[^a-z0-9]/g,'').replace(/mecanic/g,'mechanic').replace(/0*(\d+)$/,'$1');
 const ORG15_KEY='highos.org15';
 const org15=(()=>{let s={};try{s=JSON.parse(localStorage.getItem(ORG15_KEY)||'{}')||{}}catch(_){s={}}
  return {view:s.view==='mapa'?'mapa':'lista',sort:s.sort||'segmento',periodo:s.periodo||'14'}})();
@@ -15026,7 +15030,7 @@ function org15Indice(r=org15Range()){
   const d=metricDateValue(m),t=d&&d.getTime?d.getTime():NaN;
   if(!Number.isFinite(t)||t<ini||t>fim)return;
   const slots=metricSlots(m);if(!Object.keys(slots).length)return;
-  const gk=alvesNorm(g),dk=org15DiaKey(d);
+  const gk=org15GK(g),dk=org15DiaKey(d);
   if(!idx.has(gk))idx.set(gk,new Map());
   const dias=idx.get(gk),prev=dias.get(dk),merged={...(prev?prev.slots:{}),...slots};
   const v=Object.values(merged).map(Number).filter(Number.isFinite);if(!v.length)return;
@@ -15035,7 +15039,7 @@ function org15Indice(r=org15Range()){
  return idx;
 }
 function org15Resumo(f,idx,dias){
- const m=idx.get(alvesNorm(f.group))||new Map();
+ const m=idx.get(org15GK(f.group))||new Map();
  const serie=dias.map(d=>{const x=m.get(org15DiaKey(d));return x?x.pico:null});
  const vals=serie.filter(v=>v!==null),pres=vals.filter(v=>v>0).length;
  let ultima=null;for(let i=dias.length-1;i>=0;i--){if(serie[i]>0){ultima=dias[i];break}}
@@ -15169,7 +15173,7 @@ function org15ExportFreq(lista){
  const fs=(lista||orgV92Filtered()).filter(f=>f.__orgStatus==='ASSUMIDA');
  const slotKeys=[...new Set([...idx.values()].flatMap(m=>[...m.values()].flatMap(x=>Object.keys(x.slots))))].sort((a,b)=>org15SlotMin(a)-org15SlotMin(b));
  const linhas=[];
- fs.forEach(f=>{const m=idx.get(alvesNorm(f.group))||new Map();dias.forEach(d=>{const x=m.get(org15DiaKey(d));
+ fs.forEach(f=>{const m=idx.get(org15GK(f.group))||new Map();dias.forEach(d=>{const x=m.get(org15DiaKey(d));
   linhas.push([d.toLocaleDateString('pt-BR'),f.faccao,f.group,f.__orgSegment,...slotKeys.map(k=>x&&x.slots[k]!==undefined?x.slots[k]:''),x?x.pico:'',x?org15Num(x.media):'',x?x.coletas:0,x?(x.pico>0?'SIM':'NÃO'):'SEM COLETA'])})});
  const nome=lista&&lista.length===1?`frequencia_${alvesNorm(lista[0].faccao||lista[0].group)}_${org15Stamp()}.csv`:`frequencia_diaria_${org15Stamp()}.csv`;
  org15Csv(nome,['Data','Facção','Group','Segmento',...slotKeys,'Pico do dia','Média do dia','Coletas','Presente'],linhas);
