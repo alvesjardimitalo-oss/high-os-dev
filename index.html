@@ -26,6 +26,10 @@
   <link rel="stylesheet" href="assets/ocupacao.css?v=14.1.0">
   <link rel="stylesheet" href="assets/organizacoes.css?v=14.2.0">
   <link rel="stylesheet" href="assets/metricas-rh.css?v=14.5.1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="assets/diario.css?v=14.6.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
 </head>
@@ -96,7 +100,7 @@
       </aside>
       <div class="content">
         <section class="page active" id="page-dashboard">
-          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 14.5.2</span></div>
+          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 14.6.0</span></div>
           <div id="commandDashboard" class="command-dashboard"><div class="placeholder"><b>◆</b><h3>CARREGANDO CENTRAL DE COMANDO</h3></div></div>
           <span id="dashEmail" class="hidden">—</span><span id="dashRole" class="hidden">—</span>
         </section>
@@ -417,13 +421,11 @@
           </div>
         </section>
         <section class="page" id="page-diario">
-          <div class="page-head"><div><div class="eyebrow">CRONOGRAMA • EXECUÇÃO • RESULTADOS • PREMIAÇÕES</div><h2>DIÁRIO OPERACIONAL</h2><p class="page-subtitle">Agenda e histórico oficial do Ilegal. Eventos, reuniões, doações, sorteios, benefícios e blindados registrados no Discord/Railway.</p></div><button id="diarioRefresh" class="btn-primary compact">ATUALIZAR</button></div>
-          <div class="metric-period-panel"><div class="metric-period-dates"><label>DATA<input id="diarioDate" type="date"></label><button id="diarioToday" class="btn-secondary compact">HOJE</button></div></div>
-          <div id="diarioStats" class="fac-stats"></div>
-          <div class="economy-shell"><div class="economy-summary"><div><span>AGENDA</span><b id="diarioAgendaCount">—</b></div><div><span>REALIZADOS</span><b id="diarioDoneCount">—</b></div><div><span>FONTE</span><b>Discord / Railway</b></div></div></div>
-          <div id="diarioAgenda" class="history-list"><div class="placeholder"><b>▦</b><h3>CARREGANDO CRONOGRAMA</h3></div></div>
-          <div class="page-head" style="margin-top:28px"><div><div class="eyebrow">FECHAMENTO DO DIA</div><h2>REGISTROS REALIZADOS</h2></div></div>
-          <div id="diarioList" class="history-list"><div class="placeholder"><b>◷</b><h3>CARREGANDO DIÁRIO</h3></div></div>
+          <div class="dg-head">
+            <div><div class="eyebrow">AGENDA DO BOT • EXECUÇÃO • RESULTADOS • PREMIAÇÕES</div><h2>DIÁRIO OPERACIONAL</h2><div id="dgDayLabel" class="dg-day">—</div></div>
+            <div class="dg-nav"><button type="button" id="dgPrev" title="Dia anterior">◀</button><input type="date" id="dgDate" aria-label="Data"><button type="button" id="dgNext" title="Próximo dia">▶</button><button type="button" id="dgToday" class="primary">HOJE</button><button type="button" id="dgRefresh" title="Atualizar">⟳</button></div>
+          </div>
+          <div id="dgMain"><div class="dg-skeleton"><i></i><i></i><i></i><i></i></div></div>
         </section>
         <section class="page" id="page-historico">
           <div class="page-head"><div><div class="eyebrow">AUDITORIA OPERACIONAL</div><h2>HISTÓRICO</h2><p class="page-subtitle">Linha do tempo de entregas, recolhimentos, alterações de estrutura, usuários e solicitações registradas no High OS.</p></div></div>
@@ -890,7 +892,7 @@
   <script src="assets/modules/eventos-painel.js?v=12.17.0"></script>
   <script src="assets/mission-planner.js?v=12.18.0"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
-  <script type="module" src="assets/app.js?v=14.5.2"></script>
+  <script type="module" src="assets/app.js?v=14.6.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>

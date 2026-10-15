@@ -15794,6 +15794,95 @@ rh15Ligar();
 document.querySelectorAll('.nav-item[data-page="metricas"]').forEach(b=>b.addEventListener('click',()=>setTimeout(()=>{try{rh15Render()}catch(_){}},0)));
 setTimeout(()=>{try{rh15Render()}catch(e){console.warn('[RH]',e)}},0);
 
+/* ===== HIGH OS V14.6 · DIÁRIO OPERACIONAL =====
+   Agenda do dia = a mesma do post "📅 AGENDA DO DIA" do bot (/v1/agenda):
+   cronograma padrão do Ilegal + eventos do Discord + extras/reagendados.
+   Cruza com os registros feitos no Discord (diario_operacional) para mostrar
+   o que já foi realizado, o que está acontecendo agora e o que ficou pendente. */
+const DG_ICON={evento:'🏆',relampago:'⚡',oficial:'⚔️',visita:'📍',reuniao:'🤝',especial:'⭐',geral:'📌'};
+const DG_LABEL={oficial:'DIA OFICIAL',relampago:'RELÂMPAGO',visita:'VISITA',especial:'ESPECIAL',evento:'EVENTO',reuniao:'REUNIÃO',geral:'ATIVIDADE'};
+let dgTimer=null,dgData=null;
+const dgNorm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function dgAgoraBr(){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).map(x=>[x.type,x.value]));return {date:`${p.year}-${p.month}-${p.day}`,min:(+p.hour)*60+(+p.minute)}}
+const dgMin=t=>{const m=String(t||'').match(/^(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null};
+const dgFmtMin=m=>m<60?`${m} min`:`${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}`;
+function dgDiaLongo(date){const d=new Date(date+'T12:00:00');return d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase())}
+function dgShift(date,n){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+
+async function dgCarregar(date){
+ let agenda=[],fonte='Bot do Discord',erroAgenda='';
+ const [ag,regs]=await Promise.allSettled([highOsDiscordRequest('/v1/agenda?date='+encodeURIComponent(date)),highOsStoreList('diario_operacional')]);
+ if(ag.status==='fulfilled'&&ag.value?.ok){agenda=ag.value.items||[];fonte=ag.value.source||fonte}
+ else{erroAgenda=ag.reason?.message||'';
+  /* bot ainda sem a rota nova: usa só o cronograma extra salvo */
+  try{const sch=await highOsStoreList('cronograma_operacional');const day=diaryWeekday(date);
+   agenda=sch.filter(x=>x.active!==false&&(!x.date||x.date===date)&&dgNorm(x.day)===dgNorm(day)).map(x=>({time:x.time,name:x.name,type:x.type||'geral',typeLabel:DG_LABEL[x.type]||'ATIVIDADE',durationMinutes:x.durationMinutes||15,extraordinary:x.extraordinary}));fonte='Cronograma extra (bot sem /v1/agenda)'}catch(_){}
+ }
+ const registros=regs.status==='fulfilled'?regs.value.filter(x=>String(x.date||'')===date).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||''))):[];
+ agenda.sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
+ /* liga cada atividade ao registro feito no Discord */
+ const usados=new Set();
+ agenda.forEach(a=>{const r=registros.find(r=>!usados.has(r)&&((r.scheduleName&&dgNorm(r.scheduleName)===dgNorm(a.name)&&(!r.scheduleTime||r.scheduleTime===a.time))||(dgNorm(r.title)===dgNorm(a.name))));if(r){usados.add(r);a.reg=r}});
+ return {date,agenda,registros,avulsos:registros.filter(r=>!usados.has(r)),fonte,erroAgenda};
+}
+function dgStatus(a,date){
+ const now=dgAgoraBr(),ini=dgMin(a.time),dur=+a.durationMinutes||15;
+ if(a.reg)return 'feito';
+ if(date<now.date)return 'pendente';
+ if(date>now.date||ini===null)return 'agendado';
+ if(now.min>=ini&&now.min<ini+dur)return 'agora';
+ if(now.min>=ini+dur)return 'pendente';
+ return 'agendado';
+}
+function dgRender(){
+ const D=dgData,box=$('#dgMain');if(!D||!box)return;
+ const now=dgAgoraBr(),hoje=D.date===now.date;
+ D.agenda.forEach(a=>a.st=dgStatus(a,D.date));
+ const prox=hoje?D.agenda.find(a=>a.st==='agendado'&&dgMin(a.time)>now.min):null;
+ const agora=D.agenda.find(a=>a.st==='agora');
+ const feitos=D.agenda.filter(a=>a.st==='feito').length,pend=D.agenda.filter(a=>a.st==='pendente').length,tot=D.agenda.length;
+ const pct=tot?Math.round(feitos/tot*100):0;
+ const porTipo=Object.entries(D.agenda.reduce((m,a)=>{m[a.type]=(m[a.type]||0)+1;return m},{}));
+ let destaque='';
+ if(agora)destaque=`<div class="dg-live now"><span class="dg-pulse"></span><div><small>ACONTECENDO AGORA</small><b>${DG_ICON[agora.type]||'📌'} ${esc(agora.name)}</b><em>começou às ${esc(agora.time)} · registre o resultado no Discord ao terminar</em></div></div>`;
+ else if(prox){const falta=dgMin(prox.time)-now.min;destaque=`<div class="dg-live next"><span class="dg-clock">⏱</span><div><small>PRÓXIMA ATIVIDADE</small><b>${DG_ICON[prox.type]||'📌'} ${esc(prox.name)} <span>às ${esc(prox.time)}</span></b><em>começa em <strong>${dgFmtMin(falta)}</strong> · aviso automático no Discord 15 min antes</em></div></div>`}
+ else if(hoje&&tot)destaque=`<div class="dg-live done"><span class="dg-clock">✓</span><div><small>DIA ENCERRADO</small><b>${feitos} de ${tot} atividades registradas</b><em>${pend?`${pend} sem registro — use /highos diario no Discord para resolver`:'tudo registrado no Discord'}</em></div></div>`;
+ box.innerHTML=`
+<div class="dg-kpis">
+ <div class="dg-kpi"><span>AGENDA DO DIA</span><b>${tot}</b><small>${porTipo.map(([t,n])=>`${DG_ICON[t]||'📌'} ${n}`).join('  ')||'—'}</small></div>
+ <div class="dg-kpi ok"><span>REALIZADAS</span><b>${feitos}</b><small>registradas no Discord</small></div>
+ <div class="dg-kpi ${pend?'warn':''}"><span>SEM REGISTRO</span><b>${pend}</b><small>${pend?'passaram do horário':'nenhuma pendência'}</small></div>
+ <div class="dg-kpi"><span>REGISTROS DO DIA</span><b>${D.registros.length}</b><small>${D.avulsos.length?`${D.avulsos.length} fora da agenda`:'todos ligados à agenda'}</small></div>
+</div>
+<div class="dg-progress"><div class="dg-bar"><i style="--w:${pct}%"></i></div><span>${pct}% da agenda registrada</span></div>
+${destaque}
+<section class="dg-card"><header><b>Agenda do dia</b><small>Fonte: ${esc(D.fonte)}</small></header>
+${tot?`<ol class="dg-timeline">${D.agenda.map((a,i)=>`<li class="dg-item st-${a.st}" style="--i:${i}">
+ <div class="dg-time">${esc(a.time||'—')}</div>
+ <div class="dg-node"><span>${DG_ICON[a.type]||'📌'}</span></div>
+ <div class="dg-body"><div class="dg-title"><b>${esc(a.name)}</b><span class="dg-type t-${esc(a.type)}">${esc(a.typeLabel||DG_LABEL[a.type]||'ATIVIDADE')}</span>${a.extraordinary?'<span class="dg-type t-extra">EXTRA</span>':''}</div>
+ ${a.reg?`<div class="dg-result">${a.reg.winner?`<span>🏅 <b>${esc(a.reg.winner)}</b></span>`:''}${a.reg.prize?`<span>🎁 ${esc(a.reg.prize)}</span>`:''}${a.reg.quantity?`<span>Qtd. ${esc(a.reg.quantity)}</span>`:''}${a.reg.result?`<span class="txt">${esc(a.reg.result)}</span>`:''}<span class="by">registrado por ${esc(a.reg.createdByName||'staff')}${a.reg.time?` às ${esc(a.reg.time)}`:''}</span></div>`:''}
+ </div>
+ <div class="dg-status">${{feito:'<span class="dg-pill ok">✓ REALIZADO</span>',agora:'<span class="dg-pill live">● AGORA</span>',pendente:'<span class="dg-pill warn">SEM REGISTRO</span>',agendado:'<span class="dg-pill">AGENDADO</span>'}[a.st]}</div>
+</li>`).join('')}</ol>`:`<div class="placeholder"><b>▦</b><h3>NADA NA AGENDA DESTA DATA</h3><p>${D.erroAgenda?esc(D.erroAgenda):'O bot não tem atividades programadas para este dia.'}</p></div>`}
+</section>
+${D.avulsos.length?`<section class="dg-card"><header><b>Registros fora da agenda</b><small>Feitos no Discord sem atividade correspondente no cronograma</small></header><div class="dg-avulsos">${D.avulsos.map((r,i)=>`<article style="--i:${i}"><div class="t">${esc(r.time||'—')}</div><div><b>${esc(r.title||'Registro')}</b><small>${esc(String(r.type||'geral').toUpperCase())}${r.winner?' · 🏅 '+esc(r.winner):''}${r.prize?' · 🎁 '+esc(r.prize):''}${r.createdByName?' · por '+esc(r.createdByName):''}</small>${r.result?`<p>${esc(r.result)}</p>`:''}</div></article>`).join('')}</div></section>`:''}`;
+}
+async function loadOperationalDiaryV146(){
+ const inp=$('#dgDate');const date=(inp&&inp.value)||diaryTodayIso();if(inp&&!inp.value)inp.value=date;
+ const lbl=$('#dgDayLabel');if(lbl)lbl.textContent=dgDiaLongo(date);
+ const box=$('#dgMain');if(box&&!dgData)box.innerHTML='<div class="dg-skeleton"><i></i><i></i><i></i><i></i></div>';
+ try{dgData=await dgCarregar(date);dgRender();operationalDiaryLoaded=true}
+ catch(e){if(box)box.innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message||String(e))}</p></div>`}
+ clearInterval(dgTimer);dgTimer=setInterval(()=>{if($('#page-diario')?.classList.contains('active'))dgRender()},30000);
+}
+loadOperationalDiary=loadOperationalDiaryV146;
+$('#dgDate')?.addEventListener('change',()=>{dgData=null;loadOperationalDiaryV146()});
+$('#dgToday')?.addEventListener('click',()=>{$('#dgDate').value=diaryTodayIso();dgData=null;loadOperationalDiaryV146()});
+$('#dgPrev')?.addEventListener('click',()=>{$('#dgDate').value=dgShift($('#dgDate').value||diaryTodayIso(),-1);dgData=null;loadOperationalDiaryV146()});
+$('#dgNext')?.addEventListener('click',()=>{$('#dgDate').value=dgShift($('#dgDate').value||diaryTodayIso(),1);dgData=null;loadOperationalDiaryV146()});
+$('#dgRefresh')?.addEventListener('click',()=>loadOperationalDiaryV146());
+
 /* ===== HIGH OS V12.7 - MISSOES NA NUVEM: UM DOCUMENTO POR ZONA =====
    Até a V12.6 todas as zonas ficavam em UM documento (config/missoes_planejador),
    gravado inteiro a cada SALVAR. Isso causava três problemas:
