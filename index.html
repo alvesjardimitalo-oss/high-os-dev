@@ -25,7 +25,8 @@
   <link rel="stylesheet" href="assets/prime.css?v=10.76.3">
   <link rel="stylesheet" href="assets/ocupacao.css?v=14.1.0">
   <link rel="stylesheet" href="assets/organizacoes.css?v=14.2.0">
-  <link rel="stylesheet" href="assets/metricas-rh.css?v=14.4.4">
+  <link rel="stylesheet" href="assets/metricas-rh.css?v=14.5.1">
+  <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
 </head>
 <body>
@@ -90,15 +91,13 @@
           <button class="nav-item" data-page="diario">▦ <span>Diário Operacional</span></button>
           <button class="nav-item" data-page="planejador">◎ <span>Planejador de Missões</span></button>
           <button class="nav-item" data-page="chat">✉ <span>Chat da Equipe</span></button>
-          <button class="nav-item hidden" data-page="spotify">♫ <span>Spotify</span></button>
-          <button class="nav-item" data-page="alvesinho">✦ <span>Alvesinho</span></button>
           <button class="nav-item admin-only" data-page="usuarios">♟ <span>Usuários</span></button>
           <button class="nav-item admin-only" data-page="administracao">⚠ <span>Administração</span></button>
         </nav>
       </aside>
       <div class="content">
         <section class="page active" id="page-dashboard">
-          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 14.5.0</span></div>
+          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 14.5.1</span></div>
           <div id="commandDashboard" class="command-dashboard"><div class="placeholder"><b>◆</b><h3>CARREGANDO CENTRAL DE COMANDO</h3></div></div>
           <span id="dashEmail" class="hidden">—</span><span id="dashRole" class="hidden">—</span>
         </section>
@@ -892,7 +891,7 @@
   <script src="assets/modules/eventos-painel.js?v=12.17.0"></script>
   <script src="assets/mission-planner.js?v=12.18.0"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
-  <script type="module" src="assets/app.js?v=14.5.0"></script>
+  <script type="module" src="assets/app.js?v=14.5.1"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>

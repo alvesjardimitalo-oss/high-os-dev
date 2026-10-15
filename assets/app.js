@@ -1405,7 +1405,7 @@ return ['VIEW',
 'EDIT'].includes(effectivePermissions()[pageModule(module)]||'NONE')}
 function canEditModule(module){if(isAdmin())return true;
 return (effectivePermissions()[pageModule(module)]||'NONE')==='EDIT'}
-function firstAllowedModule(){return SYSTEM_MODULES.find(m=>!['solicitacoes','economia'].includes(m.id)&&canViewModule(m.id))?.id||''}
+function firstAllowedModule(){return SYSTEM_MODULES.find(m=>!['solicitacoes','economia','alvesinho','spotify'].includes(m.id)&&canViewModule(m.id))?.id||''}
 function applyModuleAccess(role='CONSULTA'){
  const perms=effectivePermissions();
 document.body.classList.toggle('metric-only-access',false);
@@ -12259,6 +12259,7 @@ function spotifyRedirectUri(){return `${location.origin}${location.pathname}`}
 let spotifyConfigReadAt=0;
 const SPOTIFY_CONFIG_TTL=10*60*1000;
 async function loadSpotifyConfig({force=false}={}){
+ return; /* V14.5: Spotify removido — não carrega SDK nem configuração */
  if(!force&&spotifyConfigReadAt&&Date.now()-spotifyConfigReadAt<SPOTIFY_CONFIG_TTL){renderSpotify();await spotifyHandleCallback();await spotifyRestoreSession();return}
  try{const _d=await highOsStoreGet('config','spotify').catch(()=>null);const s={exists:()=>!!_d,data:()=>_d||{}};
 spotifyConfigReadAt=Date.now();
@@ -13410,7 +13411,7 @@ activateAppPage=function(page){if(['organizacoes',
 'disponiveis',
 'entregas'].includes(page))page='faccoes';
 /* V14.5: Solicitações e Economia saíram do menu; acessos antigos vão para o Dashboard */
-if(['solicitacoes','economia'].includes(page))page='dashboard';
+if(['solicitacoes','economia','alvesinho','spotify'].includes(page))page='dashboard';
 return _activateAppPageV836(page)};
 
 const _loadFaccoesV836=loadFaccoes;
