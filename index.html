@@ -18,11 +18,12 @@
   <title>High OS • Gestão do Ilegal</title>
   <link rel="stylesheet" href="assets/style.css?v=12.9.3">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'">
-  <link rel="stylesheet" href="assets/mission-planner.css?v=11.0.2">
+  <link rel="stylesheet" href="assets/mission-planner.css?v=12.18.0">
   <link rel="stylesheet" href="assets/mission-planner-nav.css?v=12.8.0">
   <link rel="stylesheet" href="assets/ui-kit.css?v=10.4.1">
   <link rel="stylesheet" href="assets/high-refresh.css?v=10.76.3">
   <link rel="stylesheet" href="assets/prime.css?v=10.76.3">
+  <link rel="stylesheet" href="assets/ocupacao.css?v=14.1.0">
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
 </head>
 <body>
@@ -97,7 +98,7 @@
       </aside>
       <div class="content">
         <section class="page active" id="page-dashboard">
-          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 12.8.1</span></div>
+          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 14.1.0</span></div>
           <div id="commandDashboard" class="command-dashboard"><div class="placeholder"><b>◆</b><h3>CARREGANDO CENTRAL DE COMANDO</h3></div></div>
           <span id="dashEmail" class="hidden">—</span><span id="dashRole" class="hidden">—</span>
         </section>
@@ -246,7 +247,7 @@
           </div>
         </section>
         <section class="page" id="page-planejador">
-          <div class="page-head"><div><div class="eyebrow">MAPA GTA V • EVENTOS • MISSÕES</div><h2>PLANEJADOR DE MISSÕES</h2><p class="page-subtitle">Crie novos locais de evento, gere spawns em círculo, valide CDS uma a uma e mantenha cada missão salva com o último print do mapa.</p></div><span class="dev-badge">DEV 12.8.1</span></div>
+          <div class="page-head"><div><div class="eyebrow">MAPA GTA V • EVENTOS • MISSÕES</div><h2>PLANEJADOR DE MISSÕES</h2><p class="page-subtitle">Crie novos locais de evento, gere spawns em círculo, valide CDS uma a uma e mantenha cada missão salva com o último print do mapa.</p></div><span class="dev-badge">DEV 12.18.0</span></div>
 
           <section id="mpCentralV954" class="mp-central-v952" aria-label="Central de Missões"></section>
 
@@ -257,8 +258,13 @@
                 <label>Nome da missão<input id="mpMissionName" placeholder="Ex.: Dominação — Sul"></label>
                 <div class="mp-grid">
                   <label>Evento<input id="mpEventType" placeholder="Dominação"></label>
-                  <label>Painel<input id="mpPanel" placeholder="/ilegal"></label>
+                  <label>Painel<input id="mpPanel" placeholder="/evento"></label>
                 </div>
+                <div class="mp-grid" style="margin-top:8px">
+                  <label>Tipo do evento<select id="mpEventKind"></select></label>
+                  <label>Solicitação<select id="mpRequestKind"><option value="create-event">CRIAR EVENTO</option><option value="create-zone">CRIAR ZONA</option><option value="alter-zone">ALTERAR ZONA</option></select></label>
+                </div>
+                <div id="mpEventKindHint" class="mpk-hint"></div>
                 <label style="margin-top:8px">Modo de trabalho
                   <select id="mpMode"><option value="assistant">ASSISTENTE DE VALIDAÇÃO</option><option value="manual">MODO MANUAL</option></select>
                 </label>
@@ -354,8 +360,8 @@
 
               <div class="mp-card">
                 <h3>EXPORTAR</h3>
-                <textarea id="mpExport" rows="7" readonly placeholder="Somente pontos realmente validados aparecem aqui. Pontos pendentes podem ser copiados individualmente com Z=0 para teste via TPCDS/NC."></textarea>
-                <div class="mp-actions"><button type="button" id="mpExportBtn" class="primary">COPIAR CDS VALIDADAS</button><button type="button" id="mpExportXYBtn">COPIAR CDS PARA TESTE (Z=0)</button></div>
+                <textarea id="mpExport" rows="7" readonly placeholder="Somente pontos realmente validados aparecem aqui. Pontos pendentes são copiados com Z estimado pelas CDS já validadas próximas, para o TP não cair embaixo do mapa."></textarea>
+                <div class="mp-actions"><button type="button" id="mpExportBtn" class="primary">COPIAR CDS VALIDADAS</button><button type="button" id="mpExportXYBtn">COPIAR CDS PARA TESTE (Z ESTIMADO)</button></div>
               </div>
 
               <div class="mp-card">
@@ -849,9 +855,10 @@
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" onerror="this.onerror=null;this.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'"></script>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="assets/ui-kit.js?v=10.4.1"></script>
-  <script src="assets/mission-planner.js?v=12.8.1"></script>
+  <script src="assets/modules/eventos-painel.js?v=12.17.0"></script>
+  <script src="assets/mission-planner.js?v=12.18.0"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
-  <script type="module" src="assets/app.js?v=12.9.3"></script>
+  <script type="module" src="assets/app.js?v=14.1.1"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>

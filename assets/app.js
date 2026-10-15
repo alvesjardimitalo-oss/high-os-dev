@@ -24,6 +24,9 @@ import { getFirestore,
  limit,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
+import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta } from './modules/metricas-motor.js';
+import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
 authDomain:'high-os.firebaseapp.com',
@@ -2637,6 +2640,9 @@ updatedBy:currentUser.email};
 
  if(data.status==='ATIVA'&&!data.faccao){alert('Informe o nome da facção para marcar como ATIVA.');
 return}
+ /* V14: facção entra pela ENTREGA e sai pelo RECOLHER; uma facção só ocupa um Group. */
+ {const outroV14=data.faccao?faccoes.find(x=>!x.removido&&x.group!==data.group&&ocupadoV14(x)&&String(x.faccao).trim().toLowerCase()===data.faccao.trim().toLowerCase()):null;
+ if(outroV14){alert(`${data.faccao} já ocupa o ${outroV14.group}. Uma facção só pode ter um Group.`);return}}
  // O bot recusa entrega sem líder (passaporte + nome); avisa aqui antes de enviar.
  if(data.status==='ATIVA'&&old?.status!=='ATIVA'&&!data.lider){alert('Informe o líder (passaporte e nome) para marcar como ATIVA.');
 return}
@@ -4716,6 +4722,11 @@ async function loadDeliveries(){
  }catch(e){if($('#deliveryList'))$('#deliveryList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message)}</p></div>`}
 }
 async function reconcileActiveDeliveriesToGroups(){
+ /* V14: desligada. Ela reocupava o Group sozinha a partir de qualquer entrega
+    ATIVA — inclusive entrega antiga que ficou para trás num recolhimento.
+    Agora o caso aparece em Revisar ocupação com as opções "restaurar
+    ocupação" ou "marcar entrega como recolhida", e o admin escolhe. */
+ return;
  if(!Array.isArray(entregas)||!Array.isArray(faccoes)||!entregas.length||!faccoes.length)return;
  const activeByGroup=new Map();
  entregas.filter(d=>d&&d.status==='ATIVA'&&String(d.group||'').trim()&&String(d.faccao||'').trim())
@@ -4780,7 +4791,8 @@ $('#deliveryStats').innerHTML=`<span><b>${entregas.length}</b> REGISTROS</span><
 }
 function openNewDelivery(group=''){
  const sel=$('#dGroup');
-sel.innerHTML='<option value="">SELECIONE O GROUP</option>'+faccoes.filter(f=>!f.removido).map(f=>`<option value="${esc(f.group)}">${esc(f.group)} — ${esc(f.qg||'SEM LOCAL')} ${f.status==='ATIVA'?'['+esc(f.faccao||'OCUPADO')+']':'[VAGO]'}</option>`).join('');
+/* V14: situação pela regra única; SEM QG / REVISAR não podem ser entregues; ocupado = troca */
+sel.innerHTML='<option value="">SELECIONE O GROUP</option>'+faccoes.filter(f=>!f.removido).map(f=>{const st=situacaoGroup(f);return `<option value="${esc(f.group)}" ${st==='SEM_QG'||st==='REVISAR'?'disabled':''}>${esc(f.group)} — ${esc(f.qg||'SEM LOCAL')} ${st==='ASSUMIDA'?'['+esc(f.faccao)+' • TROCA]':st==='SEM_QG'?'[SEM QG]':st==='REVISAR'?'[REVISAR]':'[DISPONÍVEL]'}</option>`}).join('');
 
  $('#newDeliveryForm').reset();
 dlvCurrent.group='';
@@ -5240,6 +5252,19 @@ const o=btn.textContent;
 btn.textContent='COPIADO ✓';
 setTimeout(()=>btn.textContent=o,1300)}catch(e){alert('Não foi possível copiar automaticamente.')}}
 let deliverySaveInFlight=false;
+/* V14: troca de ocupante = recolhimento da anterior (o bot anuncia) + entrega da nova */
+async function recolherParaTrocaV14(f,novaFaccao,justificativa){
+ const agora=new Date(),hora=agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}),data=agora.toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
+ const responsavel=$('#dStaff')?.value.trim()||currentProfile?.name||currentUser?.email||'';
+ const extrato=['RECOLHIMENTO POR TROCA DE OCUPANTE',`Group: ${f.group}`,`QG / Local: ${f.qg||'—'}`,`Sai: ${f.faccao}`,`Entra: ${novaFaccao}`,`Responsável: ${responsavel}`,`Data: ${data} ${hora}`,`Justificativa: ${justificativa}`].join('\n');
+ const recolhimento={motivo:'TROCA_OCUPANTE',motivoLabel:'Troca de ocupante',responsavel,data,hora,justificativa,baixoContingente:null,extrato,createdAtText:agora.toISOString(),createdBy:currentUser.email,troca:true,novaFaccao};
+ const vago={...f,status:'INATIVA',faccao:'',lider:'',staff:'',dataEntrega:'',ocupacaoAtual:null,ultimoRecolhimento:{...recolhimento,possuiEvidencia:false},updatedBy:currentUser.email};
+ const [titulo,...corpo]=extrato.split('\n');
+ await setDoc(doc(db,'highos','data','faccoes',f.group),{...vago,anuncioRecolhimento:{title:titulo,description:corpo.join('\n').trim(),imageDataUrl:''}});
+ try{await setDoc(doc(db,'highos','data','organizacoes',orgKey(f.faccao)),{nome:f.faccao,status:'SEM_GROUP',groupAtual:'',segmentoAtual:f.segmento||'',qgAtual:'',ultimoRecolhimento:recolhimento,updatedBy:currentUser.email},{merge:true})}catch(e){}
+ entregas=entregas.map(d=>d.group===f.group&&d.status==='ATIVA'?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email,recolhimento}:d);
+ const i=faccoes.findIndex(x=>x.group===f.group);if(i>=0)faccoes[i]={...faccoes[i],...vago};
+}
 async function saveNewDelivery(e){
  e.preventDefault();
  if(deliverySaveInFlight)return;
@@ -5249,6 +5274,19 @@ const faccao=$('#dFaccao').value.trim();
 if(!faccao)return alert('Informe a facção que está assumindo.');
 // O bot recusa entrega sem líder (passaporte + nome); avisa aqui antes de enviar.
 if(!$('#dLider').value.trim())return alert('Informe o líder (passaporte e nome) da facção que está assumindo.');
+/* V14 — travas de ocupação */
+{const st=situacaoGroup(f);
+ if(st==='SEM_QG')return alert('Este Group não tem QG/favela cadastrado. Cadastre o QG antes de entregar.');
+ if(st==='REVISAR')return alert('Os dados deste Group estão contraditórios. Corrija em Organizações → A REVISAR antes de entregar.');
+ const outro=faccoes.find(x=>!x.removido&&x.group!==f.group&&ocupadoV14(x)&&alvesNorm(x.faccao).trim()===alvesNorm(faccao).trim());
+ if(outro)return alert(`${faccao} já ocupa o ${outro.group}${outro.qg?` (${outro.qg})`:''}. Uma facção só pode ter um Group: recolha o ${outro.group} antes.`);
+ if(st==='ASSUMIDA'){
+  if(alvesNorm(f.faccao).trim()===alvesNorm(faccao).trim())return alert(`${faccao} já é a ocupante deste Group.`);
+  if(!confirm(`TROCA DE OCUPANTE\n\n${f.group} está ocupado por ${f.faccao}.\nAo confirmar, ${f.faccao} é recolhida (com anúncio de recolhimento) e ${faccao} assume.\n\nContinuar?`))return;
+  const just=prompt(`Justificativa da troca (${f.faccao} → ${faccao}):`,'');
+  if(!just||!just.trim())return alert('A troca precisa de justificativa.');
+  try{await recolherParaTrocaV14(f,faccao,just.trim())}catch(err){return alert('Não foi possível recolher a facção anterior: '+err.message)}
+ }}
 const pendentes=deliveryMissingData();
 if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que ainda não existem no Group:\n\n• '+pendentes.join('\n• ')+'\n\nPreencha os campos ou desmarque o benefício.');
 // Sem data informada, a entrega vale para hoje (o anúncio não sai com {DATA}).
@@ -5325,7 +5363,9 @@ loadFaccoes=async function(){await _loadFaccoesV5();
 renderFaccoes();
 await loadDeliveries();
 await reconcileActiveDeliveriesToGroups();
-renderFaccoes();renderAvailableFaccoes();renderOrganizations()};
+renderFaccoes();renderAvailableFaccoes();renderOrganizations();
+/* V14.1: entregas definem quem ocupava cada Group — reatribui as métricas */
+if(reatribuirMetricas()){try{renderMetrics()}catch(e){}}};
 
 // ===== HIGH OS V5.1 · PERFIL TÉCNICO + MEMÓRIA OPERACIONAL DO GROUP =====
 let historico=[];
@@ -5820,7 +5860,23 @@ year:'numeric'}).replace(/^./,c=>c.toUpperCase());
 }
 function parseIsoMetricDate(v=''){const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
 return m?new Date(+m[1],+m[2]-1,+m[3]):null}
-function metricGroupOccupied(group){return faccoes.some(f=>alvesNorm(f.group)===alvesNorm(group)&&f.status==='ATIVA'&&String(f.faccao||'').trim())}
+function metricGroupOccupied(group){return faccoes.some(f=>!f.removido&&alvesNorm(f.group)===alvesNorm(group)&&ocupadoV14(f))}
+/* ===== V14.1 · MÉTRICA POR FACÇÃO (modules/metricas-motor.js) =====
+   metricasCache = linhas BRUTAS (Discord/Sheets). metricas = versão ATRIBUÍDA:
+   cada coleta vai para a facção que ocupava o Group naquele horário, já no
+   Group atual dela. Coleta em Group vago vai para metricSemOcupante. */
+let metricTransferencias=[],metricSemOcupante=[];
+function metricasAtribuidas(rows=[]){
+ try{
+  const tl=montarLinhaDoTempo({faccoes,entregas,transferencias:metricTransferencias});
+  const r=atribuirLinhas(rows,tl,{faccoes,dataDe:metricDateValue,slotsDe:metricSlots});
+  metricSemOcupante=r.semOcupante;return r.linhas;
+ }catch(e){console.warn('[MÉTRICAS] atribuição por facção falhou; exibindo por Group',e);metricSemOcupante=[];return rows.slice()}
+}
+function reatribuirMetricas(){if(!metricasCache?.length)return false;metricas=metricasAtribuidas(metricasCache);return true}
+async function carregarTransferenciasMetricas(){
+ try{const rows=await highOsStoreList('historico');metricTransferencias=rows.filter(h=>h.tipo==='TRANSFERENCIA_PAINEL')}catch(e){metricTransferencias=[]}
+}
 function metricRowHasHistoricalOccupant(m={}){
  // Snapshots novos podem trazer a identidade histórica; registros legados do
  // cache do bot não trazem. Group válido continua sendo dado histórico válido
@@ -6227,7 +6283,7 @@ renderMetrics();
 if(persist)await persistMetricRows(rows,result.sheet);
 if(!quiet)alert(`${rows.length} registro(s) históricos lidos da aba ${result.sheet}. Exibindo ${activeMetricRows().length} registro(s) de ${metricPeriodLabel(metricPeriodKey)}. A planilha não foi alterada.`);
 return true
- }catch(e){metricas=metricasCache.slice();
+ }catch(e){metricas=metricasAtribuidas(metricasCache);
 if(e.message==='AUTORIZAÇÃO NECESSÁRIA'){metricSourceState={...metricSourceState,
 status:'AGUARDANDO',
 error:''};
@@ -6324,7 +6380,7 @@ function applyMetricSnapshot(qs,{realtime=false}={}){
  metricasCache=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
 
- metricas=metricasCache.slice();
+ metricas=metricasAtribuidas(metricasCache);
 
  metricPeriodKey=previousKey;
 
@@ -6506,7 +6562,7 @@ function aplicarLinhasMetricas(rows=[],origem=''){
 
  metricasCache=rows.slice();
 
- metricas=rows.slice();
+ metricas=metricasAtribuidas(rows);
 
  metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
 
@@ -6522,6 +6578,7 @@ async function loadMetrics({force=false}={}){
  if(metricsLoadPromise&&!force)return metricsLoadPromise;
  metricsLoadPromise=(async()=>{
   metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
+  await carregarTransferenciasMetricas();
   try{
    const remote=await metricTimeout(highOsDiscordRequest('/v1/metrics'),15000,'métricas do Discord');
    if(!Array.isArray(remote?.rows)||!remote.rows.length)throw new Error('Snapshot de métricas vazio no Discord.');
@@ -6667,7 +6724,7 @@ filled=a.rows.reduce((n,r)=>n+Object.values(metricSlots(r)).filter(v=>Number.isF
 
  sum.innerHTML=`<article><span>FACÇÃO</span><b>${esc(id.faccao||'—')}</b><small>${esc(group)} • ${esc(id.segmento||'—')}</small></article><article><span>PICO</span><b>${a.peak.value}</b><small>${esc(a.peak.hour)} • ${esc(a.peak.date)}</small></article><article class="metric-predominance-card"><span>PREDOMINÂNCIA</span><b>${esc(a.predominance.label)}</b><small>${a.predominance.share.toFixed(0)}% das medições nessa faixa</small></article><article><span>MÉDIA DIÁRIA DE PICO</span><b>${a.dailyPeakAvg.toFixed(1)}</b><small>média do maior contingente de cada dia</small></article><article><span>MÉDIA GERAL</span><b>${a.avg.toFixed(1)}</b><small>todos os horários do período</small></article><article><span>MELHOR HORÁRIO</span><b>${esc(a.strongestHour)}</b><small>média ${a.strongestHourAvg.toFixed(1)} • noite ${esc(a.nightPredominance.label)}</small></article>`;
 
- table.innerHTML=`<div class="metric-date-table-title"><div><b>HISTÓRICO DIÁRIO</b><span>${esc(id.faccao||group)} • ${esc(metricActivePeriodLabel())} • ${filled}/${expected} coletas</span></div></div><div class="metric-table-scroll"><table class="metric-date-table"><thead><tr><th>DATA</th>${keys.map(h=>`<th>${esc(h)}</th>`).join('')}<th>PICO DO DIA</th><th>MÉDIA DO DIA</th></tr></thead><tbody>${a.rows.map(r=>{const sl=metricSlots(r),vals=Object.values(sl).filter(Number.isFinite),pk=vals.length?Math.max(...vals):'—';return `<tr><td><b>${esc(metricDateLabel(r))}</b></td>${keys.map(h=>`<td>${sl[h]??'—'}</td>`).join('')}<td><b>${pk}</b></td><td>${metricDayAverage(r).toFixed(1)}</td></tr>`}).join('')}</tbody></table></div>`;
+ table.innerHTML=`<div class="metric-date-table-title"><div><b>HISTÓRICO DIÁRIO</b><span>${esc(id.faccao||group)} • ${esc(metricActivePeriodLabel())} • ${filled}/${expected} coletas</span></div></div><div class="metric-table-scroll"><table class="metric-date-table"><thead><tr><th>DATA</th>${keys.map(h=>`<th>${esc(h)}</th>`).join('')}<th>PICO DO DIA</th><th>MÉDIA DO DIA</th></tr></thead><tbody>${a.rows.map(r=>{const sl=metricSlots(r),vals=Object.values(sl).filter(Number.isFinite),pk=vals.length?Math.max(...vals):'—';const cl=coletaDoDia(sl,metricDateValue(r)),pl=rotuloColeta(cl);return `<tr class="${pl?'metric-row-parcial':''}"><td><b>${esc(metricDateLabel(r))}</b>${r.gruposOrigem&&r.gruposOrigem.some(x=>alvesNorm(x)!==alvesNorm(group))?`<small class="metric-origem">no ${esc(r.gruposOrigem.join(', '))}</small>`:''}</td>${keys.map(h=>`<td>${sl[h]??(cl.aguardando&&!(h in sl)?'<i class="metric-wait">…</i>':'—')}</td>`).join('')}<td><b>${pk}</b></td><td>${metricDayAverage(r).toFixed(1)}${pl?`<small class="metric-parcial">${esc(pl)}</small>`:''}</td></tr>`}).join('')}</tbody></table></div>`;
 
 }
 function metricReportData(group,period=metricPeriodKey){
@@ -7234,6 +7291,11 @@ dailyPeakOverall=dailyPeaksAll.length?dailyPeaksAll.reduce((a,b)=>a+b,0)/dailyPe
 if($('#metricOverview'))$('#metricOverview').innerHTML=selected?`<article class="metric-hero-kpi"><span>FACÇÃO / GROUP</span><b>${esc(selected.f.faccao||selected.f.group)}</b><small>${esc(selected.f.group)} • ${esc(selected.f.segmento||'—')}</small></article><article class="metric-hero-kpi"><span>PICO</span><b>${selected.a.peak.value}</b><small>${esc(selected.a.peak.hour)} • ${esc(selected.a.peak.date)}</small></article><article class="metric-hero-kpi metric-predominance-card"><span>PREDOMINÂNCIA</span><b>${esc(selected.a.predominance.label)}</b><small>${selected.a.predominance.share.toFixed(0)}% das medições</small></article><article class="metric-hero-kpi"><span>MÉDIA DIÁRIA DE PICO</span><b>${selected.a.dailyPeakAvg.toFixed(1)}</b><small>média geral ${selected.a.avg.toFixed(1)} • melhor ${esc(selected.a.strongestHour)}</small></article>`:`<article class="metric-hero-kpi"><span>VISÃO GERAL</span><b>${rows.length}</b><small>facções / Groups no recorte</small></article><article class="metric-hero-kpi"><span>MAIOR PICO</span><b>${peak?peak.a.peak.value:'—'}</b><small>${peak?`${esc(peak.f.group)} • ${esc(peak.a.peak.hour)}`:'sem dados'}</small></article><article class="metric-hero-kpi metric-predominance-card"><span>PREDOMINÂNCIA GERAL</span><b>${esc(generalPred.label)}</b><small>${generalPred.share.toFixed(0)}% das medições</small></article><article class="metric-hero-kpi"><span>MÉDIA DIÁRIA DE PICO</span><b>${dailyPeakOverall.toFixed(1)}</b><small>média geral ${overall.toFixed(1)} • horário forte ${esc(pred[0])}</small></article>`;
 
  $('#metricStats').innerHTML=`<span><b>${esc(metricActivePeriodLabel())}</b> COMPETÊNCIA</span><span><b>${esc(metricPeriodRange(active))}</b> PERÍODO</span><span><b>${active.length}</b> DIAS / REGISTROS</span><span><b>${groupsWith}</b> GROUPS COM DADOS</span><span><b>${rows.length}</b> EXIBIDOS</span>${seg?`<span>SEGMENTO <b>${esc(seg)}</b></span>`:''}`;
+ /* V14.1: coleta de hoje — parcial em vez de parecer zero/média baixa */
+ {const hoje=new Date(),hk=hoje.toDateString(),doDia=visibleRaw.filter(r=>metricDateValue(r)?.toDateString?.()===hk);
+  if(doDia.length){const uni={};doDia.forEach(r=>Object.assign(uni,metricSlots(r)));const c=coletaDoDia(uni,hoje,hoje);
+   $('#metricStats').insertAdjacentHTML('beforeend',`<span class="${c.parcial?'metric-parcial-chip':''}"><b>HOJE ${c.feitas}/${c.esperadas}</b> ${c.parcial?esc(rotuloColeta(c)):'COLETAS COMPLETAS'}</span>`)}}
+ {const ex=metricas.filter(r=>r.__exFaccao&&metricMonthKey(r)===(metricPeriodKey||currentMetricMonthKey())).length;if(ex)$('#metricStats').insertAdjacentHTML('beforeend',`<span title="Coletas de facções que já saíram aparecem como linha própria (Group • Facção), separadas da ocupante atual"><b>${ex}</b> REGISTROS DE FACÇÕES QUE SAÍRAM (separados)</span>`)}
 
  const maxHour=Math.max(1,...Object.values(hourAvgs)),
 top5=rows.slice(0,5),
@@ -7792,7 +7854,7 @@ fireLastBefore=metricLatestInfo(fireRows);
     entao aplicamos localmente e economizamos N leituras por ciclo. */
  metricasCache=sheetRows.slice();
 
- metricas=sheetRows.slice();
+ metricas=metricasAtribuidas(sheetRows);
 
  metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
 
@@ -11016,15 +11078,15 @@ prevStart=new Date(curStart);
 prevStart.setDate(prevStart.getDate()-7);
 const prevEnd=new Date(curStart.getTime()-1);
 
- const currentRows=metricasCache.filter(r=>{const d=metricDateValue(r);return d&&d>=curStart&&d<=now});
+ const currentRows=metricas.filter(r=>{const d=metricDateValue(r);return d&&d>=curStart&&d<=now});
 
- const previousRows=metricasCache.filter(r=>{const d=metricDateValue(r);return d&&d>=prevStart&&d<=prevEnd});
+ const previousRows=metricas.filter(r=>{const d=metricDateValue(r);return d&&d>=prevStart&&d<=prevEnd});
 
  const cfg=dashboardConfig||DEFAULT_DASHBOARD_CONFIG,
 weekKey=isoDay(curStart),
 out=[];
 
- faccoes.filter(f=>f.status==='ATIVA'&&String(f.faccao||'').trim()).forEach(f=>{
+ faccoes.filter(f=>!f.removido&&ocupadoV14(f)).forEach(f=>{
   const same=r=>alvesNorm(r.group||r.organizacao||r.faccao)===alvesNorm(f.group),
 cur=currentRows.filter(same),
 prev=previousRows.filter(same);if(!cur.length||!prev.length)return;
@@ -11059,8 +11121,8 @@ function vacantMetricAnomalies(){
  const cutoff=new Date();
 cutoff.setDate(cutoff.getDate()-7);
 const by=new Map();
-metricasCache.forEach(r=>{const g=String(r.group||r.organizacao||r.faccao||'').trim(),
-d=metricDateValue(r);if(!g||!d||d<cutoff||metricGroupOccupied(g))return;const vals=Object.values(metricSlots(r)).map(Number).filter(Number.isFinite),
+metricSemOcupante.forEach(r=>{const g=String(r.group||r.organizacao||r.faccao||'').trim(),
+d=metricDateValue(r);if(!g||!d||d<cutoff)return;const vals=Object.values(metricSlots(r)).map(Number).filter(Number.isFinite),
 mx=vals.length?Math.max(...vals):0;if(mx<=0)return;const cur=by.get(alvesNorm(g));if(!cur||d>cur.date)by.set(alvesNorm(g),{group:g,
 date:d,
 value:mx,
@@ -11086,12 +11148,25 @@ switchMetricCenterView('faction');
 renderMetricFactionDetail(group);
 
 }
+/* ===== V14 · painéis de ocupação / revisão (modules/painel-ocupacao.js) ===== */
+const estadoV14={get faccoes(){return faccoes},get entregas(){return entregas}};
+function inconsistenciasV14(){return inconsistencias(faccoes,entregas)}
+function painelDepsV14(){return {esc,estado:estadoV14,db,fs:{setDoc,doc,addDoc,serverTimestamp},histCol,
+ user:()=>({email:currentUser?.email||'',sessionId:currentSessionId||''}),
+ discordState:f=>availableDiscordState(f),anuncioTexto:f=>availableAnnouncementText(f),
+ marcarPostado:(g,v)=>setAvailableDiscordState(g,v),
+ abrirEntrega:g=>openNewDelivery(g),
+ abrirGroup:g=>{activateAppPage('faccoes');const f=faccoes.find(x=>x.group===g);if(f)openFac(f.id)},
+ abrirOrganizacoes:st=>{activateAppPage('faccoes');const sel=$('#facStatus');if(sel){sel.value=st==='SEM_QG'?'INDISPONIVEL':st;renderFaccoes();}},
+ recarregar:async()=>{await loadFaccoes();renderCommandDashboard();},
+ alert:msg=>alert(msg)}}
 function renderCommandDashboard(){
  const box=$('#commandDashboard');
 if(!box)return;
 
- const active=faccoes.filter(f=>f.status==='ATIVA'&&f.faccao),
-vacant=faccoes.filter(f=>f.status!=='ATIVA'||!f.faccao),
+ /* V14: regra única de ocupação (modules/ocupacao.js) */
+ const active=faccoes.filter(f=>!f.removido&&situacaoGroup(f)==='ASSUMIDA'),
+vacant=faccoes.filter(f=>!f.removido&&situacaoGroup(f)==='DISPONIVEL'),
 weekly=weeklyContingentAlerts(),
 visibleWeekly=weekly.filter(x=>x.state!=='LIMPO'),
 openAlerts=visibleWeekly.filter(x=>x.state!=='CONCLUIDO'),
@@ -11118,14 +11193,14 @@ v])=>`<div class="dash-seg-row"><span>${esc(k)}</span><div><i style="width:${v.a
 
  const activity=movements.map(h=>`<div class="dash-activity-row"><i></i><div><b>${esc(historyTitle(h))}</b><span>${esc([h.group,h.faccao].filter(Boolean).join(' • ')||h.descricao||'Operação administrativa')}</span><small>${esc(formatHistoryDate(h))}${h.usuario?' • '+esc(h.usuario):''}</small></div></div>`).join('')||'<div class="dash-empty">Nenhuma movimentação registrada.</div>';
 
- box.innerHTML=`<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>QGs VAGOS</span><b>${vacant.length}</b><small>fora de métricas globais</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><button data-go="solicitacoes"><span>SOLICITAÇÕES</span><b>${pending||solicitacoes.length}</b><small>${pending?'pendentes':'modelos cadastrados'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
- <div class="dash-grid"><section class="dash-panel dash-wide"><header><div><span>COMPARAÇÃO SEMANAL</span><h3>ALERTAS OBJETIVOS DE CONTINGENTE</h3></div><button data-go="metricas">ABRIR CENTRAL →</button></header><p class="dash-rule-note">A semana atual é comparada com os mesmos dias e horários da semana anterior. Facções sem ocupação nunca geram alerta.</p><div class="dash-week-alerts">${attention}</div></section>
- <section class="dash-panel"><header><div><span>PATRIMÔNIO</span><h3>OCUPAÇÃO POR SEGMENTO</h3></div><button data-go="faccoes">VER ORGANIZAÇÕES →</button></header><div class="dash-segments">${bars}</div></section>
+ box.innerHTML=`<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>DISPONÍVEIS</span><b>${vacant.length}</b><small>prontas para entrega</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><button data-go="solicitacoes"><span>SOLICITAÇÕES</span><b>${pending||solicitacoes.length}</b><small>${pending?'pendentes':'modelos cadastrados'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
+ <div class="dash-grid">${painelDisponiveisHtml(painelDepsV14())}${painelOcupacaoHtml(painelDepsV14())}<section class="dash-panel dash-wide"><header><div><span>COMPARAÇÃO SEMANAL</span><h3>ALERTAS OBJETIVOS DE CONTINGENTE</h3></div><button data-go="metricas">ABRIR CENTRAL →</button></header><p class="dash-rule-note">A semana atual é comparada com os mesmos dias e horários da semana anterior. Facções sem ocupação nunca geram alerta.</p><div class="dash-week-alerts">${attention}</div></section>
  <section class="dash-panel dash-wide"><header><div><span>VALIDAÇÃO AUTOMÁTICA</span><h3>INCONSISTÊNCIAS • GROUP VAGO COM PLAYER</h3></div></header><div class="dash-anomalies">${anomalyHtml}</div></section>
  <section class="dash-panel"><header><div><span>30 DIAS / HISTÓRICO</span><h3>MOVIMENTAÇÃO DE FACÇÕES</h3></div><button data-go="historico">VER HISTÓRICO →</button></header><div class="dash-move-kpis"><div><b>${ent30}</b><span>ENTREGAS</span></div><div><b>${rec30}</b><span>RECOLHIMENTOS</span></div><div><b>${historico.length}</b><span>EVENTOS</span></div></div></section>
  <section class="dash-panel dash-wide"><header><div><span>AUDITORIA</span><h3>ATIVIDADE RECENTE</h3></div><button data-go="historico">ABRIR HISTÓRICO →</button></header><div class="dash-activity">${activity}</div></section></div>`;
 
  box.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>dashboardGo(b.dataset.go));
+ligarPaineis(box,painelDepsV14(),renderCommandDashboard);
 box.querySelector('[data-open-management]')?.addEventListener('click',()=>{activateAppPage('metricas');switchMetricCenterView('management');renderIllegalManagement()});
 box.querySelector('[data-open-general-report]')?.addEventListener('click',mgmtOpenRichReport);
 box.querySelectorAll('[data-alert-group]').forEach(b=>b.onclick=()=>openMetricForGroup(b.dataset.alertGroup));
@@ -12128,6 +12203,8 @@ $('#adminOpenUsersBtn')?.addEventListener('click',()=>activateAppPage('usuarios'
 // HIGH OS V8.20 · status da facção é determinado pela ocupação do Group.
 let occupationStatusCheckSignature='';
 async function normalizeOccupationStatusV820(){
+ /* V14: desligada — contradições vão para Revisar ocupação (o admin escolhe). */
+ return;
  const signature=faccoes.map(f=>`${f.group}:${f.faccao||''}:${f.status||''}`).sort().join('|');
  if(signature===occupationStatusCheckSignature)return;
  occupationStatusCheckSignature=signature;
@@ -14747,10 +14824,10 @@ function orgV92HasQG(f={}){
  return !!q && !/^(sem\s*(qg|local)|-|—|n\/a)$/i.test(q);
 
 }
-function orgV92Status(f={}){if(orgV92HasOccupant(f))return 'ASSUMIDA';
-return orgV92HasQG(f)?'DISPONIVEL':'INDISPONIVEL'}
-function orgV92StatusLabel(s=''){return s==='ASSUMIDA'?'ASSUMIDA':s==='DISPONIVEL'?'DISPONÍVEL':s==='INDISPONIVEL'?'INDISPONÍVEL':'—'}
-function orgV92StatusClass(s=''){return s==='ASSUMIDA'?'assumed':s==='DISPONIVEL'?'available':'unavailable'}
+/* V14: mesma regra do Dashboard, métricas e entrega (modules/ocupacao.js). */
+function orgV92Status(f={}){const s=situacaoGroup(f);return s==='SEM_QG'?'INDISPONIVEL':s}
+function orgV92StatusLabel(s=''){return s==='ASSUMIDA'?'ASSUMIDA':s==='DISPONIVEL'?'DISPONÍVEL':s==='INDISPONIVEL'?'SEM QG':s==='REVISAR'?'REVISAR':'—'}
+function orgV92StatusClass(s=''){return s==='ASSUMIDA'?'assumed':s==='DISPONIVEL'?'available':s==='REVISAR'?'review':'unavailable'}
 function orgV92Segment(f={}){
  const raw=String(f.segmento||'').trim();
 if(raw)return raw;
@@ -14810,8 +14887,11 @@ function renderFacActivityButtons(){activityButtons('facStatusButtons','facStatu
 'DISPONÍVEIS',
 '◇'],
 ['INDISPONIVEL',
-'INDISPONÍVEIS',
-'×']],renderFaccoes)}
+'SEM QG',
+'×'],
+['REVISAR',
+'REVISAR',
+'!']],renderFaccoes)}
 renderFacSegmentChips=function(){renderVisualSegmentFilter({rows:orgV92Rows().map(f=>({...f,
 segmento:f.__orgSegment})),
 field:'segmento',
@@ -14840,6 +14920,7 @@ renderFacSegmentChips();
 
  const summary=$('#orgV92Summary');
 if(summary)summary.innerHTML=`<article><span>TOTAL</span><b>${all.length}</b><small>Groups administrativos</small></article><article class="assumed"><span>ASSUMIDAS</span><b>${c('ASSUMIDA')}</b><small>com facção ocupante</small></article><article class="available"><span>DISPONÍVEIS</span><b>${c('DISPONIVEL')}</b><small>livres com QG/Favela</small></article><article class="unavailable"><span>INDISPONÍVEIS</span><b>${c('INDISPONIVEL')}</b><small>ausência de QG/Favela</small></article>`;
+ {const inc=inconsistenciasV14();if(summary&&(c('REVISAR')||inc.length)){summary.insertAdjacentHTML('beforeend',`<article class="review" data-revisar-ocupacao style="cursor:pointer"><span>A REVISAR</span><b>${inc.length}</b><small>dados contraditórios ou incompletos →</small></article>`);summary.querySelector('[data-revisar-ocupacao]')?.addEventListener('click',()=>abrirRevisao(painelDepsV14()))}}
 
  const st=$('#facStatus')?.value||'',
 seg=$('#facSegment')?.value||'';
@@ -14993,6 +15074,13 @@ async function writeMissionZones(itens=[],excluir=false){
 window.HighOSMissionCloud={
  version:2,
  canEdit:()=>!!currentUser&&canEditModule('planejador'),
+ /* Planejador V12.17: facções com Group ativo hoje (meta de spawns dos eventos) */
+ faccoesAtivas:()=>(faccoes||[]).filter(f=>!f.removido&&ocupadoV14(f)).map(f=>({group:f.group,faccao:f.faccao||'',segmento:f.segmento||''})),
+ /* QGs/favelas com CDS: spawn de evento não pode cair dentro; Z ajuda a estimar a altura do TP de teste */
+ qgs:()=>(faccoes||[]).map(f=>{const n=String(f.cds||'').match(/-?\d+(?:\.\d+)?/g)||[];return {group:f.group,qg:f.qg||'',faccao:f.faccao||'',x:Number(n[0]),y:Number(n[1]),z:Number(n[2])};}).filter(q=>Number.isFinite(q.x)&&Number.isFinite(q.y)&&q.x!==0&&!/sem local/i.test(q.qg)),
+ user:()=>currentUser?.email||'',
+ /* Planejador V12.18: resultados de eventos lançados no Diário Operacional (/highos registrar) */
+ diarioEventos:async()=>(await highOsStoreList('diario_operacional')).filter(x=>String(x.type||'').toLowerCase()==='evento'),
  pull:pullMissionsFromCloud,
  ensureMigrated:ensureMissionsMigrated,
  saveZones:itens=>writeMissionZones(itens,false),

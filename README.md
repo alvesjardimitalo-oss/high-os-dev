@@ -1,5 +1,35 @@
 # HIGH OS
 
+## V14.1 + Planejador V12.17 (atual — trazido do high-os, mantendo o banco Discord/Railway do dev)
+
+**Ocupação dos Groups (V14)** — `assets/modules/ocupacao.js`
+- Regra única de ocupação para todas as telas: ASSUMIDA (status ATIVA + facção), DISPONÍVEL, SEM QG e REVISAR (dados contraditórios).
+- Dashboard: painel de ocupação + "Facções disponíveis" refeitos; card "A REVISAR" e tela de revisão. Nada é corrigido sozinho: o administrador escolhe a ação (marcar assumida, liberar, restaurar entrega órfã, fechar entrega).
+- Entrega: facção não pode ocupar dois Groups; Group SEM QG/REVISAR bloqueado; Group ocupado só por **troca confirmada** com justificativa (recolhe o ocupante com anúncio de recolhimento e entrega ao novo com anúncio de entrega, pelo bot do Discord).
+- Desligadas as correções automáticas antigas (normalização V8.20 e reconciliação de entregas) que remarcavam Groups sem avisar.
+
+**Métricas (V14.1)** — `assets/modules/metricas-motor.js`
+- A métrica é da facção que ocupava o Group no horário da coleta (linha do tempo por entregas, recolhimentos, transferências de painel e cadastro).
+- Facção transferida leva o histórico para o Group atual; facção que saiu aparece como `Group • Facção`; coleta em Group vago vira anomalia.
+- Dia de hoje mostra coleta parcial (14H/16H/21H/23H) em vez de comparar dia incompleto.
+
+**Planejador V12.17** — mesclado com a SAFE dinâmica V3, polígonos, sincronização e desfazer/refazer do dev
+- Tipos de evento do painel `/evento` (`assets/modules/eventos-painel.js`), ciclo da solicitação por zona (rascunho → pronta → enviada → no jogo), diff do que mudou desde o jogo, pacote do evento e cópia em partes para o Discord.
+- Padrão dos eventos com gás (13/10) em toda solicitação de Sobrevivência / Fac x Fac / BR, com testes no jogo.
+- ⚡ AUTO na SAFE: 4 etapas em terra firme, longe de QG, ~20 min até raio 0 e tempo de fuga a pé com margem PvP em todas as transições.
+- Solicitação de gás descreve todas as SAFEs, dano/HUD fora da safe e a duração pela timeline; dominação por polígono sai com as CDS do contorno.
+- META de facções, gerar spawns que faltam (fora de água/QG), sugerir locais, centro justo, otimizar spawns, partidas e análise de vitórias.
+- TP de teste com **Z estimado** pelas CDS já validadas próximas (evita limbo/NC).
+
+**Planejador V12.18**
+- ⚡ AUTO devolve o tempo extra da fuga a pé encurtando as esperas: fecha perto dos 20 min sem perder a margem PvP.
+- Pendência "spawns fora da safe inicial" com correção em um clique: AUMENTAR RAIO (mantém o centro) ou CENTRO JUSTO.
+- Exportar HIGH usa a mesma solicitação padronizada da etapa Solicitação; com pendência sai como RASCUNHO, com o motivo.
+- Partidas puxam do Diário Operacional (/highos registrar no Discord) os resultados ainda não registrados: USAR preenche data, campeã e obs.
+- Cayo Perico (Fac x Fac) recebe rascunho de 25 spawns em terra firme, PENDENTES até validar a CDS no jogo.
+- Barra do editor opaca e sem sobrepor os cartões; modais do planejador com o estilo que faltava; botão excluir do evento sem vazar.
+- `tools/referencia-funcoes.json` atualizado: `verificar-integridade` volta a servir de trava antes de publicar.
+
 ## V9.5.0 (atual)
 - Planejador abre em **Central de Missões compacta**; formulário e mapa só aparecem depois de escolher uma zona.
 - Editor ganhou breadcrumb `MISSÕES > EVENTO > ZONA`, mantendo as abas ZONA / PONTOS / VALIDAÇÃO / ENTREGA.
