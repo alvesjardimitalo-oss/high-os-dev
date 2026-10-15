@@ -238,3 +238,38 @@
 .rh15-strip div{text-align:center;border-radius:5px;padding:4px 0;font-size:11px;font-weight:800;background:rgba(255,255,255,.04);color:var(--g-tx2);font-variant-numeric:tabular-nums}
 .rh15-strip div em{display:block;font-style:normal;font-size:8.5px;font-weight:600;opacity:.75}
 .rh15-strip .s-ok{background:rgba(34,197,94,.18);color:#86efac}.rh15-strip .s-top{background:rgba(22,163,74,.35);color:#bbf7d0}.rh15-strip .s-low{background:rgba(245,158,11,.18);color:#fcd34d}.rh15-strip .s-zero{background:rgba(239,68,68,.18);color:#fca5a5}.rh15-strip .s-fut{opacity:.35}
+
+/* painel: uma facção por vez + grade de mini gráficos */
+#page-metricas .rh15-pf-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+#page-metricas .rh15-pf-head b{font-size:14px}
+#page-metricas .rh15-pf-head .rh15-select{min-height:36px}
+#page-metricas .rh15-mini-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+#page-metricas .rh15-mini{display:block;text-align:left;background:var(--r-bg);border:1px solid var(--r-line-2);border-radius:12px;padding:10px 12px;cursor:pointer;color:var(--r-text)}
+#page-metricas .rh15-mini:hover{border-color:var(--r-brand)}
+#page-metricas .rh15-mini.on{border-color:var(--r-brand);box-shadow:0 0 0 1px var(--r-brand) inset;background:#1b1328}
+#page-metricas .rh15-mini .t{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+#page-metricas .rh15-mini .t b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-metricas .rh15-mini .t span{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+#page-metricas .rh15-mini .f{display:flex;justify-content:space-between;margin-top:5px}
+#page-metricas .rh15-mini .f small{font-size:10.5px;color:var(--r-text-3)}
+#page-metricas .rh15-minisvg{display:block;width:100%;height:34px}
+#page-metricas .rh15-minisvg .mm{fill:rgba(34,197,94,.10)}
+#page-metricas .rh15-minisvg .ok{fill:#22c55e}#page-metricas .rh15-minisvg .top{fill:#16a34a}#page-metricas .rh15-minisvg .low{fill:#f59e0b}#page-metricas .rh15-minisvg .zero{fill:#ef4444}#page-metricas .rh15-minisvg .nd{fill:rgba(255,255,255,.15)}
+.rh15-gbox .b.parcial{opacity:.45}
+
+/* pico do Ilegal por horário, segunda a sexta */
+.rh15-wh-chart .axw{fill:#f4f0f8;font-size:12px;font-weight:800}
+.rh15-wh-chart .hb.s0,.rh15-gleg .hb-leg.s0{fill:#5cc8ff;background:#5cc8ff}
+.rh15-wh-chart .hb.s1,.rh15-gleg .hb-leg.s1{fill:#9a4dff;background:#9a4dff}
+.rh15-wh-chart .hb.s2,.rh15-gleg .hb-leg.s2{fill:#22c55e;background:#22c55e}
+.rh15-wh-chart .hb.s3,.rh15-gleg .hb-leg.s3{fill:#f59e0b;background:#f59e0b}
+.rh15-wh-chart .hb.s4,.rh15-gleg .hb-leg.s4{fill:#ff6b81;background:#ff6b81}
+.rh15-wh-chart .hb.s5,.rh15-gleg .hb-leg.s5{fill:#7be0d6;background:#7be0d6}
+.rh15-wh-chart .hb.best{stroke:#fff;stroke-width:2}
+.rh15-gleg .hb-leg.best{background:transparent;border:2px solid #fff}
+#page-metricas .rh15-wh td{text-align:center}
+#page-metricas .rh15-wh td:first-child,#page-metricas .rh15-wh th:first-child{text-align:left}
+#page-metricas .rh15-wh th{text-align:center}
+#page-metricas .rh15-wh td[style]{background:rgba(154,77,255,var(--a))}
+#page-metricas .rh15-wh td b{font-size:16px}
+#page-metricas .rh15-wh td.best{box-shadow:inset 0 0 0 2px #fff}
