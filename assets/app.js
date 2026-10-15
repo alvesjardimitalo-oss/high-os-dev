@@ -1405,7 +1405,7 @@ return ['VIEW',
 'EDIT'].includes(effectivePermissions()[pageModule(module)]||'NONE')}
 function canEditModule(module){if(isAdmin())return true;
 return (effectivePermissions()[pageModule(module)]||'NONE')==='EDIT'}
-function firstAllowedModule(){return SYSTEM_MODULES.find(m=>canViewModule(m.id))?.id||''}
+function firstAllowedModule(){return SYSTEM_MODULES.find(m=>!['solicitacoes','economia'].includes(m.id)&&canViewModule(m.id))?.id||''}
 function applyModuleAccess(role='CONSULTA'){
  const perms=effectivePermissions();
 document.body.classList.toggle('metric-only-access',false);
@@ -4154,9 +4154,6 @@ function buscaResultados(termoBruto){
   .filter(o=>buscaCasa(termo,o.nome,o.group,o.tipo,o.status))
   .map(o=>({titulo:o.nome||o.group||'(sem nome)',detalhe:[o.group,o.status].filter(Boolean).join(' • '),acao:()=>activateAppPage('faccoes')})),'faccoes');
 
- add('sol','SOLICITAÇÕES',(solicitacoes||[]).concat(requestRecords||[])
-  .filter(r=>buscaCasa(termo,r.titulo,r.group,r.descricao,r.tipo,r.status))
-  .map(r=>({titulo:r.titulo||r.tipo||'(solicitação)',detalhe:[r.group,r.status].filter(Boolean).join(' • '),acao:()=>activateAppPage('solicitacoes')})),'solicitacoes');
 
  add('entrega','ENTREGAS',(entregas||[])
   .filter(e=>buscaCasa(termo,e.group,e.faccao,e.lider,e.responsavel))
@@ -11194,7 +11191,7 @@ v])=>`<div class="dash-seg-row"><span>${esc(k)}</span><div><i style="width:${v.a
 
  const activity=movements.map(h=>`<div class="dash-activity-row"><i></i><div><b>${esc(historyTitle(h))}</b><span>${esc([h.group,h.faccao].filter(Boolean).join(' • ')||h.descricao||'Operação administrativa')}</span><small>${esc(formatHistoryDate(h))}${h.usuario?' • '+esc(h.usuario):''}</small></div></div>`).join('')||'<div class="dash-empty">Nenhuma movimentação registrada.</div>';
 
- box.innerHTML=`<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>DISPONÍVEIS</span><b>${vacant.length}</b><small>prontas para entrega</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><button data-go="solicitacoes"><span>SOLICITAÇÕES</span><b>${pending||solicitacoes.length}</b><small>${pending?'pendentes':'modelos cadastrados'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
+ box.innerHTML=`<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>DISPONÍVEIS</span><b>${vacant.length}</b><small>prontas para entrega</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
  <div class="dash-grid">${painelDisponiveisHtml(painelDepsV14())}${painelOcupacaoHtml(painelDepsV14())}<section class="dash-panel dash-wide"><header><div><span>COMPARAÇÃO SEMANAL</span><h3>ALERTAS OBJETIVOS DE CONTINGENTE</h3></div><button data-go="metricas">ABRIR CENTRAL →</button></header><p class="dash-rule-note">A semana atual é comparada com os mesmos dias e horários da semana anterior. Facções sem ocupação nunca geram alerta.</p><div class="dash-week-alerts">${attention}</div></section>
  <section class="dash-panel dash-wide"><header><div><span>VALIDAÇÃO AUTOMÁTICA</span><h3>INCONSISTÊNCIAS • GROUP VAGO COM PLAYER</h3></div></header><div class="dash-anomalies">${anomalyHtml}</div></section>
  <section class="dash-panel"><header><div><span>30 DIAS / HISTÓRICO</span><h3>MOVIMENTAÇÃO DE FACÇÕES</h3></div><button data-go="historico">VER HISTÓRICO →</button></header><div class="dash-move-kpis"><div><b>${ent30}</b><span>ENTREGAS</span></div><div><b>${rec30}</b><span>RECOLHIMENTOS</span></div><div><b>${historico.length}</b><span>EVENTOS</span></div></div></section>
@@ -13412,6 +13409,8 @@ const _activateAppPageV836=activateAppPage;
 activateAppPage=function(page){if(['organizacoes',
 'disponiveis',
 'entregas'].includes(page))page='faccoes';
+/* V14.5: Solicitações e Economia saíram do menu; acessos antigos vão para o Dashboard */
+if(['solicitacoes','economia'].includes(page))page='dashboard';
 return _activateAppPageV836(page)};
 
 const _loadFaccoesV836=loadFaccoes;
