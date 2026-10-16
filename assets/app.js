@@ -16080,3 +16080,170 @@ async function postarAnuncioLivre(f){
 {const _deps=painelDepsV14;painelDepsV14=function(){return {..._deps(),postarAnuncio:f=>postarAnuncioLivre(f)}}}
 {const _lf=loadFaccoes;loadFaccoes=async function(...a){const r=await _lf.apply(this,a);carregarAnunciosLivres();return r}}
 setTimeout(()=>{if(currentUser)carregarAnunciosLivres()},1500);
+
+/* ===== HIGH OS V15.4 · RELATÓRIO GERAL DO ILEGAL (inteligente) =====
+   Usa o mesmo motor da Central RH (métrica atribuída à facção, meta 15–20):
+   últimos 7 dias × 7 anteriores, tendência de 30 dias, padrão dia × horário,
+   diagnóstico automático por facção, segmentos, ocupação e plano de ação. */
+const RG_CSS=`
+.ins{display:grid;gap:6px}
+.ins div{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;padding:7px 10px;border-radius:9px;border:1px solid #ece6f3;background:#fcfbfe;font-size:10.5px;line-height:1.45}
+.ins div i{font-style:normal;font-size:13px;line-height:1.2;text-align:center}
+.ins div.bad{border-color:#fecaca;background:#fff5f5}.ins div.warn{border-color:#fde68a;background:#fffbeb}.ins div.ok{border-color:#bbf7d0;background:#f0fdf4}.ins div.info{border-color:#ddd6fe;background:#f7f4ff}
+.ins b{color:#1d1626}
+.lead{font-size:12.5px;line-height:1.6;color:#2e2438;margin:0 0 12px;padding:12px 14px;border-left:4px solid #8b3dff;background:#faf7ff;border-radius:0 10px 10px 0}
+.cols{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
+.cols3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+h3{margin:0 0 8px;font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:#4b3d5e}
+.hm td{text-align:center;font-weight:700;font-size:10.5px;padding:6px 4px}
+.hm td.l{text-align:left;font-weight:800}
+.hm td.f{color:#c9c1d4;font-weight:600}
+.st{display:inline-block;padding:2px 8px;border-radius:999px;font-size:8.5px;font-weight:800;letter-spacing:.6px;white-space:nowrap}
+.st.c-top{background:#bbf7d0;color:#14532d}.st.c-ok{background:#dcfce7;color:#166534}.st.c-low{background:#fef3c7;color:#92400e}.st.c-bad{background:#fee2e2;color:#991b1b}
+td.rec{font-size:9.5px;color:#4b3d5e;line-height:1.35}
+.up{color:#15803d;font-weight:800}.dn{color:#b91c1c;font-weight:800}.eq{color:#8a7d9a}
+svg .tb{fill:#c4b5fd}svg .tb.we{fill:#a78bfa}svg .tb.hj{fill:#e9d5ff;stroke:#8b3dff;stroke-dasharray:3 2}
+svg .ma{stroke:#7c3aed;stroke-width:2.4;fill:none;stroke-linejoin:round}
+svg .rk{fill:#a78bfa}svg .rk.r-top{fill:#16a34a}svg .rk.r-ok{fill:#4ade80}svg .rk.r-low{fill:#fbbf24}svg .rk.r-zero{fill:#f87171}
+svg .prev{stroke:#1d1626;stroke-width:2}
+svg .nm{fill:#1d1626;font-size:10px;font-weight:700}svg .nm2{fill:#8a7d9a;font-size:8.5px}
+svg .vl{fill:#1d1626;font-size:9.5px;font-weight:800}
+`;
+function rgRange(fim,n){return {ini:new Date(fim.getFullYear(),fim.getMonth(),fim.getDate()-(n-1)),fim}}
+function rgVar(a,b){if(a===null||a===undefined||b===null||b===undefined||b<3)return null;return (a-b)/b*100}
+function rgVarHtml(v){if(v===null)return '<span class="eq">—</span>';const r=Math.round(v);return r>=3?`<span class="up">▲ ${r}%</span>`:r<=-3?`<span class="dn">▼ ${Math.abs(r)}%</span>`:`<span class="eq">= ${r}%</span>`}
+function rgDiag(e,M){
+ const st=e.st,v=rgVar(st.media,e.ant?.media??null),forte=st.forte,fraco=Object.entries(st.porSlot||{}).filter(([,x])=>x!==null).sort((a,b)=>a[1]-b[1])[0]?.[0];
+ if(!st.comDados)return {cls:'bad',rot:'SEM COLETA',peso:100,rec:'Nenhuma coleta na semana. Confirmar se a facção está ativa; se seguir assim, avaliar recolhimento.',v};
+ if(st.semPlayers>=3)return {cls:'bad',rot:'SEM PLAYERS',peso:95,rec:`Sem players há ${st.semPlayers} dias seguidos. Contatar a liderança hoje; candidata a recolhimento.`,v};
+ if(st.media<M.min*.5)return {cls:'bad',rot:'CRÍTICA',peso:90,rec:`Média de ${rh15N(st.media)}, menos da metade da meta mínima (${M.min}). Advertência formal e prazo para recuperar.`,v};
+ if(st.media<M.min){
+  if(v!==null&&v<=-20)return {cls:'low',rot:'ABAIXO ▼',peso:80,rec:`Abaixo da meta e caindo ${Math.abs(Math.round(v))}% na semana. Cobrar a liderança e acompanhar diariamente.`,v};
+  if(v!==null&&v>=15)return {cls:'low',rot:'RECUPERANDO',peso:50,rec:`Abaixo da meta, mas subiu ${Math.round(v)}%. Manter acompanhamento até chegar a ${M.min}.`,v};
+  return {cls:'low',rot:'ABAIXO',peso:65,rec:`Média ${rh15N(st.media)} (meta ${M.min}–${M.max}); ficou abaixo de ${M.min} em ${st.total-st.diasMeta} de ${st.total} dias.${st.pico>=M.min?` Já chegou a ${rh15N(st.pico)}: dá para sustentar a meta.`:' Nunca chegou à meta na semana.'}${forte?` Melhor horário: ${forte}.`:''}`,v};
+ }
+ if(v!==null&&v<=-25)return {cls:'ok',rot:'NA META ▼',peso:40,rec:`Ainda na meta, mas caiu ${Math.abs(Math.round(v))}%. Alerta preventivo à liderança.`,v};
+ if(st.media>=M.max)return {cls:'top',rot:'DESTAQUE',peso:0,rec:`Acima da meta (${rh15N(st.media)})${st.regularidade!==null&&st.regularidade>=.8?' e constante':''}. Candidata a reconhecimento.${forte?` Horário forte: ${forte}.`:''}`,v};
+ return {cls:'ok',rot:'NA META',peso:10,rec:`Dentro da meta.${st.regularidade!==null&&st.regularidade<.6?' Oscila bastante entre os dias: pedir constância.':' Manter.'}`,v};
+}
+function rgDados(){
+ const M=rh15Meta(),hoje=rh15Hoje(),ontem=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate()-1),r7=rgRange(ontem,7),p7=rgRange(new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate()-8),7),r30=rgRange(hoje,30);
+ const A=rh15Coletar(r7,true),P=rh15Coletar(p7,false),T=rh15Coletar(r30,false);
+ const ant=new Map(P.lista.map(e=>[rh15K(e.faccao),e.st]));
+ const atuais=A.lista.filter(e=>!e.ex);atuais.forEach(e=>{e.ant=ant.get(rh15K(e.faccao))||null;e.dg=rgDiag(e,M)});
+ /* facções que ocupam Group mas não aparecem nas métricas da semana */
+ const vistos=new Set(atuais.map(e=>org15GK(e.group)));
+ (RH15_FACCOES()||[]).filter(f=>f&&!f.removido&&situacaoGroup(f)==='ASSUMIDA'&&!vistos.has(org15GK(f.group))).forEach(f=>{const e={k:'x'+f.group,faccao:f.faccao,group:f.group,segmento:f.segmento||'OUTROS',dias:new Map(),st:{comDados:0,media:null,pico:null,porSlot:{},semPlayers:0,diasMeta:0,total:7,regularidade:null}};e.dg=rgDiag(e,M);atuais.push(e)});
+ /* Ilegal por dia (soma dos picos das facções) */
+ const somaDia=(lista,d)=>{let s=0,t=false;lista.forEach(e=>{const v=e.dias.get(rh15DK(d))?.pico;if(Number.isFinite(v)){s+=v;t=true}});return t?s:null};
+ const serie30=T.dias.map(d=>({d,v:somaDia(T.lista,d)}));
+ const tot7=A.dias.map(d=>somaDia(A.lista,d)).filter(v=>v!==null),totP=P.dias.map(d=>somaDia(P.lista,d)).filter(v=>v!==null);
+ const med=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+ /* dia × horário (soma das facções na coleta) */
+ const slots=A.slotKeys.length?A.slotKeys:['14H','16H','21H','23H'];
+ const agora=new Date(),minAgora=agora.getHours()*60+agora.getMinutes();
+ const grade=A.dias.map(d=>slots.map(s=>{let t=0,tem=false;A.lista.forEach(e=>{const v=+e.dias.get(rh15DK(d))?.slots?.[s];if(Number.isFinite(v)){t+=v;tem=true}});const fut=d.getTime()===hoje.getTime()&&!tem&&rh15SlotMin(s)+20>minAgora;return {v:tem?t:null,fut}}));
+ const porSlot=slots.map((s,si)=>({s,m:med(grade.map(l=>l[si].v).filter(v=>v!==null))}));
+ const faltas=[];grade.forEach((l,di)=>l.forEach((c,si)=>{if(c.v===null&&!c.fut)faltas.push(rh15Dm(A.dias[di])+' '+slots[si])}));
+ /* segmentos */
+ const segs={};atuais.forEach(e=>{(segs[e.segmento||'OUTROS']||=[]).push(e)});
+ const segRows=Object.entries(segs).map(([nome,l])=>{const c=l.filter(e=>e.st.comDados);return {nome,n:l.length,media:med(c.map(e=>e.st.media)),abaixo:l.filter(e=>['bad','low'].includes(e.dg.cls)).length,top:l.filter(e=>e.dg.cls==='top').length}}).sort((a,b)=>(b.media||0)-(a.media||0));
+ /* ocupação */
+ const fac=(RH15_FACCOES()||[]).filter(f=>f&&!f.removido),sit=s=>fac.filter(f=>situacaoGroup(f)===s);
+ let anom=[];try{anom=vacantMetricAnomalies()}catch(e){}
+ return {M,hoje,r7,p7,A,P,atuais,serie30,mediaIlegal:med(tot7),mediaIlegalAnt:med(totP),picoIlegal:tot7.length?Math.max(...tot7):null,slots,grade,porSlot,faltas,segRows,
+  ocup:{total:fac.length,ass:sit('ASSUMIDA').length,disp:sit('DISPONIVEL').length,rev:sit('REVISAR').length,semqg:sit('SEM_QG').length,vagos:sit('DISPONIVEL').map(f=>f.group)},anom};
+}
+function rgInsights(D){
+ const out=[],M=D.M,L=D.atuais,c=k=>L.filter(e=>e.dg.cls===k).length,comDados=L.filter(e=>e.st.comDados);
+ const vI=rgVar(D.mediaIlegal,D.mediaIlegalAnt);
+ if(vI!==null)out.push([vI<=-10?'bad':vI>=10?'ok':'info',vI<=-10?'📉':vI>=10?'📈':'📊',`O Ilegal teve em média <b>${rh15N(D.mediaIlegal)}</b> pessoas no pico diário na última semana fechada, ${vI>=0?'alta':'queda'} de <b>${Math.abs(Math.round(vI))}%</b> sobre a semana anterior (${rh15N(D.mediaIlegalAnt)}).`]);
+ const sp=L.filter(e=>e.dg.rot==='SEM PLAYERS'||e.dg.rot==='SEM COLETA');
+ if(sp.length)out.push(['bad','🚨',`<b>${sp.length}</b> facção(ões) sem players ou sem coleta na semana: ${sp.slice(0,6).map(e=>`<b>${esc(e.faccao)}</b> (${esc(e.group)})`).join(', ')}${sp.length>6?'…':''}. Candidatas a recolhimento.`]);
+ const crit=L.filter(e=>e.dg.rot==='CRÍTICA');
+ if(crit.length)out.push(['bad','⛔',`<b>${crit.length}</b> facção(ões) com menos da metade da meta mínima: ${crit.slice(0,6).map(e=>`<b>${esc(e.faccao)}</b> (${rh15N(e.st.media)})`).join(', ')}.`]);
+ const queda=comDados.filter(e=>e.dg.v!==null&&e.dg.v<=-25).sort((a,b)=>a.dg.v-b.dg.v);
+ if(queda.length)out.push(['warn','▼',`Maiores quedas na semana: ${queda.slice(0,4).map(e=>`<b>${esc(e.faccao)}</b> ${Math.round(e.dg.v)}%`).join(', ')}.`]);
+ const alta=comDados.filter(e=>e.dg.v!==null&&e.dg.v>=25).sort((a,b)=>b.dg.v-a.dg.v);
+ if(alta.length)out.push(['ok','▲',`Maiores crescimentos: ${alta.slice(0,4).map(e=>`<b>${esc(e.faccao)}</b> +${Math.round(e.dg.v)}%`).join(', ')}.`]);
+ const tops=comDados.filter(e=>e.dg.cls==='top').sort((a,b)=>b.st.media-a.st.media);
+ if(tops.length)out.push(['ok','🏆',`<b>${tops.length}</b> facção(ões) acima de ${M.max}: ${tops.slice(0,5).map(e=>`<b>${esc(e.faccao)}</b> (${rh15N(e.st.media)})`).join(', ')}. Candidatas a reconhecimento.`]);
+ const naMeta=c('top')+c('ok');
+ out.push([naMeta/Math.max(1,L.length)>=.6?'ok':'warn','🎯',`<b>${naMeta}</b> de ${L.length} facções estão na meta de ${M.min}–${M.max} (${Math.round(naMeta/Math.max(1,L.length)*100)}%); <b>${c('low')+c('bad')}</b> estão abaixo.`]);
+ const ps=D.porSlot.filter(x=>x.m!==null).sort((a,b)=>b.m-a.m);
+ if(ps.length>1)out.push(['info','🕘',`Horário mais forte: <b>${esc(ps[0].s)}</b> (média ${rh15N(ps[0].m)} online). Mais fraco: <b>${esc(ps[ps.length-1].s)}</b> (${rh15N(ps[ps.length-1].m)}) — bom horário para eventos que puxem movimento.`]);
+ const ord=[...comDados].sort((a,b)=>b.st.media-a.st.media),tot=ord.reduce((a,e)=>a+e.st.media,0);
+ if(ord.length>=8&&tot>0){const t5=ord.slice(0,5).reduce((a,e)=>a+e.st.media,0)/tot;if(t5>=.4)out.push(['info','⚖️',`As 5 maiores facções concentram <b>${Math.round(t5*100)}%</b> do movimento. ${t5>=.55?'Dependência alta de poucas facções.':'Distribuição razoável.'}`])}
+ const sw=D.segRows.filter(s=>s.media!==null);
+ if(sw.length>1)out.push(['info','🧩',`Segmento mais forte: <b>${esc(sw[0].nome)}</b> (média ${rh15N(sw[0].media)}). Mais fraco: <b>${esc(sw[sw.length-1].nome)}</b> (${rh15N(sw[sw.length-1].media)})${sw[sw.length-1].abaixo?`, com ${sw[sw.length-1].abaixo} abaixo da meta`:''}.`]);
+ if(D.ocup.disp)out.push([D.ocup.disp>=8?'warn':'info','🏚️',`<b>${D.ocup.disp}</b> Group(s) disponíveis para assumir (${D.ocup.ass} ocupados de ${D.ocup.total}).${D.ocup.rev?` ${D.ocup.rev} com cadastro a revisar.`:''}`]);
+ if(D.anom.length)out.push(['bad','👀',`<b>${D.anom.length}</b> Group(s) com player sem facção registrada nos últimos 7 dias: ${D.anom.slice(0,5).map(a=>esc(a.group)).join(', ')}.`]);
+ if(D.faltas.length)out.push(['warn','🕳️',`<b>${D.faltas.length}</b> coleta(s) não chegaram na semana (${D.faltas.slice(0,6).join(', ')}${D.faltas.length>6?'…':''}). Os números desses horários ficam subestimados.`]);
+ const ord2={bad:0,warn:1,ok:2,info:3};return out.sort((a,b)=>ord2[a[0]]-ord2[b[0]]);
+}
+function rgGraficoTendencia(D){
+ const s=D.serie30,W=1000,H=185,Lm=40,Rm=14,T=14,Bm=32,iw=W-Lm-Rm,ih=H-T-Bm,n=s.length,bw=iw/n;
+ const max=Math.max(10,...s.map(x=>x.v||0)),passo=max<=60?10:max<=150?25:max<=400?50:100,topo=Math.ceil(max/passo)*passo,y=v=>T+ih-(v/topo)*ih,hoje=D.hoje.getTime();
+ let g='';for(let v=0;v<=topo;v+=passo)g+=`<line x1="${Lm}" x2="${W-Rm}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${Lm-6}" y="${y(v)+3}" class="ax" text-anchor="end">${v}</text>`;
+ const pts=[];s.forEach((x,i)=>{const cx=Lm+i*bw+bw/2,dw=x.d.getDay(),we=dw===0||dw===6;
+  if(i%2===0||n<=16)g+=`<text x="${cx}" y="${H-Bm+13}" class="ax sm" text-anchor="middle">${rh15Dm(x.d)}</text>`;
+  if(dw===1)g+=`<text x="${cx}" y="${H-Bm+25}" class="ax sm wk" text-anchor="middle">seg</text>`;
+  if(x.v===null)return;const h=Math.max(1,x.v/topo*ih);
+  g+=`<rect x="${Lm+i*bw+1.5}" y="${y(x.v)}" width="${bw-3}" height="${h}" rx="2" class="tb${x.d.getTime()===hoje?' hj':we?' we':''}"/>`;
+  const jan=s.slice(Math.max(0,i-6),i+1).map(z=>z.v).filter(v=>v!==null);if(jan.length>=3)pts.push(`${cx},${y(jan.reduce((a,b)=>a+b,0)/jan.length)}`)});
+ if(pts.length>1)g+=`<polyline points="${pts.join(' ')}" class="ma"/>`;
+ return `<div class="chart"><svg class="rh15-mes" viewBox="0 0 ${W} ${H}">${g}</svg><div class="leg"><span><i style="background:#c4b5fd"></i>pico do Ilegal no dia (soma das facções)</span><span><i style="background:#a78bfa"></i>fim de semana</span><span><i class="ln" style="background:#7c3aed"></i>média móvel de 7 dias</span></div></div>`;
+}
+function rgGraficoRanking(L,M,de,ate){
+ const l=L.slice(de,ate),W=1000,rowH=17,T=22,H=T+l.length*rowH+18,Lm=230,Rm=60,iw=W-Lm-Rm;
+ const max=Math.max(M.max+5,...L.map(e=>Math.max(e.st.media||0,e.ant?.media||0))),x=v=>Lm+(v/max)*iw;
+ let g=`<rect x="${x(M.min)}" y="${T-6}" width="${x(M.max)-x(M.min)}" height="${l.length*rowH+8}" class="meta"/><text x="${(x(M.min)+x(M.max))/2}" y="${T-10}" class="metat" text-anchor="middle">META ${M.min}–${M.max}</text>`;
+ const passo=max<=40?5:10;for(let v=0;v<=max;v+=passo)g+=`<line x1="${x(v)}" x2="${x(v)}" y1="${T-4}" y2="${T+l.length*rowH}" class="grid"/><text x="${x(v)}" y="${T+l.length*rowH+12}" class="ax sm" text-anchor="middle">${v}</text>`;
+ l.forEach((e,i)=>{const yy=T+i*rowH,m=e.st.media,f=m===null?'zero':rh15Faixa(m);
+  g+=`<text x="${Lm-8}" y="${yy+11}" class="nm" text-anchor="end">${de+i+1}. ${esc(e.faccao).slice(0,26)}</text><text x="${Lm-8}" y="${yy+19}" class="nm2" text-anchor="end">${esc(e.group)}</text>`;
+  if(m!==null)g+=`<rect x="${Lm}" y="${yy+3}" width="${Math.max(1,x(m)-Lm)}" height="${rowH-7}" rx="3" class="rk r-${f}"/><text x="${x(m)+5}" y="${yy+13}" class="vl">${rh15N(m)}</text>`;
+  else g+=`<text x="${Lm+4}" y="${yy+13}" class="nm2">sem coleta</text>`;
+  if(e.ant?.media!=null)g+=`<line x1="${x(e.ant.media)}" x2="${x(e.ant.media)}" y1="${yy+1}" y2="${yy+rowH-2}" class="prev"/>`});
+ return `<div class="chart"><svg class="rh15-mes" viewBox="0 0 ${W} ${H}">${g}</svg><div class="leg"><span><i style="background:#16a34a"></i>acima de ${M.max}</span><span><i style="background:#4ade80"></i>na meta</span><span><i style="background:#fbbf24"></i>abaixo</span><span><i style="background:#f87171"></i>crítica</span><span><i class="ln"></i>traço = média da semana anterior</span></div></div>`;
+}
+function rgHeat(D){
+ const dn=['DOM','SEG','TER','QUA','QUI','SEX','SÁB'],max=Math.max(1,...D.grade.flat().map(c=>c.v||0));
+ return `<table class="hm"><thead><tr><th>DIA</th>${D.slots.map(s=>`<th class="n">${esc(s)}</th>`).join('')}<th class="n">PICO</th></tr></thead><tbody>${D.A.dias.map((d,di)=>{const l=D.grade[di],vs=l.map(c=>c.v).filter(v=>v!==null);return `<tr><td class="l">${dn[d.getDay()]} ${rh15Dm(d)}</td>${l.map(c=>c.v===null?`<td class="f">${c.fut?'…':'—'}</td>`:`<td style="background:rgba(139,61,255,${(.08+.55*c.v/max).toFixed(2)});color:${c.v/max>.6?'#fff':'#1d1626'}">${c.v}</td>`).join('')}<td><b>${vs.length?Math.max(...vs):'—'}</b></td></tr>`}).join('')}</tbody></table>`;
+}
+function rgHtml(){
+ const D=rgDados(),M=D.M,L=[...D.atuais].sort((a,b)=>(b.st.media??-1)-(a.st.media??-1)),ins=rgInsights(D);
+ const per=`${rh15Br(D.r7.ini)} a ${rh15Br(D.r7.fim)} • comparação com ${rh15Br(D.p7.ini)} a ${rh15Br(D.p7.fim)} • meta ${M.min}–${M.max}`;
+ const c=k=>L.filter(e=>e.dg.cls===k).length,vI=rgVar(D.mediaIlegal,D.mediaIlegalAnt);
+ const lead=`Na última semana fechada o Ilegal teve <b>${L.length}</b> facções ativas, com média de <b>${rh15N(D.mediaIlegal)}</b> pessoas no pico diário${vI!==null?` (${vI>=0?'+':''}${Math.round(vI)}% na semana)`:''} e recorde de <b>${rh15N(D.picoIlegal)}</b>. <b>${c('top')+c('ok')}</b> facções estão na meta e <b>${c('low')+c('bad')}</b> abaixo${c('bad')?`, sendo <b>${c('bad')}</b> em situação crítica`:''}. ${L[0]?.st.media!=null?`A líder da semana é <b>${esc(L[0].faccao)}</b> (${esc(L[0].group)}) com ${rh15N(L[0].st.media)}.`:''}`;
+ const pags=[];
+ pags.push(`<section class="pg">${rh15PrintTopo('Relatório Geral do Ilegal',per)}<div class="in">
+<div class="kp"><div><span>Pico médio do Ilegal</span><b>${rh15N(D.mediaIlegal)}</b><small>${vI===null?'sem comparação':(vI>=0?'+':'')+Math.round(vI)+'% vs semana anterior'}</small></div>
+<div><span>Recorde da semana</span><b>${rh15N(D.picoIlegal)}</b><small>soma das facções</small></div>
+<div class="ok"><span>Na meta</span><b>${c('top')+c('ok')}</b><small>${c('top')} acima de ${M.max}</small></div>
+<div class="warn"><span>Abaixo da meta</span><b>${c('low')+c('bad')}</b><small>${c('bad')} crítica(s)</small></div>
+<div><span>Groups ocupados</span><b>${D.ocup.ass}/${D.ocup.total}</b><small>${D.ocup.disp} disponíveis</small></div>
+<div class="${D.anom.length?'warn':''}"><span>Inconsistências</span><b>${D.anom.length}</b><small>Group vago com player</small></div></div>
+<p class="lead">${lead}</p>
+<h3>Leitura automática da semana</h3><div class="ins">${ins.slice(0,11).map(([k,i,t])=>`<div class="${k}"><i>${i}</i><span>${t}</span></div>`).join('')}</div></div></section>`);
+ pags.push(`<section class="pg">${rh15PrintTopo('Movimento do Ilegal',`Últimos 30 dias e padrão da semana • ${per}`)}<div class="in"><h3>Pico diário do Ilegal — 30 dias</h3>${rgGraficoTendencia(D)}
+<div class="cols" style="margin-top:12px"><div><h3>Semana por dia e horário (pessoas online)</h3>${rgHeat(D)}</div><div><h3>Média por horário de coleta</h3><table><thead><tr><th>Horário</th><th class="n">Média online</th><th>Leitura</th></tr></thead><tbody>${(()=>{const ps=D.porSlot.filter(x=>x.m!==null),mx=Math.max(...ps.map(x=>x.m),1);return D.porSlot.map(x=>`<tr><td><b>${esc(x.s)}</b></td><td class="n">${rh15N(x.m)}</td><td>${x.m===null?'sem coleta':x.m===mx?'<span class="st c-top">MAIS FORTE</span>':x.m<mx*.5?'<span class="st c-low">FRACO</span>':'<span class="st c-ok">NORMAL</span>'}</td></tr>`).join('')})()}</tbody></table>
+<h3 style="margin-top:12px">Segmentos</h3><table><thead><tr><th>Segmento</th><th class="n">Facções</th><th class="n">Média</th><th class="n">Abaixo</th><th class="n">Destaques</th></tr></thead><tbody>${D.segRows.slice(0,5).map(s=>`<tr><td><b>${esc(s.nome)}</b></td><td class="n">${s.n}</td><td class="n">${rh15N(s.media)}</td><td class="n">${s.abaixo||'—'}</td><td class="n">${s.top||'—'}</td></tr>`).join('')}</tbody></table></div></div></div></section>`);
+ const POR=28;for(let i=0;i<L.length;i+=POR)pags.push(`<section class="pg">${rh15PrintTopo('Ranking da semana',`Média dos picos diários por facção • ${per}`)}<div class="in">${rgGraficoRanking(L,M,i,i+POR)}</div></section>`);
+ const prio=[...L].sort((a,b)=>b.dg.peso-a.dg.peso||(a.st.media??-1)-(b.st.media??-1));
+ const POR2=11;for(let i=0;i<prio.length;i+=POR2)pags.push(`<section class="pg">${rh15PrintTopo('Diagnóstico e recomendações',`Ordenado por prioridade de ação • ${per}`)}<div class="in"><table><thead><tr><th>#</th><th>Facção</th><th>Group</th><th class="n">Média</th><th class="n">Semana ant.</th><th class="n">Variação</th><th class="n">Pico</th><th class="n">Dias na meta</th><th>Situação</th><th>Recomendação</th></tr></thead><tbody>${prio.slice(i,i+POR2).map((e,j)=>`<tr><td>${i+j+1}</td><td><b>${esc(e.faccao)}</b><br><small style="color:#8a7d9a">${esc(e.segmento)}</small></td><td>${esc(e.group)}</td><td class="n"><b>${rh15N(e.st.media)}</b></td><td class="n">${rh15N(e.ant?.media??null)}</td><td class="n">${rgVarHtml(e.dg.v)}</td><td class="n">${rh15N(e.st.pico)}</td><td class="n">${e.st.diasMeta}/${e.st.total}</td><td><span class="st c-${e.dg.cls}">${e.dg.rot}</span></td><td class="rec">${esc(e.dg.rec)}</td></tr>`).join('')}</tbody></table></div></section>`);
+ const acoes=prio.filter(e=>e.dg.peso>=50).slice(0,10),reconhecer=L.filter(e=>e.dg.cls==='top').slice(0,6);
+ pags.push(`<section class="pg">${rh15PrintTopo('Plano de ação',per)}<div class="in"><div class="cols"><div><h3>Prioridades da staff</h3><div class="ins">${acoes.length?acoes.map((e,i)=>`<div class="${e.dg.cls==='bad'?'bad':'warn'}"><i>${i+1}</i><span><b>${esc(e.faccao)}</b> • ${esc(e.group)} — ${esc(e.dg.rec)}</span></div>`).join(''):'<div class="ok"><i>✓</i><span>Nenhuma facção exige ação imediata.</span></div>'}</div></div>
+<div><h3>Reconhecimento</h3><div class="ins">${reconhecer.length?reconhecer.map(e=>`<div class="ok"><i>🏆</i><span><b>${esc(e.faccao)}</b> • ${esc(e.group)} — média ${rh15N(e.st.media)}, pico ${rh15N(e.st.pico)}, ${e.st.diasMeta}/${e.st.total} dias na meta.</span></div>`).join(''):'<div class="info"><i>—</i><span>Nenhuma facção acima de '+M.max+' na semana.</span></div>'}</div>
+<h3 style="margin-top:12px">Ocupação</h3><div class="ins"><div class="info"><i>🏠</i><span><b>${D.ocup.ass}</b> ocupados • <b>${D.ocup.disp}</b> disponíveis • ${D.ocup.semqg} sem QG • ${D.ocup.rev} a revisar.${D.ocup.vagos.length?` Disponíveis: ${D.ocup.vagos.slice(0,14).map(esc).join(', ')}${D.ocup.vagos.length>14?'…':''}.`:''}</span></div>${D.anom.length?`<div class="bad"><i>👀</i><span>Player em Group sem facção: ${D.anom.slice(0,8).map(a=>`<b>${esc(a.group)}</b> (${a.value} em ${a.date.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})})`).join(', ')}.</span></div>`:''}</div></div></div>
+<p class="note">Como ler: "média" é a média dos picos diários da facção (maior coleta de cada dia) nos últimos 7 dias. A métrica acompanha a facção que ocupava o Group no horário da coleta. Variação só é calculada quando a semana anterior tem média ≥ 3, para evitar porcentagens enganosas.</p></div></section>`);
+ const total=pags.length,html=pags.map((p,i)=>p.replace(/<\/section>$/,rh15PrintRodape(i+1,total)+'</section>')).join('');
+ return html;
+}
+function rgAbrir(){
+ try{
+  if(!(typeof metricas!=='undefined'&&metricas?.length))return alert('As métricas ainda estão carregando. Abra a página Métricas uma vez e tente de novo.');
+  const html=rgHtml(),w=window.open('','_blank');if(!w)return alert('O navegador bloqueou a janela do relatório. Libere pop-ups para o High OS.');
+  w.document.open();w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório Geral do Ilegal</title><style>${RH15_PRINT_CSS}${RG_CSS}</style></head><body><button class="np" onclick="window.print()">IMPRIMIR / SALVAR PDF</button>${html}</body></html>`);w.document.close();w.focus();
+ }catch(e){console.error('[RELATÓRIO GERAL]',e);alert('Falha ao montar o relatório: '+(e.message||e))}
+}
+mgmtOpenRichReport=rgAbrir;
