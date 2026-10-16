@@ -16247,3 +16247,123 @@ function rgAbrir(){
  }catch(e){console.error('[RELATÓRIO GERAL]',e);alert('Falha ao montar o relatório: '+(e.message||e))}
 }
 mgmtOpenRichReport=rgAbrir;
+
+/* ===== HIGH OS V15.5 · DIÁRIO — RELATÓRIOS (semana / mês / ano / período) =====
+   Tudo que o bot registra no Discord (diario_operacional) vira relatório:
+   eventos e vencedores, premiação paga, reuniões dos Padrinhos (valor pago
+   e demandas), visitas, atividades não realizadas. Exporta PDF e CSV. */
+let dgModo='dia',dgRelRows=null,dgRelAt=0;
+const dgRel={per:'semana',ref:'',ini:'',fim:''};
+const dgIso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const dgFromIso=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?new Date(+m[1],+m[2]-1,+m[3]):null};
+const dgMoney=v=>Number(v)>0?'R$ '+Math.round(Number(v)).toLocaleString('pt-BR'):'—';
+function dgParseMoney(t){const m=String(t??'').match(/([\d.]+(?:,\d+)?)\s*(milh(?:ão|ao|ões|oes)|mil|mi|kk|k|m)?(?![a-zà-ú])/i);if(!m)return 0;let v=Number(m[1].replace(/\./g,'').replace(',','.'));if(!Number.isFinite(v))return 0;const u=String(m[2]||'').toLowerCase();if(u==='mil'||u==='k')v*=1e3;else if(u==='kk'||u.startsWith('m'))v*=1e6;return v}
+function dgRelRange(){
+ const hoje=dgFromIso(diaryTodayIso())||new Date(),ref=dgFromIso(dgRel.ref)||hoje;
+ if(dgRel.per==='mes')return {ini:new Date(ref.getFullYear(),ref.getMonth(),1),fim:new Date(ref.getFullYear(),ref.getMonth()+1,0),rot:ref.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}).replace(/^./,c=>c.toUpperCase())};
+ if(dgRel.per==='ano')return {ini:new Date(ref.getFullYear(),0,1),fim:new Date(ref.getFullYear(),11,31),rot:'Ano de '+ref.getFullYear()};
+ if(dgRel.per==='periodo'){const a=dgFromIso(dgRel.ini)||new Date(hoje.getFullYear(),hoje.getMonth(),1),b=dgFromIso(dgRel.fim)||hoje;const ini=a<=b?a:b,fim=a<=b?b:a;return {ini,fim,rot:`${ini.toLocaleDateString('pt-BR')} a ${fim.toLocaleDateString('pt-BR')}`}}
+ const dow=(ref.getDay()+6)%7,ini=new Date(ref.getFullYear(),ref.getMonth(),ref.getDate()-dow),fim=new Date(ini.getFullYear(),ini.getMonth(),ini.getDate()+6);
+ return {ini,fim,rot:`Semana de ${ini.toLocaleDateString('pt-BR')} a ${fim.toLocaleDateString('pt-BR')}`};
+}
+function dgRelShift(n){const r=dgRelRange(),b=r.ini;let d;if(dgRel.per==='mes')d=new Date(b.getFullYear(),b.getMonth()+n,1);else if(dgRel.per==='ano')d=new Date(b.getFullYear()+n,0,1);else d=new Date(b.getFullYear(),b.getMonth(),b.getDate()+7*n);dgRel.ref=dgIso(d)}
+function dgKind(r){
+ const t=String(r.type||'').toLowerCase(),st=String(r.scheduleType||'').toLowerCase(),nm=String(r.title||r.scheduleName||'');
+ if(r.meeting||/reuni/i.test(nm)&&(r.valorPago!==undefined||t==='reuniao'))return 'reuniao';
+ if(t==='evento'||r.winner||['evento','relampago','oficial','especial'].includes(st))return 'evento';
+ if(t==='visita'||st==='visita'||/visita/i.test(nm))return 'visita';
+ return 'outro';
+}
+function dgPlaces(r){
+ const out=[];const add=(pos,name,val)=>{name=String(name||'').trim();if(name&&!out.some(p=>p.pos===pos))out.push({pos,name,val:Number(val)||0})};
+ const vals=Array.isArray(r.prizeValues)?r.prizeValues.map(Number):String(r.prize||'').split(/•|\/|,(?=\s*R\$)/).map(dgParseMoney);
+ String(r.result||'').split(/\n+/).forEach(l=>{const m=l.match(/^\s*([1-3])\s*(?:º|°|o)?\s*(?:lugar)?\s*[:\-–]?\s*(.+?)(?:\s+[-–]\s+(.+))?$/i);if(m)add(+m[1],m[2],dgParseMoney(m[3])||vals[+m[1]-1])});
+ if(!out.length){const pares=[...String(r.result||'').matchAll(/([^\s-–][^-–\n]*?)\s+[-–]\s+([\d.,]+\s*(?:milh(?:ão|ao|ões|oes)|mil|mi|kk|k)?)/gi)];if(pares.length>=2)pares.slice(0,3).forEach((m,i)=>add(i+1,m[1],dgParseMoney(m[2])))}
+ const pod=String(r.podium||'').split(/[,;|\/]|\s+e\s+/i).map(x=>x.trim()).filter(Boolean);
+ add(1,r.winner,vals[0]);add(2,r.second||pod[0],vals[1]);add(3,r.third||pod[1],vals[2]);
+ return out.sort((a,b)=>a.pos-b.pos);
+}
+async function dgRelCarregar(force=false){
+ if(!force&&dgRelRows&&Date.now()-dgRelAt<60000)return dgRelRows;
+ dgRelRows=(await highOsStoreList('diario_operacional')).filter(r=>/^\d{4}-\d{2}-\d{2}/.test(String(r.date||'')));dgRelAt=Date.now();return dgRelRows;
+}
+function dgRelDados(rows){
+ const R=dgRelRange(),a=dgIso(R.ini),b=dgIso(R.fim);
+ const L=rows.filter(r=>{const d=String(r.date).slice(0,10);return d>=a&&d<=b&&String(r.status||'FINALIZADO')!=='REAGENDADO'}).sort((x,y)=>String(x.date+x.time).localeCompare(String(y.date+y.time)));
+ const ok=L.filter(r=>r.status!=='NAO_REALIZADO'),nao=L.filter(r=>r.status==='NAO_REALIZADO');
+ const ev=ok.filter(r=>dgKind(r)==='evento'),reu=ok.filter(r=>dgKind(r)==='reuniao'),vis=ok.filter(r=>dgKind(r)==='visita');
+ const rank=new Map();let premio=0;
+ ev.forEach(r=>dgPlaces(r).forEach(p=>{const k=p.name.toLowerCase().replace(/\s+/g,' ');if(!rank.has(k))rank.set(k,{nome:p.name,v1:0,v2:0,v3:0,valor:0,eventos:new Set()});const x=rank.get(k);x['v'+p.pos]++;x.valor+=p.val;x.eventos.add(r.title||r.scheduleName);premio+=p.val}));
+ const ranking=[...rank.values()].map(x=>({...x,pontos:x.v1*3+x.v2*2+x.v3,eventos:[...x.eventos]})).sort((x,y)=>y.v1-x.v1||y.pontos-x.pontos||y.valor-x.valor);
+ const pago=reu.reduce((s,r)=>s+(Number(r.valorPago)||0),0);
+ const porEvento=new Map();ev.forEach(r=>{const k=r.title||r.scheduleName||'Evento';porEvento.set(k,(porEvento.get(k)||0)+1)});
+ /* série: por dia (semana/mês/período curto) ou por mês (ano / período longo) */
+ const dias=Math.round((R.fim-R.ini)/864e5)+1,porMes=dias>62,serie=[];
+ if(porMes){for(let d=new Date(R.ini.getFullYear(),R.ini.getMonth(),1);d<=R.fim;d=new Date(d.getFullYear(),d.getMonth()+1,1)){const k=dgIso(d).slice(0,7);serie.push({rot:d.toLocaleDateString('pt-BR',{month:'short'}).replace('.',''),ok:ok.filter(r=>String(r.date).startsWith(k)).length,nao:nao.filter(r=>String(r.date).startsWith(k)).length})}}
+ else{for(let d=new Date(R.ini);d<=R.fim;d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)){const k=dgIso(d);serie.push({rot:dias<=7?['DOM','SEG','TER','QUA','QUI','SEX','SÁB'][d.getDay()]+' '+String(d.getDate()).padStart(2,'0'):String(d.getDate()).padStart(2,'0'),ok:ok.filter(r=>String(r.date).slice(0,10)===k).length,nao:nao.filter(r=>String(r.date).slice(0,10)===k).length})}}
+ return {R,L,ok,nao,ev,reu,vis,ranking,premio,pago,porEvento:[...porEvento.entries()].sort((a,b)=>b[1]-a[1]),serie,porMes};
+}
+function dgRelInsights(D){
+ const out=[];const tot=D.ok.length+D.nao.length;
+ if(tot)out.push(`<b>${D.ok.length}</b> de ${tot} atividades realizadas (${Math.round(D.ok.length/tot*100)}%)${D.nao.length?`; <b>${D.nao.length}</b> não aconteceram`:''}.`);
+ if(D.ranking[0])out.push(`Maior vencedor: <b>${esc(D.ranking[0].nome)}</b> com ${D.ranking[0].v1} vitória(s)${D.ranking[0].valor?` e ${dgMoney(D.ranking[0].valor)} em prêmios`:''}.`);
+ if(D.premio)out.push(`Premiação paga nos eventos: <b>${dgMoney(D.premio)}</b> em ${D.ev.length} evento(s).`);
+ if(D.reu.length)out.push(`Reuniões dos Padrinhos: <b>${D.reu.length}</b> · valor pago total <b>${dgMoney(D.pago)}</b>${D.reu.filter(r=>r.teveDemanda).length?` · ${D.reu.filter(r=>r.teveDemanda).length} com demandas`:''}.`);
+ const motivos=D.nao.map(r=>String(r.reason||'').toLowerCase()).filter(Boolean);if(D.nao.length>=3)out.push(`Atenção: ${D.nao.length} atividades não realizadas no período${motivos.length?' — veja os motivos na lista':''}.`);
+ const top=D.porEvento[0];if(top)out.push(`Evento mais realizado: <b>${esc(top[0])}</b> (${top[1]}x).`);
+ return out;
+}
+function dgRelHtml(D){
+ const mx=Math.max(1,...D.serie.map(s=>s.ok+s.nao)),mr=Math.max(1,...D.ranking.map(r=>r.pontos));
+ const kind={evento:'🏆 Evento',reuniao:'🤝 Reunião',visita:'📍 Visita',outro:'📌 Atividade'};
+ return `<div class="dg-rel-bar"><div class="dg-seg">${[['semana','Semana'],['mes','Mês'],['ano','Ano'],['periodo','Período']].map(([k,l])=>`<button type="button" data-dgrel-per="${k}" class="${dgRel.per===k?'on':''}">${l}</button>`).join('')}</div>
+ ${dgRel.per==='periodo'?`<div class="dg-per"><input type="date" id="dgRelIni" value="${dgIso(D.R.ini)}"><span>a</span><input type="date" id="dgRelFim" value="${dgIso(D.R.fim)}"></div>`:`<div class="dg-per"><button type="button" data-dgrel-mv="-1">◀</button><b>${esc(D.R.rot)}</b><button type="button" data-dgrel-mv="1">▶</button></div>`}
+ <div class="dg-exp"><button type="button" data-dgrel-exp="pdf">PDF</button><button type="button" data-dgrel-exp="csv">CSV</button></div></div>
+<div class="dg-kpis">
+ <div class="dg-kpi"><span>ATIVIDADES</span><b>${D.ok.length}</b><small>${D.nao.length} não realizada(s)</small></div>
+ <div class="dg-kpi ok"><span>EVENTOS</span><b>${D.ev.length}</b><small>${D.ranking.length} organização(ões) no pódio</small></div>
+ <div class="dg-kpi"><span>PREMIAÇÃO PAGA</span><b class="sm">${dgMoney(D.premio)}</b><small>soma dos pódios</small></div>
+ <div class="dg-kpi"><span>REUNIÕES • VALOR PAGO</span><b class="sm">${dgMoney(D.pago)}</b><small>${D.reu.length} reunião(ões) · ${D.vis.length} visita(s)</small></div>
+</div>
+${dgRelInsights(D).length?`<section class="dg-card"><header><b>Leitura do período</b><small>${esc(D.R.rot)}</small></header><ul class="dg-ins">${dgRelInsights(D).map(t=>`<li>${t}</li>`).join('')}</ul></section>`:''}
+<div class="dg-rel-grid">
+<section class="dg-card"><header><b>Atividades ${D.porMes?'por mês':'por dia'}</b><small><i class="dg-lg ok"></i>realizadas <i class="dg-lg no"></i>não realizadas</small></header>
+ <div class="dg-cols" style="--n:${D.serie.length}">${D.serie.map((s,i)=>`<div class="dg-col" style="--i:${i}" title="${esc(s.rot)}: ${s.ok} realizada(s), ${s.nao} não realizada(s)"><div class="dg-stack"><i class="no" style="height:${s.nao/mx*100}%"></i><i class="ok" style="height:${s.ok/mx*100}%"></i></div><em>${s.ok+s.nao||''}</em><small>${esc(s.rot)}</small></div>`).join('')}</div></section>
+<section class="dg-card"><header><b>Ranking de vencedores</b><small>🥇 3 pts · 🥈 2 · 🥉 1</small></header>
+ ${D.ranking.length?`<div class="dg-rank">${D.ranking.slice(0,12).map((r,i)=>`<div class="dg-rk" style="--i:${i}"><span class="n">${i+1}</span><div><b>${esc(r.nome)}</b><small>🥇 ${r.v1} · 🥈 ${r.v2} · 🥉 ${r.v3}${r.valor?' · '+dgMoney(r.valor):''}</small><i style="--w:${r.pontos/mr*100}%"></i></div><strong>${r.pontos}</strong></div>`).join('')}</div>`:'<div class="placeholder"><p>Nenhum evento com vencedor no período.</p></div>'}</section>
+</div>
+${D.reu.length?`<section class="dg-card"><header><b>Reuniões dos Padrinhos</b><small>Valor pago e demandas registradas no Discord</small></header><div class="dg-tbl"><table><thead><tr><th>Data</th><th>Reunião</th><th class="n">Valor pago</th><th>Demandas</th><th>Registrado por</th></tr></thead><tbody>${D.reu.map(r=>`<tr><td>${String(r.date).slice(0,10).split('-').reverse().join('/')}</td><td><b>${esc(r.title||r.scheduleName||'Reunião')}</b></td><td class="n"><b>${dgMoney(r.valorPago)}</b></td><td>${r.teveDemanda?esc(r.demandas||''):'<span class="mut">Sem demandas</span>'}</td><td>${esc(r.createdByName||'—')}</td></tr>`).join('')}</tbody></table></div></section>`:''}
+<section class="dg-card"><header><b>Eventos e atividades</b><small>${D.L.length} registro(s)</small></header><div class="dg-tbl"><table><thead><tr><th>Data</th><th>Hora</th><th>Tipo</th><th>Atividade</th><th>Resultado</th><th class="n">Prêmio</th><th>Situação</th></tr></thead><tbody>${D.L.map(r=>{const k=dgKind(r),pl=k==='evento'?dgPlaces(r):[];return `<tr class="${r.status==='NAO_REALIZADO'?'nao':''}"><td>${String(r.date).slice(0,10).split('-').reverse().join('/')}</td><td>${esc(r.time||'—')}</td><td>${kind[k]}</td><td><b>${esc(r.title||r.scheduleName||'—')}</b>${r.zone?`<br><small class="mut">${esc(r.zone)}</small>`:''}</td><td>${r.status==='NAO_REALIZADO'?`<span class="mut">${esc(r.reason||'não realizada')}</span>`:k==='reuniao'?`${dgMoney(r.valorPago)}${r.teveDemanda?' · demandas':''}`:pl.length?pl.map(p=>`${['🥇','🥈','🥉'][p.pos-1]} ${esc(p.name)}`).join('<br>'):esc(String(r.result||'').slice(0,90))}</td><td class="n">${pl.length?dgMoney(pl.reduce((s,p)=>s+p.val,0)):'—'}</td><td>${r.status==='NAO_REALIZADO'?'<span class="dg-pill warn">NÃO REALIZADA</span>':'<span class="dg-pill ok">✓ REALIZADA</span>'}</td></tr>`}).join('')||'<tr><td colspan="7" class="mut">Nada registrado no período.</td></tr>'}</tbody></table></div></section>`;
+}
+function dgRelCsv(D){
+ const cab=['Data','Hora','Tipo','Atividade','Situação','1º lugar','2º lugar','3º lugar','Premiação total','Zona','Valor pago (reunião)','Demandas','Motivo (não realizada)','Registrado por'];
+ const linhas=D.L.map(r=>{const k=dgKind(r),pl=k==='evento'?dgPlaces(r):[],p=n=>pl.find(x=>x.pos===n)?.name||'';return [String(r.date).slice(0,10).split('-').reverse().join('/'),r.time||'',k,r.title||r.scheduleName||'',r.status==='NAO_REALIZADO'?'NÃO REALIZADA':'REALIZADA',p(1),p(2),p(3),pl.reduce((s,x)=>s+x.val,0)||'',r.zone||'',k==='reuniao'?(r.valorPago||''):'',r.demandas||'',r.reason||'',r.createdByName||'']});
+ org15Csv(`diario_${dgRel.per}_${dgIso(D.R.ini)}_${dgIso(D.R.fim)}.csv`,cab,linhas);
+}
+function dgRelPdf(D){
+ const sub=`${D.R.rot} • gerado pelo High OS a partir do Discord`,pags=[],ins=dgRelInsights(D);
+ pags.push(`<section class="pg">${rh15PrintTopo('Relatório do Diário Operacional',sub)}<div class="in"><div class="kp k4"><div><span>Atividades</span><b>${D.ok.length}</b><small>${D.nao.length} não realizada(s)</small></div><div class="ok"><span>Eventos</span><b>${D.ev.length}</b><small>${D.ranking.length} no pódio</small></div><div><span>Premiação paga</span><b>${dgMoney(D.premio)}</b><small>soma dos pódios</small></div><div><span>Reuniões • valor pago</span><b>${dgMoney(D.pago)}</b><small>${D.reu.length} reunião(ões)</small></div></div>
+ ${ins.length?`<div class="note" style="font-size:12px;line-height:1.7;margin:0 0 12px">${ins.map(t=>'• '+t).join('<br>')}</div>`:''}
+ <table><thead><tr><th>#</th><th>Organização</th><th class="n">1º</th><th class="n">2º</th><th class="n">3º</th><th class="n">Pontos</th><th class="n">Prêmios</th></tr></thead><tbody>${D.ranking.slice(0,14).map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.nome)}</b></td><td class="n">${r.v1}</td><td class="n">${r.v2}</td><td class="n">${r.v3}</td><td class="n"><b>${r.pontos}</b></td><td class="n">${dgMoney(r.valor)}</td></tr>`).join('')||'<tr><td colspan="7">Nenhum vencedor registrado.</td></tr>'}</tbody></table></div></section>`);
+ if(D.reu.length)for(let i=0;i<D.reu.length;i+=12)pags.push(`<section class="pg">${rh15PrintTopo('Reuniões dos Padrinhos',sub)}<div class="in"><table><thead><tr><th>Data</th><th>Reunião</th><th class="n">Valor pago</th><th>Demandas</th></tr></thead><tbody>${D.reu.slice(i,i+12).map(r=>`<tr><td>${String(r.date).slice(0,10).split('-').reverse().join('/')}</td><td><b>${esc(r.title||'Reunião')}</b></td><td class="n"><b>${dgMoney(r.valorPago)}</b></td><td>${r.teveDemanda?esc(r.demandas||''):'Sem demandas'}</td></tr>`).join('')}</tbody></table><p class="note">Total pago no período: <b>${dgMoney(D.pago)}</b></p></div></section>`);
+ for(let i=0;i<Math.max(1,D.L.length);i+=18)pags.push(`<section class="pg">${rh15PrintTopo('Eventos e atividades',sub)}<div class="in"><table><thead><tr><th>Data</th><th>Hora</th><th>Atividade</th><th>Resultado</th><th class="n">Prêmio</th><th>Situação</th></tr></thead><tbody>${D.L.slice(i,i+18).map(r=>{const k=dgKind(r),pl=k==='evento'?dgPlaces(r):[];return `<tr><td>${String(r.date).slice(0,10).split('-').reverse().join('/')}</td><td>${esc(r.time||'')}</td><td><b>${esc(r.title||r.scheduleName||'')}</b></td><td>${r.status==='NAO_REALIZADO'?esc(r.reason||'—'):k==='reuniao'?'Valor pago '+dgMoney(r.valorPago):pl.map(p=>p.pos+'º '+esc(p.name)).join(' · ')||esc(String(r.result||'').slice(0,80))}</td><td class="n">${pl.length?dgMoney(pl.reduce((s,p)=>s+p.val,0)):'—'}</td><td>${r.status==='NAO_REALIZADO'?'NÃO REALIZADA':'REALIZADA'}</td></tr>`}).join('')||'<tr><td colspan="6">Nada registrado.</td></tr>'}</tbody></table></div></section>`);
+ const total=pags.length;rh15PrintAbrir('Diário Operacional — '+D.R.rot,pags.map((p,i)=>p.replace(/<\/section>$/,rh15PrintRodape(i+1,total)+'</section>')).join(''));
+}
+let dgRelUltimo=null;
+async function dgRelRender(force=false){
+ const box=$('#dgMain');if(!box)return;
+ box.innerHTML=dgModoBar()+'<div class="dg-skeleton"><i></i><i></i><i></i><i></i></div>';
+ try{const rows=await dgRelCarregar(force);dgRelUltimo=dgRelDados(rows);box.innerHTML=dgModoBar()+dgRelHtml(dgRelUltimo)}
+ catch(e){box.innerHTML=dgModoBar()+`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message||String(e))}</p></div>`}
+}
+function dgModoBar(){return `<div class="dg-modo"><button type="button" data-dg-modo="dia" class="${dgModo==='dia'?'on':''}">📅 Dia</button><button type="button" data-dg-modo="rel" class="${dgModo==='rel'?'on':''}">📊 Relatórios</button></div>`}
+{const _r=dgRender;dgRender=function(){if(dgModo==='rel')return;_r();const box=$('#dgMain');if(box&&!box.querySelector('.dg-modo'))box.insertAdjacentHTML('afterbegin',dgModoBar())}}
+{const _l=loadOperationalDiary;loadOperationalDiary=async function(...a){if(dgModo==='rel')return dgRelRender(true);return _l.apply(this,a)}}
+document.addEventListener('click',e=>{
+ const m=e.target.closest?.('[data-dg-modo]');if(m){dgModo=m.dataset.dgModo;if(dgModo==='rel'){if(!dgRel.ref)dgRel.ref=$('#dgDate')?.value||diaryTodayIso();dgRelRender()}else{dgData=null;loadOperationalDiaryV146()}return}
+ const p=e.target.closest?.('[data-dgrel-per]');if(p){dgRel.per=p.dataset.dgrelPer;dgRelRender();return}
+ const mv=e.target.closest?.('[data-dgrel-mv]');if(mv){dgRelShift(+mv.dataset.dgrelMv);dgRelRender();return}
+ const ex=e.target.closest?.('[data-dgrel-exp]');if(ex&&dgRelUltimo){ex.dataset.dgrelExp==='pdf'?dgRelPdf(dgRelUltimo):dgRelCsv(dgRelUltimo)}
+});
+document.addEventListener('change',e=>{if(e.target?.id==='dgRelIni'||e.target?.id==='dgRelFim'){dgRel.ini=$('#dgRelIni')?.value||'';dgRel.fim=$('#dgRelFim')?.value||'';dgRelRender()}});
+{const _v=loadOperationalDiaryV146;loadOperationalDiaryV146=function(...a){if(dgModo==='rel')return dgRelRender(true);return _v.apply(this,a)}}

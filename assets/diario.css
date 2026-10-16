@@ -179,3 +179,46 @@
 .al-act button:hover{background:rgba(255,255,255,.08);color:#fff}
 .al-more{margin-top:8px;width:100%;padding:9px;border-radius:10px;border:1px dashed rgba(255,255,255,.15);background:transparent;color:#cfc8d8;font:700 12px "Chakra Petch",system-ui,sans-serif;letter-spacing:.05em;cursor:pointer}
 @media(max-width:720px){.al-main{grid-template-columns:8px minmax(0,1fr) auto}.al-main .al-g,.al-main .al-meta{display:none}}
+/* ===== V15.5 · Diário — relatórios ===== */
+#page-diario .dg-modo{display:inline-flex;gap:4px;padding:4px;border-radius:14px;background:var(--d-s);border:1px solid var(--d-l2);margin-bottom:14px}
+#page-diario .dg-modo button,#page-diario .dg-seg button{height:38px;padding:0 16px;border-radius:10px;border:0;background:transparent;color:var(--d-t2,#cfc8d8);font:700 14px "Chakra Petch",system-ui,sans-serif;cursor:pointer;transition:background .2s,color .2s}
+#page-diario .dg-modo button.on,#page-diario .dg-seg button.on{background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;box-shadow:0 6px 16px rgba(124,58,237,.35)}
+#page-diario .dg-rel-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;animation:dgUp .35s ease both}
+#page-diario .dg-seg{display:inline-flex;gap:3px;padding:4px;border-radius:12px;background:var(--d-s);border:1px solid var(--d-l2)}
+#page-diario .dg-per{display:flex;align-items:center;gap:8px;font-size:15px}
+#page-diario .dg-per b{font-family:"Chakra Petch",system-ui,sans-serif;font-size:17px;min-width:220px;text-align:center}
+#page-diario .dg-per button,#page-diario .dg-exp button{height:38px;min-width:38px;padding:0 12px;border-radius:10px;border:1px solid var(--d-l2);background:var(--d-s);color:#eee;font-weight:800;cursor:pointer}
+#page-diario .dg-per input{height:38px;border-radius:10px;border:1px solid var(--d-l2);background:var(--d-s);color:#fff;padding:0 10px;color-scheme:dark}
+#page-diario .dg-exp{margin-left:auto;display:flex;gap:6px}
+#page-diario .dg-exp button:hover,#page-diario .dg-per button:hover{border-color:#a855f7;background:rgba(168,85,247,.12)}
+#page-diario .dg-kpi b.sm{font-size:26px}
+#page-diario .dg-ins{margin:0;padding:4px 4px 2px 20px;display:grid;gap:7px;font-size:14.5px;line-height:1.5}
+#page-diario .dg-ins b{color:#fff}
+#page-diario .dg-rel-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+@media(max-width:1000px){#page-diario .dg-rel-grid{grid-template-columns:1fr}}
+#page-diario .dg-lg{display:inline-block;width:10px;height:10px;border-radius:3px;margin:0 4px 0 10px;vertical-align:-1px}
+#page-diario .dg-lg.ok{background:#22c55e}#page-diario .dg-lg.no{background:#f59e0b}
+#page-diario .dg-cols{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:4px;align-items:end;height:220px;padding:8px 4px 0}
+#page-diario .dg-col{display:flex;flex-direction:column;align-items:center;height:100%;min-width:0}
+#page-diario .dg-stack{flex:1;width:100%;max-width:38px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+#page-diario .dg-stack i{display:block;border-radius:5px;transform-origin:bottom;animation:dgGrow .6s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i)*25ms)}
+#page-diario .dg-stack i.ok{background:linear-gradient(180deg,#4ade80,#16a34a)}#page-diario .dg-stack i.no{background:linear-gradient(180deg,#fbbf24,#d97706)}
+#page-diario .dg-col em{font-style:normal;font-weight:800;font-size:12px;margin-top:4px;min-height:15px}
+#page-diario .dg-col small{font-size:10.5px;color:var(--d-t3,#9a92a8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+@keyframes dgGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+#page-diario .dg-rank{display:grid;gap:6px}
+#page-diario .dg-rk{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--d-l2);animation:dgUp .35s ease both;animation-delay:calc(var(--i)*35ms)}
+#page-diario .dg-rk .n{font:800 15px "Chakra Petch",system-ui,sans-serif;color:#c084fc;text-align:center}
+#page-diario .dg-rk:nth-child(1) .n{color:#facc15}#page-diario .dg-rk:nth-child(2) .n{color:#e5e7eb}#page-diario .dg-rk:nth-child(3) .n{color:#f59e0b}
+#page-diario .dg-rk b{font-size:14.5px}#page-diario .dg-rk small{display:block;font-size:12px;color:var(--d-t3,#9a92a8);margin-top:2px}
+#page-diario .dg-rk div i{display:block;height:4px;border-radius:4px;margin-top:6px;width:var(--w);background:linear-gradient(90deg,#7c3aed,#c084fc);animation:dgGrowX .7s ease both}
+@keyframes dgGrowX{from{width:0}}
+#page-diario .dg-rk strong{font:800 18px "Chakra Petch",system-ui,sans-serif}
+#page-diario .dg-tbl{overflow:auto}
+#page-diario .dg-tbl table{width:100%;border-collapse:collapse;font-size:14px}
+#page-diario .dg-tbl th{text-align:left;font-size:11.5px;letter-spacing:.08em;color:var(--d-t3,#9a92a8);padding:10px;border-bottom:1px solid var(--d-l2);white-space:nowrap}
+#page-diario .dg-tbl td{padding:10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+#page-diario .dg-tbl .n{text-align:right;white-space:nowrap}
+#page-diario .dg-tbl tr.nao td{opacity:.75}
+#page-diario .dg-tbl tr:hover td{background:rgba(168,85,247,.06)}
+#page-diario .mut{color:var(--d-t3,#9a92a8)}
