@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <title>High OS • Gestão do Ilegal</title>
-  <link rel="stylesheet" href="assets/style.css?v=12.9.4">
+  <link rel="stylesheet" href="assets/style.css?v=12.9.5">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'">
   <link rel="stylesheet" href="assets/mission-planner.css?v=12.18.0">
   <link rel="stylesheet" href="assets/mission-planner-nav.css?v=12.8.0">
@@ -102,7 +102,7 @@
       </aside>
       <div class="content">
         <section class="page active" id="page-dashboard">
-          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 15.5.0</span></div>
+          <div class="page-head"><div><div class="eyebrow">CENTRAL DE COMANDO DO ILEGAL</div><h2>DASHBOARD</h2><p class="page-subtitle">Visão operacional para identificar rapidamente ocupação, contingente, pendências e movimentações da Staff.</p></div><span class="dev-badge">DEV 15.5.1</span></div>
           <div id="commandDashboard" class="command-dashboard"><div class="placeholder"><b>◆</b><h3>CARREGANDO CENTRAL DE COMANDO</h3></div></div>
           <span id="dashEmail" class="hidden">—</span><span id="dashRole" class="hidden">—</span>
         </section>
@@ -521,7 +521,19 @@
 
           <div class="admin-tab-panel" data-admin-panel="groups">
             <div class="admin-group-card">
-              <div class="sheet-sync-head"><div><div class="eyebrow">PATRIMÔNIO • CADASTRO MESTRE</div><h3>GERENCIAR GROUPS / QGs</h3><p>Administre o cadastro permanente dos Groups: nome, segmento, QG, produto, ocupação, liderança, staff, coordenadas, anúncio e toda a estrutura técnica pelo editor completo.</p></div><span class="sheet-sync-badge online">ADMIN</span></div>
+              <div class="sheet-sync-head"><div><div class="eyebrow">PATRIMÔNIO • CADASTRO MESTRE</div><h3>GERENCIAR GROUPS / QGs</h3><p>Administre o cadastro permanente dos Groups: nome, segmento, QG, produto, ocupação, liderança, staff, coordenadas, anúncio e toda a estrutura técnica pelo editor completo.</p></div><div class="admin-group-head-actions"><span class="sheet-sync-badge online">ADMIN</span><button type="button" id="adminNewGroupBtn" class="btn-primary compact">+ NOVO GROUP</button></div></div>
+              <form id="adminNewGroupForm" class="admin-group-create hidden" autocomplete="off">
+                <div class="admin-group-create-top"><div><b>CADASTRAR NOVO GROUP</b><p>Cria uma nova posição vaga no cadastro mestre. A facção e a liderança serão vinculadas posteriormente, pela entrega.</p></div><button type="button" id="adminNewGroupClose" class="btn-secondary compact">FECHAR</button></div>
+                <div class="admin-group-create-grid">
+                  <label>Group <small>Identificador usado na cidade</small><input id="adminNewGroupName" name="group" maxlength="40" placeholder="Ex.: Armas05" required></label>
+                  <label>Segmento<select id="adminNewGroupSegment" name="segmento" required><option value="">SELECIONE O SEGMENTO</option></select></label>
+                  <label>QG / Favela <small>Opcional no cadastro inicial</small><input id="adminNewGroupQG" name="qg" maxlength="120" placeholder="Ex.: Favela do Vinhedo"></label>
+                  <label>Contingente mínimo<input id="adminNewGroupMin" name="min" type="number" min="0" max="500" step="1" value="15" required></label>
+                  <label>Contingente máximo<input id="adminNewGroupMax" name="max" type="number" min="0" max="500" step="1" value="28" required></label>
+                  <label class="admin-group-create-wide">Observações<textarea id="adminNewGroupObs" name="observacoes" rows="2" placeholder="Informações iniciais do Group (opcional)"></textarea></label>
+                </div>
+                <div class="admin-group-create-footer"><span>O novo Group será registrado como DISPONÍVEL, sem facção ocupante.</span><button type="button" id="adminNewGroupCancel" class="btn-secondary compact">CANCELAR</button><button type="submit" id="adminNewGroupSave" class="btn-primary compact">CADASTRAR GROUP</button></div>
+              </form>
               <div class="admin-group-toolbar"><input id="adminGroupSearch" placeholder="Buscar Group, QG, segmento ou facção..."><select id="adminGroupStatus"><option value="">TODOS</option><option value="ATIVA">OCUPADOS</option><option value="INATIVA">VAGOS</option></select></div>
               <div id="adminGroupStats" class="fac-stats compact-stats"></div>
               <div id="adminGroupList" class="admin-group-list"><div class="placeholder"><b>◆</b><h3>CARREGANDO GROUPS</h3></div></div>
@@ -895,7 +907,7 @@
   <script src="assets/mission-planner.js?v=12.18.0"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=15.5.0"></script>
+  <script type="module" src="assets/app.js?v=15.5.1"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
