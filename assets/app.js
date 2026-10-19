@@ -12212,6 +12212,76 @@ alert(`Group renomeado para ${next}.`);
 
  }catch(e){alert('Erro ao renomear Group: '+e.message)}
 }
+
+/* HIGH OS DEV 15.5.1 - Criar um Group vago sem alterar facções existentes.
+   O backend Discord é a fonte oficial do cadastro; /v1/factions persiste
+   o novo Group e o restante dos módulos lê essa mesma fonte. */
+function openAdminNewGroup(){
+ if(!isAdmin())return alert('Somente ADMIN pode cadastrar Groups.');
+ const panel=$('#adminNewGroupForm'),select=$('#adminNewGroupSegment');
+ if(!panel||!select)return;
+ const names=segmentNames();
+ select.innerHTML='<option value="">SELECIONE O SEGMENTO</option>'+names.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');
+ panel.reset();
+ panel.classList.remove('hidden');
+ $('#adminNewGroupName')?.focus();
+}
+function closeAdminNewGroup(){
+ $('#adminNewGroupForm')?.classList.add('hidden');
+ $('#adminNewGroupForm')?.reset();
+}
+async function createAdminNewGroup(event){
+ event.preventDefault();
+ if(!isAdmin())return alert('Somente ADMIN pode cadastrar Groups.');
+ const group=String($('#adminNewGroupName')?.value||'').trim(),
+ segmento=String($('#adminNewGroupSegment')?.value||'').trim(),
+ qg=String($('#adminNewGroupQG')?.value||'').trim(),
+ observacoes=String($('#adminNewGroupObs')?.value||'').trim(),
+ min=Number($('#adminNewGroupMin')?.value),
+ max=Number($('#adminNewGroupMax')?.value);
+ if(!/^[A-Za-z][A-Za-z0-9_-]{1,39}$/.test(group))return alert('Informe um Group válido (2 a 40 caracteres, sem espaços; ex.: Armas05).');
+ if(!segmento||!segmentNames().some(name=>segmentKey(name)===segmentKey(segmento)))return alert('Selecione um segmento cadastrado.');
+ if(!Number.isInteger(min)||!Number.isInteger(max)||min<0||max<1||max>500||min>max)return alert('Confira o contingente: valores inteiros, mínimo menor ou igual ao máximo (1 a 500).');
+ if(faccoes.some(f=>String(f.group||'').toLowerCase()===group.toLowerCase()))return alert('Este Group já está cadastrado.');
+ const save=$('#adminNewGroupSave');
+ if(save?.disabled)return;
+ if(save){save.disabled=true;save.textContent='CADASTRANDO...'}
+ let created=false;
+ try{
+  // Verificação remota evita sobrescrever um Group criado por outro admin.
+  const latest=await highOsDiscordRequest('/v1/factions');
+  if((latest.records||[]).some(f=>String(f.group||'').toLowerCase()===group.toLowerCase()))return alert('Este Group já existe no cadastro. Atualize a lista.');
+  await setDoc(doc(db,'highos','data','faccoes',group),{
+   group,segmento,qg,status:'DISPONIVEL',faccao:'',lider:'',staff:'',
+   dataEntrega:'',contingenteMin:min,contingenteMax:max,observacoes
+  });
+  created=true;
+  try{
+   await addDoc(histCol,{sessionId:currentSessionId||'',tipo:'CADASTRO_GROUP',
+    group,descricao:`Novo Group ${group} cadastrado como disponível (${segmento})`,
+    segmento,usuario:currentUser.email,data:serverTimestamp()});
+  }catch(auditError){console.warn('[GROUP] Cadastro realizado; não foi possível registrar a auditoria:',auditError)}
+  $('#adminGroupSearch').value='';
+  $('#adminGroupStatus').value='';
+  closeAdminNewGroup();
+  try{await loadFaccoes()}catch(refreshError){
+   console.warn('[GROUP] Criado com sucesso, mas a atualização da lista falhou:',refreshError);
+   faccoes.push({id:group,group,segmento,qg,status:'INATIVA',faccao:'',lider:'',staff:'',contingenteMin:min,contingenteMax:max,observacoes});
+   renderFaccoes();renderAvailableFaccoes();renderOrganizations();
+  }
+  renderAdminGroupManager();
+  alert(`Group ${group} cadastrado com sucesso como DISPONÍVEL. Você já pode abrir EDITAR COMPLETO para configurar seu perfil.`);
+ }catch(error){
+  alert((created?'Group criado, mas ocorreu uma falha na atualização: ':'Erro ao cadastrar Group: ')+(error?.message||error));
+ }finally{
+  if(save){save.disabled=false;save.textContent='CADASTRAR GROUP'}
+ }
+}
+$('#adminNewGroupBtn')?.addEventListener('click',openAdminNewGroup);
+$('#adminNewGroupClose')?.addEventListener('click',closeAdminNewGroup);
+$('#adminNewGroupCancel')?.addEventListener('click',closeAdminNewGroup);
+$('#adminNewGroupForm')?.addEventListener('submit',createAdminNewGroup);
+
 $('#adminGroupSearch')?.addEventListener('input',renderAdminGroupManager);
 $('#adminGroupStatus')?.addEventListener('change',renderAdminGroupManager);
 
