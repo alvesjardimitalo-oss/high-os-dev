@@ -25,6 +25,7 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
+import { syncBlipsCoordinates } from './modules/blips-sheet-sync.js?v=1.0.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.0';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
@@ -11082,10 +11083,23 @@ facSheetRenderStatus('online','Alterações da planilha confirmadas e aplicadas 
 alert('High OS atualizado com os dados confirmados da planilha.')}catch(e){alert('Erro ao aplicar alterações: '+e.message)}finally{if(btn){btn.disabled=false;
 btn.textContent='CONFIRMAR E ATUALIZAR HIGH OS'}}
 }
+async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true}={}){
+ if(!facSheetAccessToken)return false;
+ try{
+  const result=await syncBlipsCoordinates({token:facSheetAccessToken,groups:rows,onlyMissing});
+  if(result.created)console.info('[BLIPS COORDENADAS] '+result.created+' quadro(s) cadastrado(s) na categoria correta.');
+  return true;
+ }catch(error){
+  console.warn('[BLIPS COORDENADAS] Falha de sincronização:',error);
+  if(!quiet)alert('Não foi possível atualizar a aba BLIPS COORDENADAS: '+(error?.message||error));
+  return false;
+ }
+}
 async function syncGroupsToOfficialSheet(groups=[],{quiet=false,
 forceAuthorize=false}={}){
  const clean=groups.filter(Boolean);
 if(!clean.length)return true;
+await syncBlipsGroups(clean,{quiet:true});
 let token=facSheetAccessToken;
 if(!token&&forceAuthorize)token=await facSheetAuthorize();
 if(!token){facSheetRenderStatus('warn','High OS salvo. Conecte o Google Sheets para enviar as alterações pendentes à planilha.');
@@ -11131,11 +11145,19 @@ data:serverTimestamp()});
 alert('Planilha atualizada com a base atual do High OS.')}}catch(e){alert('Erro ao enviar a base: '+e.message)}finally{if(btn){btn.disabled=false;
 btn.textContent='ENVIAR HIGH OS → PLANILHA'}}
 }
-$('#facSheetConnectBtn')?.addEventListener('click',async()=>{try{await facSheetAuthorize();await facSheetReadAll();facSheetSetLastCheck();alert('Google Sheets conectado com permissão de edição. A sincronização automática do High OS → planilha está ativa nesta sessão.')}catch(e){facSheetRenderStatus('offline','Falha ao conectar: '+e.message);alert('Não foi possível conectar a planilha: '+e.message)}});
+$('#facSheetConnectBtn')?.addEventListener('click',async()=>{try{await facSheetAuthorize();await facSheetReadAll();await syncBlipsGroups(faccoes,{onlyMissing:true,quiet:true});facSheetSetLastCheck();alert('Google Sheets conectado. A aba BLIPS COORDENADAS foi conferida e os Groups ausentes foram incluídos por segmento.')}catch(e){facSheetRenderStatus('offline','Falha ao conectar: '+e.message);alert('Não foi possível conectar a planilha: '+e.message)}});
 
 $('#facSheetCheckBtn')?.addEventListener('click',facSheetCheckForChanges);
 
 $('#facSheetPushAllBtn')?.addEventListener('click',facSheetPushAll);
+$('#blipsSyncAllBtn')?.addEventListener('click',async()=>{
+ if(!isAdmin())return;
+ try{
+  if(!facSheetAccessToken)await facSheetAuthorize();
+  const success=await syncBlipsGroups(faccoes,{onlyMissing:false,quiet:false});
+  if(success)alert('BLIPS COORDENADAS sincronizada: Groups organizados por segmento, com os dados cadastrados no High OS.');
+ }catch(e){alert('Erro ao sincronizar BLIPS COORDENADAS: '+(e?.message||e));}
+});
 
 $('#facSheetDiffClose')?.addEventListener('click',()=>$('#facSheetDiffModal')?.classList.add('hidden'));
 
@@ -11482,6 +11504,7 @@ updatedBy:currentUser?.email||''},{merge:true});
  }else{
    techDraft=clonePlain(perfilTecnico);
  }
+ await syncBlipsGroups([{...(local||{group}),perfilTecnico}],{quiet:true});
  return clonePlain(perfilTecnico);
 
 }
@@ -12370,6 +12393,7 @@ async function createAdminNewGroup(event){
    renderFaccoes();renderAvailableFaccoes();renderOrganizations();
   }
   renderAdminGroupManager();
+  await syncBlipsGroups([faccoes.find(f=>String(f.group).toLowerCase()===group.toLowerCase())||{group,segmento,qg}],{quiet:true});
   alert(`Group ${group} cadastrado com sucesso como DISPONÍVEL. Você já pode abrir EDITAR COMPLETO para configurar seu perfil.`);
  }catch(error){
   alert((created?'Group criado, mas ocorreu uma falha na atualização: ':'Erro ao cadastrar Group: ')+(error?.message||error));
