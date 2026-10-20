@@ -288,3 +288,19 @@
 .rh15-wh-chart .hb.grow{transform-box:fill-box;transform-origin:bottom;animation:rh15Grow .6s cubic-bezier(.2,.8,.2,1) both}
 @keyframes rh15Grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 .rh15-wh td.wait{color:#8d849c}
+
+/* Gerador de TXT por facções assumidas · Central RH */
+#page-metricas .rh15-txt-card{margin-bottom:16px;border-color:rgba(154,77,255,.36);background:linear-gradient(145deg,rgba(154,77,255,.07),transparent 55%),var(--r-surface)}
+#page-metricas .rh15-txt-card>header{align-items:center}
+#page-metricas .rh15-txt-card>header div{display:flex;flex-direction:column;gap:3px}
+#page-metricas .rh15-txt-card>p{margin:10px 0 14px;color:var(--r-text-3);font-size:12px;line-height:1.6}
+#page-metricas .rh15-txt-card strong{color:var(--r-text)}
+#page-metricas .rh15-txt-count{display:inline-flex;align-items:center;background:rgba(154,77,255,.14);border:1px solid rgba(154,77,255,.22);border-radius:30px;padding:6px 10px;color:#d6b7ff;font-size:11px;font-weight:800;white-space:nowrap}
+#page-metricas .rh15-txt-controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
+#page-metricas .rh15-txt-controls .rh15-select{flex:1 1 260px;min-width:0}
+#page-metricas .rh15-txt-controls .rh15-select select{width:100%}
+#page-metricas .rh15-txt-controls .rh15-btn{min-height:40px}
+#page-metricas .rh15-txt-status{margin:12px 0 8px;color:var(--r-text-3);font-size:11px;line-height:1.5}
+#page-metricas .rh15-txt-preview{width:100%;min-height:195px;resize:vertical;box-sizing:border-box;border-radius:10px;border:1px solid var(--r-line);background:rgba(7,5,13,.55);color:var(--r-text);padding:14px;font:12px/1.55 Consolas,'Courier New',monospace;white-space:pre;tab-size:4}
+#page-metricas .rh15-txt-preview:focus{outline:1px solid #9a4dff}
+@media(max-width:600px){#page-metricas .rh15-txt-controls .rh15-btn{flex:1 1 auto}}
