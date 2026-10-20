@@ -12157,6 +12157,7 @@ IlegalMedic01:'APOIO',
 IlegalMedic1:'APOIO',
 IlegalMedic2:'APOIO',
 IlegalMechanic01:'APOIO',
+IlegalMechanic02:'APOIO',
 IlegalMecanic01:'APOIO'};
 const needs=faccoes.filter(f=>rules[f.group]&&segmentKey(f.segmento)!==segmentKey(rules[f.group]));
 if(!needs.length)return;
