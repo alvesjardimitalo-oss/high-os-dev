@@ -15460,7 +15460,7 @@ const rh15Meta=()=>{const a=Math.max(1,+rh15.metaMin||15),b=Math.max(a,+rh15.met
 const rh15MetaTxt=()=>{const m=rh15Meta();return m.min===m.max?`${m.max}`:`${m.min} a ${m.max}`};
 rh15.rep={agrupar:'grafico',ex:true,fac:'',...(rh15.rep||{})};
 if(!rh15.v144){rh15.rep.agrupar='grafico';rh15.v144=1}
-const rh15Salvar=()=>rh15LS.set(RH15_KEY,{tab:rh15.tab,per:rh15.per,ini:rh15.ini,fim:rh15.fim,seg:rh15.seg,heatSlot:rh15.heatSlot,fac:rh15.fac,ord:rh15.ord,v144:rh15.v144,painelFac:rh15.painelFac,metaMin:rh15.metaMin,metaMax:rh15.metaMax,rep:rh15.rep});
+const rh15Salvar=()=>rh15LS.set(RH15_KEY,{tab:rh15.tab,per:rh15.per,ini:rh15.ini,fim:rh15.fim,seg:rh15.seg,heatSlot:rh15.heatSlot,fac:rh15.fac,ord:rh15.ord,v144:rh15.v144,painelFac:rh15.painelFac,metaMin:rh15.metaMin,metaMax:rh15.metaMax,txtGroup:rh15.txtGroup,rep:rh15.rep});
 
 /* ---------- utilidades ---------- */
 const rh15K=s=>alvesNorm(s).replace(/[^a-z0-9]/g,'');
@@ -15769,9 +15769,129 @@ function rh15RelGraficos(B,L){
 <p class="rh15-hint">Cada barra é o pico do dia. A linha liga os picos e mostra a constância; a faixa verde é a meta de ${rh15MetaTxt()} e a linha tracejada é a média. Barra amarela = abaixo da meta.</p>
 ${mostrar.length?mostrar.map(e=>rh15CardMes(dias,e)).join(''):rh15Vazio('Sem coletas no período','')}`;
 }
+function rh15TxtAssumidas() {
+  const dedup = new Map();
+  (RH15_FACCOES() || []).filter(f => f && !f.removido && situacaoGroup(f) === 'ASSUMIDA' && String(f.group || '').trim()).forEach(f => {
+    const k = org15GK(f.group);
+    const old = dedup.get(k);
+    if (!old || (msDe(f.dataEntrega) || 0) > (msDe(old.dataEntrega) || 0)) dedup.set(k, f);
+  });
+  return [...dedup.values()].filter(f =>
+    (!rh15.seg || String(f.segmento || orgV92Segment(f)).toUpperCase() === rh15.seg)
+  ).sort((a,b) =>
+    String(a.segmento || orgV92Segment(a)).localeCompare(String(b.segmento || orgV92Segment(b)), 'pt-BR') ||
+    String(a.group).localeCompare(String(b.group), 'pt-BR', {numeric:true})
+  );
+}
+
+function rh15TxtMontar(B) {
+  const todos = rh15TxtAssumidas();
+  const escolhidos = todos.filter(f => !rh15.txtGroup || org15GK(f.group) === org15GK(rh15.txtGroup));
+  if (!escolhidos.length) throw new Error('Não há facção assumida para o Group/segmento selecionado.');
+  if (!(RH15_METRICAS() || []).length) throw new Error('Ainda não há métricas carregadas. Atualize a Central de Métricas.');
+  const dias = B.dias, horarios = ['14H', '16H', '21H', '23H'];
+  if (!dias.length) throw new Error('Selecione um período válido.');
+  if (dias.length > 366) throw new Error('Escolha um intervalo de até 366 dias.');
+  const nomes = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const mapa = new Map(B.lista.filter(e => !e.ex).map(e => [rh15K(e.faccao)+'|'+org15GK(e.group), e]));
+  let registradas = 0, previstas = 0;
+  const linhas = [
+    'HIGH ROLEPLAY - RELATÓRIO DE CONTINGENTE ONLINE',
+    'FACÇÕES ASSUMIDAS - HIGH OS DEV',
+    'PERÍODO: ' + rh15Br(dias[0]) + ' A ' + rh15Br(dias[dias.length - 1]),
+    'FACÇÕES NO RELATÓRIO: ' + escolhidos.length,
+    'HORÁRIOS: 14h, 16h, 21h, 23h',
+    'Legenda: — = sem registro ou horário anterior à ocupação atual; 0 = coleta zerada.',
+    'Média geral calculada somente sobre as coletas registradas.',
+    '='.repeat(64), ''
+  ];
+  escolhidos.forEach(f => {
+    const e = mapa.get(rh15K(f.faccao)+'|'+org15GK(f.group));
+    const inicio = msDe(f.dataEntrega);
+    const valores = [];
+    const diarias = [];
+    linhas.push('GROUP: ' + String(f.group).toUpperCase() + ' | FACÇÃO: ' + String(f.faccao).trim());
+    linhas.push('Dia           | 14h | 16h | 21h | 23h');
+    linhas.push('-------------------------------------');
+    dias.forEach(d => {
+      const data = rh15DK(d), slots = e?.dias?.get(data)?.slots || {};
+      const cells = horarios.map(h => {
+        const instante = new Date(d.getFullYear(), d.getMonth(), d.getDate(), Number(h.slice(0,2)));
+        const v = slots[h];
+        if ((Number.isFinite(inicio) && instante.getTime() < inicio) ||
+            v === undefined || v === null || v === '' || !Number.isFinite(Number(v))) return null;
+        return Number(v);
+      });
+      diarias.push(cells);
+      cells.filter(v => v !== null).forEach(v => valores.push(v));
+      linhas.push(nomes[d.getDay()].padEnd(7) + ' ' + rh15Dm(d) + ' | ' +
+        cells.map(v => String(v === null ? '—' : v).padStart(3)).join(' | '));
+    });
+    const total = valores.length, esperado = dias.length * horarios.length;
+    registradas += total; previstas += esperado;
+    linhas.push('-------------------------------------');
+    linhas.push('MÉDIA GERAL (' + total + ' COLETAS): ' +
+      (total ? (valores.reduce((a,b) => a+b,0)/total).toFixed(2).replace('.',',') : '—') + ' membros online');
+    linhas.push('PICO DO PERÍODO: ' + (total ? Math.max(...valores) : '—') + ' membros online');
+    linhas.push('COLETAS REGISTRADAS: ' + total + '/' + esperado);
+    if (f.dataEntrega) linhas.push('DATA QUE ASSUMIU: ' + String(f.dataEntrega));
+    linhas.push('', '');
+  });
+  linhas.push('='.repeat(64));
+  linhas.push('RESUMO: ' + escolhidos.length + ' facção(ões) assumida(s); ' +
+    registradas + '/' + previstas + ' coletas registradas.');
+  linhas.push('FONTE: Central de Métricas do High OS Dev e cadastro atual de Groups.');
+  return {texto:linhas.join('\r\n'), total:escolhidos.length, registradas, previstas};
+}
+
+function rh15TxtPainel(B) {
+  const facs = rh15TxtAssumidas();
+  const opcoes = facs.map(f => `<option value="${esc(f.group)}" ${org15GK(f.group)===org15GK(rh15.txtGroup)?'selected':''}>${esc(f.group)} — ${esc(f.faccao)}</option>`).join('');
+  return `<section class="rh15-card rh15-txt-card">
+  <header><div><b>RELATÓRIO TXT • FACÇÕES ASSUMIDAS</b><small>Contingente online por Group, dia e horário • médias e picos</small></div>
+  <span class="rh15-txt-count">${facs.length} assumida(s)</span></header>
+  <p>Utiliza o <strong>período selecionado acima</strong> (inclusive o intervalo personalizado). Somente Groups com situação ASSUMIDA no cadastro atual; não inclui disponíveis ou sem QG.</p>
+  <div class="rh15-txt-controls">
+    <label class="rh15-select"><span>FACÇÕES</span><select id="rh15TxtGroup" aria-label="Facção para relatório TXT"><option value="">TODAS AS ASSUMIDAS</option>${opcoes}</select></label>
+    <button type="button" class="rh15-btn" id="rh15TxtPreviewBtn">GERAR PRÉVIA</button>
+    <button type="button" class="rh15-btn primary" id="rh15TxtDownloadBtn">BAIXAR TXT</button>
+    <button type="button" class="rh15-btn" id="rh15TxtCopyBtn">COPIAR TEXTO</button>
+  </div>
+  <div id="rh15TxtStatus" class="rh15-txt-status" role="status">Período: ${esc(B.r.rotulo)} • Sem coleta = — • Coleta com zero = 0.</div>
+  <textarea id="rh15TxtPreview" class="rh15-txt-preview" readonly spellcheck="false" rows="13" aria-label="Prévia do relatório TXT" placeholder="Clique em GERAR PRÉVIA para visualizar o relatório no padrão do Bloco de Notas."></textarea>
+  </section>`;
+}
+
+function rh15TxtBaixar(B) {
+  const rel = rh15TxtMontar(B);
+  const blob = new Blob(['\ufeff',rel.texto], {type:'text/plain;charset=utf-8'});
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = 'relatorio_faccoes_assumidas_' + rh15DK(B.r.ini) + '_a_' + rh15DK(B.r.fim) + '.txt';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  return rel;
+}
+
+async function rh15TxtCopiar(B) {
+  const rel = rh15TxtMontar(B);
+  if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(rel.texto);
+  else {
+    const textarea = document.getElementById('rh15TxtPreview');
+    if (!textarea) throw new Error('Prévia indisponível.');
+    textarea.value = rel.texto;
+    textarea.select();
+    if (!document.execCommand('copy')) throw new Error('Não foi possível copiar para a área de transferência.');
+  }
+  return rel;
+}
+
 function rh15Relatorio(B){
  const cfg=rh15.rep,graf=cfg.agrupar==='grafico',T=graf?null:rh15RelTabela(B,rh15RelLista(B,cfg),cfg);
- return `<div class="rh15-presets"><span>MODELOS PRONTOS</span>
+ return `${rh15TxtPainel(B)}<div class="rh15-presets"><span>MODELOS PRONTOS</span>
 <button type="button" data-rh15-preset="grafico-mensal">Gráfico mensal por facção</button><button type="button" data-rh15-preset="mensal-faccao">Resumo por facção</button><button type="button" data-rh15-preset="mensal-segmento">Mensal por segmento</button><button type="button" data-rh15-preset="mensal-group">Mensal por Group</button><button type="button" data-rh15-preset="picos-diarios">Picos diários (facção × dia)</button><button type="button" data-rh15-preset="horarios">Movimento por horário</button><button type="button" data-rh15-preset="semana">Dia da semana</button><button type="button" data-rh15-preset="ilegal-dia">Total do Ilegal por dia</button></div>
 <div class="rh15-subbar"><label class="rh15-select"><span>AGRUPAR POR</span><select id="rh15RepAgrupar">${RH15_AGRUP.map(([v,l])=>`<option value="${v}" ${cfg.agrupar===v?'selected':''}>${l}</option>`).join('')}</select></label>
 <label class="rh15-check"><input type="checkbox" id="rh15RepEx" ${cfg.ex?'checked':''}> Incluir facções que saíram do Group</label>
@@ -15983,6 +16103,15 @@ function rh15Render(){
  host.querySelector('#rh15RepAgrupar')?.addEventListener('change',e=>{rh15.rep.agrupar=e.target.value;rh15Salvar();rh15Render()});
  host.querySelector('#rh15RepFac')?.addEventListener('change',e=>{rh15.rep.fac=e.target.value;rh15Salvar();rh15Render()});
  host.querySelector('#rh15RepEx')?.addEventListener('change',e=>{rh15.rep.ex=e.target.checked;rh15Salvar();rh15Render()});
+ host.querySelector('#rh15TxtGroup')?.addEventListener('change', e=>{rh15.txtGroup=e.target.value;rh15Salvar();rh15Render()});
+ const txtStatus=host.querySelector('#rh15TxtStatus');
+ const txtPreview=host.querySelector('#rh15TxtPreview');
+ const txtStatusOK=(r,acao)=>{if(txtPreview)txtPreview.value=r.texto;if(txtStatus)txtStatus.textContent=acao+' • '+r.total+' facção(ões) • '+r.registradas+'/'+r.previstas+' coletas registradas.'};
+ const txtStatusErro=e=>{if(txtStatus)txtStatus.textContent='Não foi possível gerar o TXT: '+(e?.message||e)};
+ host.querySelector('#rh15TxtPreviewBtn')?.addEventListener('click',()=>{try{txtStatusOK(rh15TxtMontar(B),'PRÉVIA GERADA')}catch(e){txtStatusErro(e)}});
+ host.querySelector('#rh15TxtDownloadBtn')?.addEventListener('click',()=>{try{txtStatusOK(rh15TxtBaixar(B),'TXT BAIXADO')}catch(e){txtStatusErro(e)}});
+ host.querySelector('#rh15TxtCopyBtn')?.addEventListener('click',async()=>{try{txtStatusOK(await rh15TxtCopiar(B),'TEXTO COPIADO')}catch(e){txtStatusErro(e)}});
+
  const presets={'grafico-mensal':'grafico','mensal-faccao':'faccao','mensal-segmento':'segmento','mensal-group':'group','picos-diarios':'faccaodia','horarios':'horario','semana':'semana','ilegal-dia':'dia'};
  host.querySelectorAll('[data-rh15-preset]').forEach(b=>b.onclick=()=>{const p=b.dataset.rh15Preset;rh15.rep.agrupar=presets[p];if((p.startsWith('mensal')||p==='grafico-mensal')&&!String(rh15.per).startsWith('mes:'))rh15.per='mes:atual';rh15Salvar();rh15Render()});
 }
