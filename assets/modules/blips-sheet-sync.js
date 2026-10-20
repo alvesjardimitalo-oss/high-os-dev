@@ -9,7 +9,7 @@ const GROUP_COLS=Array.from({length:11},(_,i)=>6+i*7);
 const TEMPLATE_START=33; // linha 34: Munição (modelo visual)
 const TEMPLATE_ROWS=20;
 
-function plain(v){return String(v==null?"":v).trim();}
+function plain(v){if(v==null||typeof v==="boolean"||typeof v==="object")return "";return String(v).trim();}
 function fold(v){
  return plain(v).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/[^A-Z0-9]/g,"");
 }
@@ -48,15 +48,15 @@ function valuesFor(f){
   LOCAL:first(op.localizacao?.nome,f.qg),
   PRODUTO:first(f.produto),
   COORDENADA:first(op.localizacao?.cdsPrincipal,f.cds),
-  INICIARROTA:first(t.rota?.inicio,b.iniciarRota,b.rotaInicio,t.farm?.cds,b.farm),
+  INICIARROTA:first(t.rota?.inicio,b.iniciarRota,b.rotaInicio,f.perfilFonte?.["INICIAR ROTA"]),
   CRAFT:first(t.craft?.cds,b.craft),
   BARBEARIA:first(op.barbearia?.cds,b.barbearia),
-  BAU:first(op.bau?.cds,b.bau,b.bauCds,fromExtra.bau),
-  LOJADEROUPAS:first(op.roupas?.cds,b.lojaRoupas),
+  BAU:first(op.bau?.cds,b.bau,b.bauCds,fromExtra.bau,f.perfilFonte?.BAU),
+  LOJADEROUPAS:first(op.roupas?.cds,b.lojaRoupas,f.perfilFonte?.["LOJA DE ROUPAS"]),
   GARAGEMVIPFAC:first(joinPairs(garage("FACCAO")),pair({blip:b.garagemVipBlip,spawn:b.garagemVipSpawn})),
   GARAGEMPUBLICA:first(joinPairs(garage("PUBLICA").concat(garage("PUBLICA2"))),pair({blip:b.garagemPublicaBlip,spawn:b.garagemPublicaSpawn})),
-  GARAGEMDELUXE:first(joinPairs(garage("SERVICO")),b.garagemDeluxeBlip,b.garagemDeluxe),
-  SHOPDELUXE:first(op.lojaFac?.cds,b.shopDeluxe),
+  GARAGEMDELUXE:first(joinPairs(garage("SERVICO")),b.garagemDeluxeBlip,b.garagemDeluxe,f.perfilFonte?.["GARAGEM DELUXE"]),
+  SHOPDELUXE:first(op.lojaFac?.cds,b.shopDeluxe,f.perfilFonte?.["SHOP DELUXE"]),
   SHOPEXCLUSIVO:first(op.lojaFac?.cds,b.shopExclusivo,b.shopDeluxe),
   ACADEMIA:first(b.academia),
   BAR:first(op.bar?.cds,fromExtra.bar),
