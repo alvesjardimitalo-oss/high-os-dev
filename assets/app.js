@@ -10949,7 +10949,7 @@ token=cred?.accessToken;
  if(!token)throw new Error('O Google não retornou autorização de edição da planilha.');
 facSheetAccessToken=token;
 facSheetRenderStatus('online','Google Sheets conectado. Alterações feitas no High OS serão enviadas automaticamente.');
-await facSheetResolveTitle(token);
+try{await facSheetResolveTitle(token)}catch(e){console.warn('[PLANILHAS] Documento das Facções indisponível; BLIPS COORDENADAS pode continuar normalmente:',e)}
 return token;
 
 }
@@ -11091,6 +11091,7 @@ async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true}={}){
   return true;
  }catch(error){
   console.warn('[BLIPS COORDENADAS] Falha de sincronização:',error);
+  if(/HTTP (401|403)|unauthorized|invalid authentication credentials/i.test(String(error?.message||error)))facSheetAccessToken='';
   if(!quiet)alert('Não foi possível atualizar a aba BLIPS COORDENADAS: '+(error?.message||error));
   return false;
  }
@@ -11145,7 +11146,11 @@ data:serverTimestamp()});
 alert('Planilha atualizada com a base atual do High OS.')}}catch(e){alert('Erro ao enviar a base: '+e.message)}finally{if(btn){btn.disabled=false;
 btn.textContent='ENVIAR HIGH OS → PLANILHA'}}
 }
-$('#facSheetConnectBtn')?.addEventListener('click',async()=>{try{await facSheetAuthorize();await facSheetReadAll();await syncBlipsGroups(faccoes,{onlyMissing:true,quiet:true});facSheetSetLastCheck();alert('Google Sheets conectado. A aba BLIPS COORDENADAS foi conferida e os Groups ausentes foram incluídos por segmento.')}catch(e){facSheetRenderStatus('offline','Falha ao conectar: '+e.message);alert('Não foi possível conectar a planilha: '+e.message)}});
+$('#facSheetConnectBtn')?.addEventListener('click',async()=>{try{await facSheetAuthorize();
+const blipsOk=await syncBlipsGroups(faccoes,{onlyMissing:true,quiet:false});
+try{await facSheetReadAll()}catch(e){console.warn('[PLANILHAS] Documento das Facções indisponível:',e)}
+facSheetSetLastCheck();
+if(blipsOk)alert('Google Sheets conectado. A aba BLIPS COORDENADAS foi conferida e os Groups ausentes foram incluídos na categoria correta.')}catch(e){facSheetRenderStatus('offline','Falha ao conectar: '+e.message);alert('Não foi possível conectar a planilha: '+e.message)}});
 
 $('#facSheetCheckBtn')?.addEventListener('click',facSheetCheckForChanges);
 
