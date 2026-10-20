@@ -1646,7 +1646,7 @@ async function loadFaccoes(){
    if(String(currentProfile?.role||'').toUpperCase()==='ADMIN'){
     try{
      const result=await persistirSolicitacaoMecanicas20261019(qs.docs);
-     if(result.updated)currentSnapshot=await getDocs(facCol);
+     if(result.updated)currentSnapshot=await getDocsCached(facCol,'faccoes',{ttl:0});
     }catch(err){console.warn('[MECÂNICAS] Cadastro pendente:',err?.message||err)}
    }
    faccoes=currentSnapshot.docs.map(d=>({id:d.id,...d.data()}));
@@ -9276,51 +9276,40 @@ const MECHANIC02_REQUEST_CONFIG_20261019={
 };
 
 // As receitas das mecânicas agora pertencem ao cadastro salvo de cada Group.
-// Migração única da solicitação de 19/10/2026 para o CADASTRO das mecânicas.
-// Respeita permissões ADMIN e não cria Groups ausentes nem toca em outros campos.
+// Migração única da solicitação de 19/10/2026 para o cadastro CANÔNICO
+// no Discord/Railway. Só uma sessão autorizada ADMIN pode realizar a gravação.
+// Nunca cria Groups ausentes e não reverte edições posteriores à migração.
 async function persistirSolicitacaoMecanicas20261019(docs=[]){
  if(String(currentProfile?.role||'').toUpperCase()!=='ADMIN'||!currentUser)return {updated:false};
- const refs=['IlegalMechanic02','IlegalMechanic01'].map(group=>{
-  const row=docs.find(d=>String(d.data()?.group||d.id)===group);
-  return row?{group,ref:row.ref}:null;
- }).filter(Boolean);
- if(!refs.length)return {updated:false};
+ const groups=['IlegalMechanic02','IlegalMechanic01'].filter(group=>
+  docs.some(d=>String(d.data()?.group||d.id).toLowerCase()===group.toLowerCase()));
+ if(!groups.length)return {updated:false};
  let updated=false;
- await runTransaction(db,async tx=>{
-  // Todas as leituras precedem as gravações (regra das transações Firestore).
-  const snaps=await Promise.all(refs.map(x=>tx.get(x.ref)));
-  for(let i=0;i<refs.length;i++){
-   const {group,ref}=refs[i],snap=snaps[i];
-   if(!snap.exists())continue;
-   const old=snap.data()||{};
-   // Evita reverter futuras edições manuais ao perfil.
-   if(old.solicitacaoMecanica20261019===true)continue;
-   const p=old.perfilTecnico||{},c=p.craft||{},f=p.farm||{};
-   const receitas=mergeRecipeLists(Array.isArray(c.receitas)?c.receitas:[],MECHANIC_REQUEST_RECIPES_20261019);
-   const perfilTecnico={...p,craft:{...c,ativo:true,receitas}};
-   const patch={perfilTecnico,solicitacaoMecanica20261019:true,updatedAt:serverTimestamp(),updatedBy:currentUser.email};
-   if(group==='IlegalMechanic02'){
-    const cfg=MECHANIC02_REQUEST_CONFIG_20261019;
-    const farmItems=new Map((Array.isArray(f.itens)?f.itens:[]).map(x=>[String(x.spawn||'').toLowerCase(),{...x}]));
-    for(const spawn of cfg.itensFarm){
-     const prev=farmItems.get(spawn)||{};
-     farmItems.set(spawn,{...prev,spawn,nome:ITEM_META[spawn]?.nome||prev.nome||spawn,
+ for(const group of groups){
+  // Consulta sempre o registro vivo antes de fazer patch (cache pode estar antigo).
+  const result=await highOsDiscordRequest('/v1/factions/'+encodeURIComponent(group));
+  const old=result.record||{};
+  if(old.solicitacaoMecanica20261019===true)continue;
+  const p=old.perfilTecnico||{},c=p.craft||{},f=p.farm||{};
+  const receitas=mergeRecipeLists(Array.isArray(c.receitas)?c.receitas:[],MECHANIC_REQUEST_RECIPES_20261019);
+  const perfilTecnico={...p,craft:{...c,ativo:true,receitas}};
+  const patch={perfilTecnico,solicitacaoMecanica20261019:true};
+  if(group==='IlegalMechanic02'){
+   const cfg=MECHANIC02_REQUEST_CONFIG_20261019;
+   const items=new Map((Array.isArray(f.itens)?f.itens:[]).map(x=>[String(x.spawn||'').toLowerCase(),{...x}]));
+   for(const spawn of cfg.itensFarm){
+    const prev=items.get(spawn)||{};
+    items.set(spawn,{...prev,spawn,nome:ITEM_META[spawn]?.nome||prev.nome||spawn,
       imagem:ITEM_META[spawn]?.imagem||prev.imagem||'',qtd:cfg.faixaFarm,
       detalhe:'Coleta de '+cfg.faixaFarm+' unidades',origem:'FARM DA SOLICITAÇÃO'});
-    }
-    perfilTecnico.craft={...perfilTecnico.craft,cds:cfg.craft,nome:c.nome||'Mecânica Ilegal'};
-    perfilTecnico.farm={...f,cds:cfg.farm,itens:[...farmItems.values()]};
-    patch.beneficios={...(old.beneficios||{}),craft:cfg.craft,farm:cfg.farm,garagemVipBlip:cfg.garagemVipBlip};
    }
-   tx.update(ref,patch);
-   tx.set(doc(histCol),{
-    tipo:'EDICAO',group,
-    descricao:'Cadastro da mecânica: receitas do craft'+(group==='IlegalMechanic02'?', farm e garagem VIP':'')+' — solicitação 19/10/2026',
-    usuario:currentUser.email,sessionId:currentSessionId||'',data:serverTimestamp()
-   });
-   updated=true;
+   perfilTecnico.craft={...perfilTecnico.craft,cds:cfg.craft,nome:c.nome||'Mecânica Ilegal'};
+   perfilTecnico.farm={...f,cds:cfg.farm,itens:[...items.values()]};
+   patch.beneficios={...(old.benefits||{}),craft:cfg.craft,farm:cfg.farm,garagemVipBlip:cfg.garagemVipBlip};
   }
- });
+  await discordFactionPatch(group,patch);
+  updated=true;
+ }
  return {updated};
 }
 
@@ -9570,9 +9559,13 @@ function syncFarmWithCraft(profile=techDraft){
 manual=(profile.farm.itens||[]).filter(x=>String(x.origem||'').toUpperCase()!=='CRAFT');
 
  const autoKeys=new Set(auto.map(x=>String(x.spawn||'').toLowerCase()));
+ const especiais=new Map(manual.filter(x=>String(x.origem||'').toUpperCase()==='FARM DA SOLICITAÇÃO')
+   .map(x=>[String(x.spawn||'').toLowerCase(),x]));
 
- profile.farm.itens=[...auto,
-...manual.filter(x=>!autoKeys.has(String(x.spawn||'').toLowerCase()))];
+ // A faixa própria de coleta (8–14), gravada no cadastro, prevalece sobre
+ // as quantidades de insumos calculadas automaticamente pelo craft.
+ profile.farm.itens=[...auto.map(x=>especiais.get(String(x.spawn||'').toLowerCase())||x),
+ ...manual.filter(x=>!autoKeys.has(String(x.spawn||'').toLowerCase()))];
 
  return profile;
 
