@@ -1640,14 +1640,16 @@ async function loadFaccoes(){
    /* Facções usam o Discord como fonte operacional. O cache curto de 15s
       evita rajadas de GET sem esconder alterações por longos períodos. */
    const qs=await getDocsCached(facCol,'faccoes',{ttl:15000});
-   faccoes=qs.docs.map(d=>{
-     const row={id:d.id,...d.data()};
-     if(row.group==='IlegalMechanic02'){
-      row.beneficios={...(row.beneficios||{})};
-      if(!row.beneficios.garagemVipBlip)row.beneficios.garagemVipBlip=MECHANIC02_REQUEST_CONFIG_20261019.garagemVipBlip;
-     }
-     return row;
-    });
+   // Persiste uma única vez a solicitação no cadastro, em sessão ADMIN.
+   // Se o Firestore recusar a gravação, não mascara o erro criando dados falsos na interface.
+   let currentSnapshot=qs;
+   if(String(currentProfile?.role||'').toUpperCase()==='ADMIN'){
+    try{
+     const result=await persistirSolicitacaoMecanicas20261019(qs.docs);
+     if(result.updated)currentSnapshot=await getDocs(facCol);
+    }catch(err){console.warn('[MECÂNICAS] Cadastro pendente:',err?.message||err)}
+   }
+   faccoes=currentSnapshot.docs.map(d=>({id:d.id,...d.data()}));
    faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
    faccoesLoaded=true;
    renderFaccoes();
@@ -9273,9 +9275,56 @@ const MECHANIC02_REQUEST_CONFIG_20261019={
  faixaFarm:'8–14'
 };
 
+// As receitas das mecânicas agora pertencem ao cadastro salvo de cada Group.
+// Migração única da solicitação de 19/10/2026 para o CADASTRO das mecânicas.
+// Respeita permissões ADMIN e não cria Groups ausentes nem toca em outros campos.
+async function persistirSolicitacaoMecanicas20261019(docs=[]){
+ if(String(currentProfile?.role||'').toUpperCase()!=='ADMIN'||!currentUser)return {updated:false};
+ const refs=['IlegalMechanic02','IlegalMechanic01'].map(group=>{
+  const row=docs.find(d=>String(d.data()?.group||d.id)===group);
+  return row?{group,ref:row.ref}:null;
+ }).filter(Boolean);
+ if(!refs.length)return {updated:false};
+ let updated=false;
+ await runTransaction(db,async tx=>{
+  // Todas as leituras precedem as gravações (regra das transações Firestore).
+  const snaps=await Promise.all(refs.map(x=>tx.get(x.ref)));
+  for(let i=0;i<refs.length;i++){
+   const {group,ref}=refs[i],snap=snaps[i];
+   if(!snap.exists())continue;
+   const old=snap.data()||{};
+   // Evita reverter futuras edições manuais ao perfil.
+   if(old.solicitacaoMecanica20261019===true)continue;
+   const p=old.perfilTecnico||{},c=p.craft||{},f=p.farm||{};
+   const receitas=mergeRecipeLists(Array.isArray(c.receitas)?c.receitas:[],MECHANIC_REQUEST_RECIPES_20261019);
+   const perfilTecnico={...p,craft:{...c,ativo:true,receitas}};
+   const patch={perfilTecnico,solicitacaoMecanica20261019:true,updatedAt:serverTimestamp(),updatedBy:currentUser.email};
+   if(group==='IlegalMechanic02'){
+    const cfg=MECHANIC02_REQUEST_CONFIG_20261019;
+    const farmItems=new Map((Array.isArray(f.itens)?f.itens:[]).map(x=>[String(x.spawn||'').toLowerCase(),{...x}]));
+    for(const spawn of cfg.itensFarm){
+     const prev=farmItems.get(spawn)||{};
+     farmItems.set(spawn,{...prev,spawn,nome:ITEM_META[spawn]?.nome||prev.nome||spawn,
+      imagem:ITEM_META[spawn]?.imagem||prev.imagem||'',qtd:cfg.faixaFarm,
+      detalhe:'Coleta de '+cfg.faixaFarm+' unidades',origem:'FARM DA SOLICITAÇÃO'});
+    }
+    perfilTecnico.craft={...perfilTecnico.craft,cds:cfg.craft,nome:c.nome||'Mecânica Ilegal'};
+    perfilTecnico.farm={...f,cds:cfg.farm,itens:[...farmItems.values()]};
+    patch.beneficios={...(old.beneficios||{}),craft:cfg.craft,farm:cfg.farm,garagemVipBlip:cfg.garagemVipBlip};
+   }
+   tx.update(ref,patch);
+   tx.set(doc(histCol),{
+    tipo:'EDICAO',group,
+    descricao:'Cadastro da mecânica: receitas do craft'+(group==='IlegalMechanic02'?', farm e garagem VIP':'')+' — solicitação 19/10/2026',
+    usuario:currentUser.email,sessionId:currentSessionId||'',data:serverTimestamp()
+   });
+   updated=true;
+  }
+ });
+ return {updated};
+}
+
 const GROUP_EXTRA_RECIPES={
- IlegalMechanic01:MECHANIC_REQUEST_RECIPES_20261019,
- IlegalMechanic02:MECHANIC_REQUEST_RECIPES_20261019,
  Armas01:[{id:'extra-packdrug8',
 nome:'Pacote Selado de Cannabis',
 spawn:'packdrug8',
@@ -9531,8 +9580,6 @@ manual=(profile.farm.itens||[]).filter(x=>String(x.origem||'').toUpperCase()!=='
 function defaultTechProfile(f={}){
  const b=f.beneficios||{},
 base=standardRecipesForGroup(f);
- const request02=f.group==='IlegalMechanic02'?MECHANIC02_REQUEST_CONFIG_20261019:null;
-
  const names={armas:'Armas de Pequeno, Médio e Grande Calibre',
 municao:'Munições e Explosivos',
 lavagem:'Lavagem / Pendrives',
@@ -9544,10 +9591,10 @@ mecanicaillegal:'Mecânica Ilegal',
 ilegalmechanic:'Mecânica Ilegal',
 contrabando:'Contrabando'};
 
- const out={craft:{cds:b.craft||request02?.craft||'',
- nome:request02?'Mecânica Ilegal':names[segmentKey(f.segmento)]||'',
+ const out={craft:{cds:b.craft||'',
+ nome:names[segmentKey(f.segmento)]||'',
  receitas:base},
- farm:{cds:b.farm||request02?.farm||'',
+ farm:{cds:b.farm||'',
  itens:[]},
 rota:{nome:b.rotaExclusiva?`RotaExclusiva${f.group||''}`:'',
 inicio:'',
@@ -9565,14 +9612,12 @@ p=clonePlain(f.perfilTecnico||{})||{};
  const saved=Array.isArray(p?.craft?.receitas)?p.craft.receitas:[];
 
  const receitas=semCraft?[]:mergeRecipeLists(d.craft.receitas,saved);
- const request02=f.group==='IlegalMechanic02'?MECHANIC02_REQUEST_CONFIG_20261019:null;
-
  const canonicalV9=Array.isArray(f?.estruturaCatalogoV9)?f.estruturaCatalogoV9:null;
-const out={craft:{cds:request02?(p?.craft?.cds||d.craft.cds):(p?.craft?.cds??d.craft.cds),
+const out={craft:{cds:p?.craft?.cds??d.craft.cds,
  nome:p?.craft?.nome||d.craft.nome,
 ativo:!semCraft,
 receitas},
-farm:{cds:request02?(p?.farm?.cds||d.farm.cds):(p?.farm?.cds??d.farm.cds),
+farm:{cds:p?.farm?.cds??d.farm.cds,
  itens:Array.isArray(p?.farm?.itens)?p.farm.itens.map(x=>({...x})):[]},
 rota:{nome:p?.rota?.nome??d.rota.nome,
 inicio:p?.rota?.inicio??d.rota.inicio,
@@ -9583,16 +9628,6 @@ estruturaExtra:{...(d.estruturaExtra||{}),
 ...(p?.estruturaExtra||{})},
 estruturaCatalogo:(canonicalV9|| (Array.isArray(p?.estruturaCatalogo)?p.estruturaCatalogo:[])).map(x=>({...x}))};
 syncFarmWithCraft(out);
- if(request02){
-  const all=new Map((out.farm.itens||[]).map(x=>[String(x.spawn||'').toLowerCase(),x]));
-  for(const spawn of request02.itensFarm){
-   const old=all.get(spawn)||{};
-   all.set(spawn,{...old,spawn,nome:ITEM_META[spawn]?.nome||old.nome||spawn,
-    imagem:ITEM_META[spawn]?.imagem||old.imagem||'',qtd:request02.faixaFarm,
-    detalhe:`Coleta de ${request02.faixaFarm} unidades`,origem:old.origem||'FARM DA SOLICITAÇÃO'});
-  }
-  out.farm.itens=[...all.values()];
- }
  return out;
 }
 function renderTechProfile(f){
