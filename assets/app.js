@@ -1632,6 +1632,33 @@ if(st)st.innerHTML=`<span class="status-chip ${(f?.status||'INATIVA').toLowerCas
 function closeGroupProfilePage(){activateAppPage('faccoes')}
 $('#groupProfileBack')?.addEventListener('click',closeGroupProfilePage);
 
+// Recuperação única: as CDS enviadas para a Mecânica 02 não foram persistidas
+// pelo antigo fluxo de entrega. Nunca substitui coordenadas já cadastradas.
+async function recuperarTelaoIlegalMechanic02(facList=[]){
+ if(!currentUser||String(currentProfile?.role||'').toUpperCase()!=='ADMIN')return false;
+ const f=facList.find(x=>String(x.group||'').toLowerCase()==='ilegalmechanic02');
+ if(!f||f.recuperacaoTelao20261020)return false;
+ const b=f.beneficios||{},p=f.perfilTecnico||{},o=p.operacional||{},t=o.telao||{};
+ const registros=[b.telaoNome,b.telaoPostit,b.telaoCds,
+  ...[1,2,3,4].map(i=>b['telaoCaixa'+i]),...(b.telaoSons||[]),
+  t.modelo,t.postit,t.cds,...(t.sons||[])];
+ if(registros.some(v=>String(v||'').trim()))return false;
+ const sons=['-226.37,-1299.58,31.36,223.94','-215.9,-1291.34,31.29,201.26',
+  '-153.71,-1293.34,31.29,102.05','-158.59,-1316.05,32.3,70.87'];
+ const telao={ativo:true,tipo:'Hall',modelo:'paradise_telao01a',
+  postit:'-220.95,-1294.61,33.65',cds:'-221.01,-1295.35,31.29,223.94',
+  permissao:f.group,sons};
+ const beneficios={...b,telao:true,telaoNome:telao.modelo,
+  telaoPostit:telao.postit,telaoCds:telao.cds,telaoSons:[...sons],
+  ...Object.fromEntries(sons.map((v,i)=>['telaoCaixa'+(i+1),v]))};
+ const perfilTecnico={...p,operacional:{...o,telao}};
+ await setDoc(doc(db,'highos','data','faccoes',f.group),{
+  beneficios,perfilTecnico,recuperacaoTelao20261020:true,
+  updatedAt:serverTimestamp(),updatedBy:currentUser.email});
+ Object.assign(f,{beneficios,perfilTecnico,recuperacaoTelao20261020:true});
+ return true;
+}
+
 let faccoesLoaded=false,faccoesLoadPromise=null;
 async function loadFaccoes(){
  if(faccoesLoadPromise)return faccoesLoadPromise;
@@ -1650,6 +1677,7 @@ async function loadFaccoes(){
     }catch(err){console.warn('[MECÂNICAS] Cadastro pendente:',err?.message||err)}
    }
    faccoes=currentSnapshot.docs.map(d=>({id:d.id,...d.data()}));
+   try{await recuperarTelaoIlegalMechanic02(faccoes)}catch(err){console.warn('[TELÃO MECÂNICA 02] Recuperação pendente:',err?.message||err)}
    faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
    faccoesLoaded=true;
    renderFaccoes();
@@ -2152,6 +2180,8 @@ function getFormBenefits(){
   telaoPostit:$('#fTelaoPostit').value.trim(),
 
   telaoCds:$('#fTelaoCds').value.trim(),
+  telaoSons:[1,2,3,4].map(i=>$('#fOpTelaoSom'+i)?.value.trim()||''),
+  ...Object.fromEntries([1,2,3,4].map(i=>['telaoCaixa'+i,$('#fOpTelaoSom'+i)?.value.trim()||''])),
 
   garagemPublica:$('#fGaragemPublica').checked,
 
@@ -5303,7 +5333,7 @@ const pendentes=deliveryMissingData();
 if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que ainda não existem no Group:\n\n• '+pendentes.join('\n• ')+'\n\nPreencha os campos ou desmarque o benefício.');
 // Sem data informada, a entrega vale para hoje (o anúncio não sai com {DATA}).
 if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
-const {base:beneficiosGroup,isNew}=deliveryBenefitState(),
+const {b:beneficiosConfigurados,isNew}=deliveryBenefitState(),
 active=selectedDeliveryBenefits(),
 requests=currentDeliveryRequests(),
 extract=deliveryExtractV5();
@@ -5336,7 +5366,8 @@ createdBy:currentUser.email};
   const previous=entregas.filter(x=>x.group===f.group&&x.status==='ATIVA');
   // Benefícios lidos da planilha passam a constar no cadastro do Group.
   const deliveredGroup={...f,
-   beneficios:clonePlain(beneficiosGroup),
+   // Persistir também as CDS informadas para novas instalações, não apenas os benefícios anteriores.
+   beneficios:clonePlain(beneficiosConfigurados),
    status:'ATIVA',
    faccao,
    lider:payload.lider,
@@ -5347,7 +5378,10 @@ createdBy:currentUser.email};
 
   // O bot cria o tópico em facs-entregues e posta o extrato como anúncio.
   const [titulo,...corpo]=extract.split('\n');
-  await saveFactionToDiscord(deliveredGroup,{anuncioEntrega:{title:titulo,description:corpo.join('\n').trim()}});
+  await setDoc(doc(db,'highos','data','faccoes',f.group),{
+   ...deliveredGroup,
+   anuncioEntrega:{title:titulo,description:corpo.join('\n').trim()}
+  });
   await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
 
   $('#newDeliveryModal').classList.add('hidden');
@@ -10157,10 +10191,7 @@ modelo:b.telaoNome||'',
 postit:b.telaoPostit||'',
 cds:b.telaoCds||'',
 permissao:f.group||'',
-sons:Array.isArray(b.telaoSons)?b.telaoSons:['',
-'',
-'',
-'']};
+sons:Array.isArray(b.telaoSons)&&b.telaoSons.some(Boolean)?b.telaoSons:[1,2,3,4].map(i=>b['telaoCaixa'+i]||'')};
 
  return opMerge(o,OP_KNOWN_EXTRAS[f.group]||{});
 
@@ -10329,6 +10360,7 @@ setOpVal('fHelipontoSpawn',heli.spawn);
 setOpVal('fTelaoNome',o.telao.modelo);
 setOpVal('fTelaoPostit',o.telao.postit);
 setOpVal('fTelaoCds',o.telao.cds);
+// Mantém caixas de som alinhadas no cadastro legado e no Perfil Operacional.
 if($('#fTelao'))$('#fTelao').checked=!!o.telao.ativo;
 if($('#fGaragemPublica'))$('#fGaragemPublica').checked=!!(pub.blip||pub.spawn);
 if($('#fHeliponto'))$('#fHeliponto').checked=!!(heli.blip||heli.spawn);
