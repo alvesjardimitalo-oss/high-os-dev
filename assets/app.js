@@ -1640,7 +1640,14 @@ async function loadFaccoes(){
    /* Facções usam o Discord como fonte operacional. O cache curto de 15s
       evita rajadas de GET sem esconder alterações por longos períodos. */
    const qs=await getDocsCached(facCol,'faccoes',{ttl:15000});
-   faccoes=qs.docs.map(d=>({id:d.id,...d.data()}));
+   faccoes=qs.docs.map(d=>{
+     const row={id:d.id,...d.data()};
+     if(row.group==='IlegalMechanic02'){
+      row.beneficios={...(row.beneficios||{})};
+      if(!row.beneficios.garagemVipBlip)row.beneficios.garagemVipBlip=MECHANIC02_REQUEST_CONFIG_20261019.garagemVipBlip;
+     }
+     return row;
+    });
    faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
    faccoesLoaded=true;
    renderFaccoes();
@@ -9248,7 +9255,27 @@ insumos:[['acid',
 
 Object.values(DRUG_GROUP_RECIPES).forEach(list=>list.forEach(r=>r.origem='PADRÃO DO GROUP'));
 
+// Solicitação 19/10/2026 - catálogo de craft compartilhado pelas duas mecânicas ilegais.
+const MECHANIC_REQUEST_RECIPES_20261019=[
+ {id:'mechanic-nitro',nome:'Nitro',spawn:'nitro',insumos:[['sheetmetal',5],['misturaquimica',9]]},
+ {id:'mechanic-nitroplus',nome:'Nitro +',spawn:'Nitro+',insumos:[['rubber',16],['sheetmetal',10]]},
+ {id:'mechanic-tablet',nome:'Tablet Descartável',spawn:'racestablet',insumos:[['sheetmetal',1],['techtrash',8]]},
+ {id:'mechanic-ticket',nome:'Cartão Descartável',spawn:'racesticket',insumos:[['paper',5]]},
+ {id:'mechanic-notebook',nome:'Notebook',spawn:'notebook',insumos:[['techtrash',5],['plastic',5]]},
+ {id:'mechanic-aerofolio',nome:'Aerofólio Esportivo',spawn:'Aerofolio_Esportivo',insumos:[['sheetmetal',17],['rubber',12]]},
+ {id:'mechanic-ticketplus',nome:'Cartão Descartável ++',spawn:'racesticketplus',insumos:[['paper',10]]}
+].map(r=>({...r,imagem:r.spawn+'.png',origem:'SOLICITAÇÃO DA MECÂNICA'}));
+const MECHANIC02_REQUEST_CONFIG_20261019={
+ craft:'-227.82,-1327.89,30.89,85.04',
+ farm:'-197.19,-1320.46,31.09,178.59',
+ garagemVipBlip:'-210.5,-1308.15,31.29,357.17',
+ itensFarm:['paper','techtrash','misturaquimica','sheetmetal','plastic','alcohol','ziplock','rubber'],
+ faixaFarm:'8–14'
+};
+
 const GROUP_EXTRA_RECIPES={
+ IlegalMechanic01:MECHANIC_REQUEST_RECIPES_20261019,
+ IlegalMechanic02:MECHANIC_REQUEST_RECIPES_20261019,
  Armas01:[{id:'extra-packdrug8',
 nome:'Pacote Selado de Cannabis',
 spawn:'packdrug8',
@@ -9504,6 +9531,7 @@ manual=(profile.farm.itens||[]).filter(x=>String(x.origem||'').toUpperCase()!=='
 function defaultTechProfile(f={}){
  const b=f.beneficios||{},
 base=standardRecipesForGroup(f);
+ const request02=f.group==='IlegalMechanic02'?MECHANIC02_REQUEST_CONFIG_20261019:null;
 
  const names={armas:'Armas de Pequeno, Médio e Grande Calibre',
 municao:'Munições e Explosivos',
@@ -9516,11 +9544,11 @@ mecanicaillegal:'Mecânica Ilegal',
 ilegalmechanic:'Mecânica Ilegal',
 contrabando:'Contrabando'};
 
- const out={craft:{cds:b.craft||'',
-nome:names[segmentKey(f.segmento)]||'',
-receitas:base},
-farm:{cds:b.farm||'',
-itens:[]},
+ const out={craft:{cds:b.craft||request02?.craft||'',
+ nome:request02?'Mecânica Ilegal':names[segmentKey(f.segmento)]||'',
+ receitas:base},
+ farm:{cds:b.farm||request02?.farm||'',
+ itens:[]},
 rota:{nome:b.rotaExclusiva?`RotaExclusiva${f.group||''}`:'',
 inicio:'',
 pontos:b.rotaBlips||''},
@@ -9537,14 +9565,15 @@ p=clonePlain(f.perfilTecnico||{})||{};
  const saved=Array.isArray(p?.craft?.receitas)?p.craft.receitas:[];
 
  const receitas=semCraft?[]:mergeRecipeLists(d.craft.receitas,saved);
+ const request02=f.group==='IlegalMechanic02'?MECHANIC02_REQUEST_CONFIG_20261019:null;
 
  const canonicalV9=Array.isArray(f?.estruturaCatalogoV9)?f.estruturaCatalogoV9:null;
-const out={craft:{cds:p?.craft?.cds??d.craft.cds,
-nome:p?.craft?.nome??d.craft.nome,
+const out={craft:{cds:request02?(p?.craft?.cds||d.craft.cds):(p?.craft?.cds??d.craft.cds),
+ nome:p?.craft?.nome||d.craft.nome,
 ativo:!semCraft,
 receitas},
-farm:{cds:p?.farm?.cds??d.farm.cds,
-itens:Array.isArray(p?.farm?.itens)?p.farm.itens.map(x=>({...x})):[]},
+farm:{cds:request02?(p?.farm?.cds||d.farm.cds):(p?.farm?.cds??d.farm.cds),
+ itens:Array.isArray(p?.farm?.itens)?p.farm.itens.map(x=>({...x})):[]},
 rota:{nome:p?.rota?.nome??d.rota.nome,
 inicio:p?.rota?.inicio??d.rota.inicio,
 pontos:p?.rota?.pontos??d.rota.pontos,
@@ -9553,8 +9582,18 @@ status:p?.rota?.status||''},
 estruturaExtra:{...(d.estruturaExtra||{}),
 ...(p?.estruturaExtra||{})},
 estruturaCatalogo:(canonicalV9|| (Array.isArray(p?.estruturaCatalogo)?p.estruturaCatalogo:[])).map(x=>({...x}))};
-return syncFarmWithCraft(out);
-
+syncFarmWithCraft(out);
+ if(request02){
+  const all=new Map((out.farm.itens||[]).map(x=>[String(x.spawn||'').toLowerCase(),x]));
+  for(const spawn of request02.itensFarm){
+   const old=all.get(spawn)||{};
+   all.set(spawn,{...old,spawn,nome:ITEM_META[spawn]?.nome||old.nome||spawn,
+    imagem:ITEM_META[spawn]?.imagem||old.imagem||'',qtd:request02.faixaFarm,
+    detalhe:`Coleta de ${request02.faixaFarm} unidades`,origem:old.origem||'FARM DA SOLICITAÇÃO'});
+  }
+  out.farm.itens=[...all.values()];
+ }
+ return out;
 }
 function renderTechProfile(f){
  techDraft=mergedTechProfile(f);
