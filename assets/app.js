@@ -5237,7 +5237,10 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
    edits.set('VIP ORG ATIVO','PENDENTE');
    if(!chosen)edits.set('PACOTE VIP ORG','NENHUM');
   }
-  if(chosen)edits.set('PACOTE VIP ORG',chosen==='ORG_ULTRA'?'ORG ULTRA':'PERSONALIZADO');
+  if(chosen){
+   edits.set('PACOTE VIP ORG',chosen==='ORG_ULTRA'?'ORG ULTRA':'PERSONALIZADO');
+   if(!edits.has('ORIGEM DO PACOTE')||!edits.get('ORIGEM DO PACOTE'))edits.set('ORIGEM DO PACOTE',chosen==='ORG_ULTRA'?'PACOTE ULTRA':'PACOTE PERSONALIZADO');
+  }
   for(const x of dlvUltraStaffConfirmed){
    const item=DLV_VIP_ITEMS.find(item=>item.key===x);
    if(item)edits.set(item.status,'SIM');
@@ -5252,6 +5255,7 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
    edits.set(idLabel,id);
    const item=DLV_VIP_ITEMS.find(x=>x.key===key);
    edits.set(item.status,'SIM');
+   if(chosen&&!edits.get(item.origin)&&!(baseline.get(item.origin)||''))edits.set(item.origin,chosen==='ORG_ULTRA'?'PACOTE ULTRA':'PACOTE PERSONALIZADO');
   }
  }
  // Setagem confirmada de veículos precisa identificar o membro.
