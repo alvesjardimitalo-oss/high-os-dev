@@ -5221,6 +5221,8 @@ texto});
 'salario',
 'garagemVip',
 'lojaRoupas',
+'bar',
+'blindados',
 'barbearia',
 'tatuagem',
 'shopExclusivo',
@@ -5256,6 +5258,10 @@ if(has('garagemVip'))L.push('',`- ${isNew.has('garagemVip')?'Adicionar':'Ativar'
 'Shop Exclusivo'],
 ['bau',
 'Baú'],
+['bar',
+'Bar'],
+['blindados',
+'Blindados'],
 ['farm',
 'Farm'],
 ['craft',
@@ -5317,6 +5323,16 @@ add('ROTA_FARM','Rota de Farm Exclusiva'+novo('rotaExclusiva'),['Assunto: Ativa�
 '',
 `- Permissao : ${f.group}`].join('\n'));
 
+ if(has('garagemPublica2'))add('GARAGEM','Garagem Pública 2'+novo('garagemPublica2'),[
+ 'Assunto: Adição de Garagem Pública 2',
+ '',
+ 'Solicitação:',
+ '- Adicionar garagem pública 2 nas coordenadas abaixo:',
+ `- Group: ${f.group}`,
+ `- Blip: ${fmtCds(b.garagemPublica2Blip)}`,
+ `- Spawn: ${fmtCds(b.garagemPublica2Spawn)}`,
+ `- Permissão: ${f.group}`
+ ].join('\n'));
  if(has('garagemDeluxe'))add('GARAGEM','Garagem Deluxe'+novo('garagemDeluxe'),['Assunto:',
 '',
 `- ${isNew.has('garagemDeluxe')?'Solicitação':'Ativação'} de Garagem Deluxe;`,
