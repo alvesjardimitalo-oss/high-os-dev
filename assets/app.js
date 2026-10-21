@@ -5196,18 +5196,19 @@ function dlvRenderVipSheet(){
   list.innerHTML='';
   return;
  }
- meta.innerHTML='<label class="dlv-vip-field"><b>Pacote adquirido</b>'+dlvVipSelect('VIP | PACOTE',DLV_VIP_PACKAGES)+'</label>'
-  +'<label class="dlv-vip-field"><b>VIP Org ativado</b>'+dlvVipSelect('VIP | ATIVO',DLV_VIP_STATUSES)+'</label>'
-  +'<label class="dlv-vip-field"><b>Origem geral</b>'+dlvVipSelect('VIP | ORIGEM GERAL',DLV_VIP_ORIGINS)+'</label>';
+ meta.innerHTML='<label class="dlv-vip-field"><b>Pacote adquirido</b>'+dlvVipSelect('PACOTE VIP ORG',DLV_VIP_PACKAGES)+'</label>'
+  +'<label class="dlv-vip-field"><b>VIP Org ativado</b>'+dlvVipSelect('VIP ORG ATIVO',DLV_VIP_STATUSES)+'</label>'
+  +'<label class="dlv-vip-field"><b>Origem geral</b>'+dlvVipSelect('ORIGEM DO PACOTE',DLV_VIP_ORIGINS)+'</label>';
  list.innerHTML=DLV_VIP_ITEMS.map(item=>
   '<div class="dlv-vip-sheet-row"><b>'+esc(item.label)+'</b>'+dlvVipExistingDetail(item)+
   (dlvSelectedVipPackage()==='PERSONALIZADO'?'<label class="dlv-vip-custom"><input type="checkbox" data-vip-custom-item="'+esc(item.key)+'" '+(dlvVipCustomItems.has(item.key)?'checked':'')+'> Incluir neste pacote</label>':'')+
   '<label>Status'+dlvVipSelect(item.status,DLV_VIP_STATUSES)+'</label>'+
   '<label>Origem'+dlvVipSelect(item.origin,DLV_VIP_ORIGINS)+'</label>'+
-  (item.id?'<label>ID setado<input data-vip-sheet-field="'+esc(item.id)+'" value="'+esc(dlvVipValue(item.id))+'" placeholder="ID do jogador"></label>':'')+'</div>'
+  (item.id?'<label>ID setado<input data-vip-sheet-field="'+esc(item.id)+'" value="'+esc(dlvVipValue(item.id))+'" placeholder="ID do jogador"></label>':'')+
+  (item.extra||[]).map(field=>'<label>'+esc(field)+'<input data-vip-sheet-field="'+esc(field)+'" value="'+esc(dlvVipValue(field))+'" placeholder="Valor conferido"></label>').join('')+'</div>'
  ).join('');
- list.innerHTML+='<label class="dlv-vip-field"><b>Observações do VIP Org</b><input data-vip-sheet-field="VIP | OBSERVACOES" value="'+esc(dlvVipValue('VIP | OBSERVACOES'))+'" placeholder="Observações do pacote ou instalações"></label>';
- const feedback=$('#dVipSheetFeedback');if(feedback)feedback.textContent='Dados oficiais do '+dlvCurrent.group+'. Salvar altera somente as células deste quadro.';
+ list.innerHTML+='<label class="dlv-vip-field"><b>Observações do VIP Org</b><input data-vip-sheet-field="OBSERVAÇÕES" value="'+esc(dlvVipValue('OBSERVAÇÕES'))+'" placeholder="Observações do pacote ou instalações"></label>';
+ const feedback=$('#dVipSheetFeedback');if(feedback)feedback.textContent='Dados oficiais do '+dlvCurrent.group+'. Salvar altera somente a linha de benefícios deste Group, sem modificar as coordenadas.';
 }
 function dlvVipFormChanges(){
  return [...document.querySelectorAll('[data-vip-sheet-field]')].map(el=>({label:el.dataset.vipSheetField,value:el.value.trim()}));
@@ -5221,14 +5222,14 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
  const edits=new Map(form.filter(x=>x.value!==(baseline.get(x.label)||'')).map(x=>[x.label,x.value]));
  if(fromDelivery){
   const chosen=dlvSelectedVipPackage();
-  if(chosen)edits.set('VIP | PACOTE',chosen==='ORG_ULTRA'?'ORG ULTRA':'PERSONALIZADO');
+  if(chosen)edits.set('PACOTE VIP ORG',chosen==='ORG_ULTRA'?'ORG ULTRA':'PERSONALIZADO');
   for(const x of dlvUltraStaffConfirmed){
    const item=DLV_VIP_ITEMS.find(item=>item.key===x);
    if(item)edits.set(item.status,'SIM');
   }
   for(const [key,idSel,idLabel] of [
-    ['mule','#dVipMuleId','VIP | MULE ID'],
-    ['cargobob','#dVipCargobobId','VIP | CARGOBOB ID']]){
+    ['mule','#dVipMuleId','MULE ID'],
+    ['cargobob','#dVipCargobobId','CARGOBOB ID']]){
    const marked=$('#dVip'+(key==='mule'?'Mule':'Cargobob')+'Set')?.checked;
    if(!marked)continue;
    const id=String($(idSel)?.value||edits.get(idLabel)||'').trim();
@@ -5246,23 +5247,16 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
   if(status==='SIM'&&!/^\d+$/.test(String(id||'')))throw Error('Informe o ID do membro que recebeu o '+(key==='mule'?'Mule':'Cargobob')+' antes de marcar SIM.');
  }
  if(!edits.size)return true;
+ if(dlvSheetCache.source!=='original')throw Error('Conecte o Google Sheets e atualize a leitura da planilha antes de salvar o checklist.');
  const token=await facSheetAuthorize();
  // Buscar o quadro do Group no momento da gravação, nunca usar posições antigas.
  const url='https://sheets.googleapis.com/v4/spreadsheets/'+DLV_VIP_SHEET_ID;
- const fresh=await facSheetFetch(url+'/values/'+encodeURIComponent("'BLIPS COORDENADAS'!A:CD")+'?valueRenderOption=FORMATTED_VALUE',{token});
- const entries=dlvSheetEntries({name:'BLIPS COORDENADAS',grid:{cells:fresh.values||[]}},group);
- const found=new Map();
- for(const e of entries){
-  const label=String(e.label||'').trim().toUpperCase();
-  if(label.startsWith('VIP |')){
-   if(found.has(label))throw Error('Campo VIP duplicado no quadro: '+label);
-   found.set(label,e);
-  }
- }
- if(!found.size)throw Error('Checklist VIP não encontrado para '+group+'. Nenhuma célula foi alterada.');
+ const fresh=await facSheetFetch(url+'/values/'+encodeURIComponent("'BENEFICIOS FACÇÕES'!A:AU")+'?valueRenderOption=FORMATTED_VALUE',{token});
+ const found=dlvVipRead(group,[{name:'BENEFICIOS FACÇÕES',grid:{cells:fresh.values||[]}}]);
+ if(!Object.keys(found).length)throw Error('Group '+group+' não existe no inventário VIP da aba BENEFICIOS FACÇÕES.');
  const requests=[];
  for(const [label,value] of edits){
-  const item=found.get(label);
+  const item=found[label];
   if(!item)throw Error('O campo '+label+' não existe no quadro '+group+'.');
   if(!Number.isInteger(item.row)||!Number.isInteger(item.col)||item.col<0)throw Error('Posição inválida para '+label);
   const remote=String(item.value??'').trim(),old=baseline.get(label)||'';
@@ -5271,7 +5265,12 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
   requests.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:item.row,columnIndex:item.col},
    rows:[{values:[{userEnteredValue:{stringValue:value}}]}],fields:'userEnteredValue'}});
  }
- if(requests.length)await facSheetFetch(url+':batchUpdate',{token,method:'POST',body:{requests}});
+ if(requests.length){
+  const last=found['ATUALIZADO EM'],by=found['ATUALIZADO POR'];
+  if(last)requests.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:last.row,columnIndex:last.col},rows:[{values:[{userEnteredValue:{stringValue:new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}}]}],fields:'userEnteredValue'}});
+  if(by)requests.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:by.row,columnIndex:by.col},rows:[{values:[{userEnteredValue:{stringValue:currentUser?.email||''}}]}],fields:'userEnteredValue'}});
+  await facSheetFetch(url+':batchUpdate',{token,method:'POST',body:{requests}});
+ }
  for(const [label,value] of edits){if(dlvCurrent.vip?.[label])dlvCurrent.vip[label].value=value;}
  dlvSheetCache={at:0,tabs:null,promise:null,error:'',source:''};
  if(!silent){await fillDeliveryFromGroup(group,{force:true});const fb=$('#dVipSheetFeedback');if(fb)fb.textContent='Checklist salvo no Google Sheets • '+requests.length+' campo(s) atualizado(s).'}
