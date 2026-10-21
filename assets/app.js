@@ -5252,8 +5252,31 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
  // Buscar o quadro do Group no momento da gravação, nunca usar posições antigas.
  const url='https://sheets.googleapis.com/v4/spreadsheets/'+DLV_VIP_SHEET_ID;
  const fresh=await facSheetFetch(url+'/values/'+encodeURIComponent("'BENEFICIOS FACÇÕES'!A:AU")+'?valueRenderOption=FORMATTED_VALUE',{token});
- const found=dlvVipRead(group,[{name:'BENEFICIOS FACÇÕES',grid:{cells:fresh.values||[]}}]);
- if(!Object.keys(found).length)throw Error('Group '+group+' não existe no inventário VIP da aba BENEFICIOS FACÇÕES.');
+ let found=dlvVipRead(group,[{name:'BENEFICIOS FACÇÕES',grid:{cells:fresh.values||[]}}]);
+ if(!Object.keys(found).length){
+  // Novo Group: acrescentar uma linha no fim do inventário, sem tocar na tabela antiga.
+  const rows=fresh.values||[];
+  const header=rows.findIndex(row=>{const g=(row||[]).findIndex(x=>dlvFold(x)==='group');return g>=0&&dlvFold(row[g+3])==='pacote vip org'});
+  if(header<0)throw Error('Tabela de inventário VIP não encontrada. Nenhuma célula foi alterada.');
+  const col=(rows[header]||[]).findIndex(x=>dlvFold(x)==='group');
+  let dest=header+1;
+  while(dest<rows.length&&rows[dest]?.[col])dest++;
+  if((rows[dest]||[]).some(x=>x!==null&&x!==undefined&&x!==''))throw Error('Linha final do inventário está ocupada. Nenhuma célula foi alterada.');
+  const meta=await facSheetFetch(url+'?fields=sheets.properties(sheetId,gridProperties(rowCount))',{token});
+  const properties=(meta.sheets||[]).find(x=>Number(x.properties?.sheetId)===DLV_VIP_SHEET_GID)?.properties;
+  if(!properties)throw Error('Aba de benefícios não disponível para cadastro do novo Group.');
+  const creation=[];
+  if(dest>=Number(properties.gridProperties?.rowCount||0))creation.push({appendDimension:{sheetId:DLV_VIP_SHEET_GID,dimension:'ROWS',length:5}});
+  creation.push({copyPaste:{source:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:dest-1,endRowIndex:dest,startColumnIndex:col,endColumnIndex:col+42},
+   destination:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:dest,endRowIndex:dest+1,startColumnIndex:col,endColumnIndex:col+42},pasteType:'PASTE_NORMAL',pasteOrientation:'NORMAL'}});
+  creation.push({repeatCell:{range:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:dest,endRowIndex:dest+1,startColumnIndex:col,endColumnIndex:col+42},cell:{},fields:'userEnteredValue'}});
+  creation.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:dest,columnIndex:col},rows:[{values:[{userEnteredValue:{stringValue:group}}]}],fields:'userEnteredValue'}});
+  creation.push({setBasicFilter:{filter:{range:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:header,endRowIndex:dest+1,startColumnIndex:col,endColumnIndex:col+42}}}});
+  await facSheetFetch(url+':batchUpdate',{token,method:'POST',body:{requests:creation}});
+  const reloaded=await facSheetFetch(url+'/values/'+encodeURIComponent("'BENEFICIOS FACÇÕES'!A:AU")+'?valueRenderOption=FORMATTED_VALUE',{token});
+  found=dlvVipRead(group,[{name:'BENEFICIOS FACÇÕES',grid:{cells:reloaded.values||[]}}]);
+  if(!Object.keys(found).length)throw Error('Falha ao cadastrar o novo Group no inventário VIP.');
+ }
  const requests=[];
  for(const [label,value] of edits){
   const item=found[label];
