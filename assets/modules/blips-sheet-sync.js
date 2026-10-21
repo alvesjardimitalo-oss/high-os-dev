@@ -84,9 +84,7 @@ function valuesFor(f){
   CHATFACCAO:b.chatFaccao?"SIM":"",
   UNIFORME:b.roupasFaccao?"SIM":"",
   CAPACIDADEBAU:first(b.bauCapacidade),
-  BAR:first(op.bar?.cds,fromExtra.bar),
-  ACADEMIA:first(b.academia),
-  VEICULOSVIP:first(b.garagemVipVeiculos) 
+  VEICULOSVIP:first(b.garagemVipVeiculos)
  };
 }
 async function sheets(url,token,method="GET",body){
@@ -126,15 +124,10 @@ function safeBlank(rows,sec,entry){
  }
  return true;
 }
-function templateLabel(rows,entryRow,valueCol){
- const offset=entryRow-(TEMPLATE_START+3);
- const map={GROUP:"GROUP",LOCAL:"LOCAL",PRODUTO:"PRODUTO",INICIARROTA:"INICIAR ROTA",
- CRAFT:"CRAFT",BARBEARIA:"BARBEARIA",BAU:"BAU",LOJADEROUPAS:"LOJA DE ROUPAS",
- GARAGEMVIPFAC:"GARAGEM VIP FAC",GARAGEMPUBLICA:"GARAGEM PUBLICA",
- GARAGEMDELUXE:"GARAGEM DELUXE",SHOPDELUXE:"SHOP DELUXE",ACADEMIA:"ACADEMIA"};
- return Object.keys(map).find(k=>k===fold(map[k])&&offset===0)||"";
-}
-export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false}={}){
+/* Preenche apenas células pertencentes ao quadro do Group; novas seções são
+   clonadas ao FIM da aba com o layout expandido, sem inserir linhas dentro de
+   quadros vizinhos nem apagar coordenadas antigas. */
+export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,preserveExisting=true}={}){
  if(!token)throw new Error("Conecte o Google Sheets para sincronizar Blips e Coordenadas.");
  const list=[...new Map(groups.filter(g=>g&&plain(g.group)).map(g=>[fold(g.group),g])).values()];
  if(!list.length)return {created:0,updated:0,skipped:0};
@@ -143,37 +136,50 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false}={
  const tab=(meta.sheets||[]).find(s=>Number(s.properties?.sheetId)===TAB_GID)?.properties;
  if(!tab)throw new Error("A aba BLIPS COORDENADAS não foi encontrada.");
  const a1="'"+String(tab.title).replace(/'/g,"''")+"'";
- const range=a1+"!A1:CD"+Math.min(tab.gridProperties?.rowCount||1006,1500);
+ const range=a1+"!A1:CD"+Math.min(tab.gridProperties?.rowCount||1006,4000);
  const data=await sheets(root+"/values/"+encodeURIComponent(range)+"?valueRenderOption=FORMATTED_VALUE",token);
  const rows=data.values||[];
  const sections=sectionsIn(rows);
+ if(!sections.length)throw new Error("Quadros da planilha não reconhecidos. Nenhuma alteração feita.");
  const requests=[];
  let created=0,updated=0,skipped=0;
- let nextStart=Math.max(rows.length+3,146);
- const occupiedAdded=new Set();
+ let nextStart=Math.max(rows.length+3,150),capacity=Number(tab.gridProperties?.rowCount||1006);
  const sectionBlocks=new Map();
  const findSector=key=>sections.filter(s=>s.sector===key);
  const planNewSection=(key,title)=>{
   let s=sectionBlocks.get(key);
-  if(s&&s.reserved.size<GROUP_COLS.length)return s;
-  const start=nextStart;nextStart+=TEMPLATE_ROWS+2;
-  if(nextStart>=Number(tab.gridProperties?.rowCount||1006)){
-   requests.push({appendDimension:{sheetId:TAB_GID,dimension:"ROWS",length:Math.max(150,nextStart-Number(tab.gridProperties?.rowCount||1006)+10)}});
+  if(s&&s.reserved.size<s.entries.length)return s;
+  const template=sections.find(x=>x.sector==="MUNICAO"&&!x.newBlock)||sections.find(x=>!x.newBlock);
+  if(!template)throw new Error("Modelo visual da planilha não encontrado.");
+  const height=template.footerRow-template.sectionRow+3,start=nextStart;
+  nextStart+=height+3;
+  if(nextStart>=capacity){
+   const extra=Math.max(150,nextStart-capacity+10);
+   requests.push({appendDimension:{sheetId:TAB_GID,dimension:"ROWS",length:extra}});
+   capacity+=extra;
   }
   requests.push({copyPaste:{
-   source:{sheetId:TAB_GID,startRowIndex:TEMPLATE_START,endRowIndex:TEMPLATE_START+TEMPLATE_ROWS,startColumnIndex:4,endColumnIndex:82},
-   destination:{sheetId:TAB_GID,startRowIndex:start,endRowIndex:start+TEMPLATE_ROWS,startColumnIndex:4,endColumnIndex:82},
+   source:{sheetId:TAB_GID,startRowIndex:template.sectionRow,endRowIndex:template.sectionRow+height,startColumnIndex:4,endColumnIndex:82},
+   destination:{sheetId:TAB_GID,startRowIndex:start,endRowIndex:start+height,startColumnIndex:4,endColumnIndex:82},
    pasteType:"PASTE_NORMAL",pasteOrientation:"NORMAL"}});
-  // Copia a aparência e a validação nativa; remove TODOS os dados da faixa copiada.
-  GROUP_COLS.forEach(c=>requests.push({repeatCell:{
-   range:{sheetId:TAB_GID,startRowIndex:start+3,endRowIndex:start+19,startColumnIndex:c,endColumnIndex:c+6},
-   cell:{},fields:"userEnteredValue"}}));
+  // Limpa só os valores da cópia NOVA. Formatação, bordas e validações continuam.
+  requests.push({repeatCell:{range:{sheetId:TAB_GID,startRowIndex:start,endRowIndex:start+height,startColumnIndex:4,endColumnIndex:82},cell:{},fields:"userEnteredValue"}});
+  const headerRow=start+template.headerRow-template.sectionRow;
+  const footerRow=start+template.footerRow-template.sectionRow;
+  const labels=Array.from({length:template.footerRow-template.headerRow},(_,i)=>cell(rows,template.headerRow+i,5));
+  const cols=template.entries.map(x=>x.col);
   put(requests,TAB_GID,start,4,title);
   put(requests,TAB_GID,start,8,"0");
-  s={sector:key,title,sectionRow:start,headerRow:start+3,
-   entries:GROUP_COLS.map(c=>({col:c,name:""})),reserved:new Set(),newBlock:true};
-  sections.push(s);
-  sectionBlocks.set(key,s);
+  for(let d=0;d<labels.length;d++)if(labels[d]){
+   for(const col of cols)put(requests,TAB_GID,headerRow+d,col-1,labels[d]);
+  }
+  for(const col of cols){
+   put(requests,TAB_GID,footerRow,col-1,"TRUE");
+   put(requests,TAB_GID,footerRow,col,"COMPLETO");
+  }
+  s={sector:key,title,sectionRow:start,headerRow,footerRow,labels,
+   entries:cols.map(col=>({col,name:""})),reserved:new Set(),newBlock:true};
+  sections.push(s);sectionBlocks.set(key,s);
   return s;
  };
  for(const f of list){
@@ -182,6 +188,11 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false}={
   let selected=null,isNew=false;
   // Primeiro tenta a ficha já existente NA categoria correta.
   for(const s of correct){
+   const entry=s.entries.find(e=>fold(e.name)===key);
+   if(entry){selected={s,entry};break;}
+  }
+  // Se já existe em uma seção histórica diferente, atualiza-a sem criar duplicata.
+  if(!selected)for(const s of sections){
    const entry=s.entries.find(e=>fold(e.name)===key);
    if(entry){selected={s,entry};break;}
   }
@@ -202,16 +213,15 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false}={
   const {s,entry}=selected;
   const fields=valuesFor(f),col=entry.col,header=s.headerRow;
   // Campos por rótulo, não por posição fixa: há diferenças entre os segmentos.
-  for(let r=header;r<header+15;r++){
-   const label=s.newBlock
-    ? ["GROUP","LOCAL","PRODUTO","INICIAR ROTA","CRAFT","BARBEARIA","BAU","LOJA DE ROUPAS","GARAGEM VIP FAC","GARAGEM PUBLICA","GARAGEM DELUXE","SHOP DELUXE","ACADEMIA"][r-header]
-    :cell(rows,r,col-1);
+  for(let r=header;r<Math.min(s.footerRow,header+MAX_FIELDS_SCAN);r++){
+   const label=s.newBlock?s.labels[r-header]:cell(rows,r,col-1);
+   if(!label||fold(label)==="TRUE")continue;
    const value=fields[fold(label)];
    if(!value)continue;
    const found=s.newBlock?"":first(...Array.from({length:6},(_,i)=>cell(rows,r,col+i)));
-   const current=cell(rows,r,col);
    if(!isNew&&value===found)continue;
    if(!isNew&&onlyMissing)continue;
+   if(!isNew&&preserveExisting&&found)continue; // nunca sobrescrever CDS já preenchidas ao entregar a facção
    const existingAnchor=!s.newBlock&&found
     ? Array.from({length:6},(_,i)=>col+i).find(c=>cell(rows,r,c))??col :col;
    put(requests,TAB_GID,r,existingAnchor,value);
