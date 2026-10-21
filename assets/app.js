@@ -4476,6 +4476,7 @@ function initDeliveryUi(){
  $('#newDeliveryModal')?.addEventListener('click',e=>{if(e.target.id==='newDeliveryModal')$('#newDeliveryModal').classList.add('hidden')});
 
  $('#dGroup')?.addEventListener('change',()=>{
+  dlvVipCustomItems.clear();
   dlvUltraStaffConfirmed.clear();
   if($('#dVipMuleSet'))$('#dVipMuleSet').checked=false;
   if($('#dVipCargobobSet'))$('#dVipCargobobSet').checked=false;
@@ -4508,14 +4509,21 @@ function initDeliveryUi(){
   finally{if(btn)btn.disabled=false}
  });
  $('#dVipSheetPanel')?.addEventListener('change',e=>{
+  if(e.target?.dataset?.vipCustomItem){
+   const key=e.target.dataset.vipCustomItem;
+   if(e.target.checked)dlvVipCustomItems.add(key);else dlvVipCustomItems.delete(key);
+   updateNewDeliveryPreview();return;
+  }
   if(!e.target?.dataset?.vipSheetField)return;
   const fb=$('#dVipSheetFeedback');
   if(fb)fb.textContent='Alterações ainda não salvas na planilha.';
   dlvRenderUltraReview();updateNewDeliveryPreview();
  });
  $('#dVipPackage')?.addEventListener('change',()=>{
+  dlvVipCustomItems.clear();
   dlvUltraStaffConfirmed.clear();
   renderDeliveryBenefits(dlvSnapshotForm());
+  dlvRenderVipSheet();
   updateNewDeliveryPreview();
  });
  ['dVipMuleSet','dVipCargobobSet'].forEach(id=>$('#'+id)?.addEventListener('change',updateNewDeliveryPreview));
@@ -4873,6 +4881,7 @@ function openNewDelivery(group=''){
 sel.innerHTML='<option value="">SELECIONE O GROUP</option>'+faccoes.filter(f=>!f.removido).map(f=>{const st=situacaoGroup(f);return `<option value="${esc(f.group)}" ${st==='SEM_QG'||st==='REVISAR'?'disabled':''}>${esc(f.group)} — ${esc(f.qg||'SEM LOCAL')} ${st==='ASSUMIDA'?'['+esc(f.faccao)+' • TROCA]':st==='SEM_QG'?'[SEM QG]':st==='REVISAR'?'[REVISAR]':'[DISPONÍVEL]'}</option>`}).join('');
 
  $('#newDeliveryForm').reset();
+ dlvVipCustomItems.clear();
  dlvUltraStaffConfirmed.clear();
 dlvCurrent.group='';
 if(group){sel.value=group;
@@ -5108,6 +5117,7 @@ function dlvMergedBenefits(){
    A avaliação usa somente instalações anteriores (base): proposta/pedido não é execução. */
 /* Fonte oficial da entrega: checklist VIP por Group na aba BLIPS COORDENADAS.
    Coordenadas e benefícios físicos são independentes do pacote comercial. */
+const dlvVipCustomItems=new Set();
 const DLV_VIP_ITEMS=[
  {key:'salario',label:'Salário de R$ 1.200 / 30 min',status:'VIP | SALARIO 1200/30',origin:'VIP | SALARIO ORIGEM'},
  {key:'bau',label:'Baú com capacidade de 2.000 kg',status:'VIP | BAU 2000KG',origin:'VIP | BAU ORIGEM'},
@@ -5161,6 +5171,7 @@ function dlvRenderVipSheet(){
   +'<label class="dlv-vip-field"><b>Origem geral</b>'+dlvVipSelect('VIP | ORIGEM GERAL',DLV_VIP_ORIGINS)+'</label>';
  list.innerHTML=DLV_VIP_ITEMS.map(item=>
   '<div class="dlv-vip-sheet-row"><b>'+esc(item.label)+'</b>'+
+  (dlvSelectedVipPackage()==='PERSONALIZADO'?'<label class="dlv-vip-custom"><input type="checkbox" data-vip-custom-item="'+esc(item.key)+'" '+(dlvVipCustomItems.has(item.key)?'checked':'')+'> Incluir neste pacote</label>':'')+
   '<label>Status'+dlvVipSelect(item.status,DLV_VIP_STATUSES)+'</label>'+
   '<label>Origem'+dlvVipSelect(item.origin,DLV_VIP_ORIGINS)+'</label>'+
   (item.id?'<label>ID setado<input data-vip-sheet-field="'+esc(item.id)+'" value="'+esc(dlvVipValue(item.id))+'" placeholder="ID do jogador"></label>':'')+'</div>'
@@ -5609,6 +5620,32 @@ b.helipontoSpawn?`- Spawn: ${fmtCds(b.helipontoSpawn)}`:'',
    add('VIP_ORG_ULTRA','VIP Org Ultra · Somente pendências',lines.join('\n'));
   }
  }
+ if(dlvSelectedVipPackage()==='PERSONALIZADO'&&dlvVipCustomItems.size){
+  const existing=new Map(dlvUltraAssessment(base).map(x=>[x.key,x.ok]));
+  const lines=['Assunto: VIP Org personalizado · benefícios selecionados',
+  '',
+  'Solicitação:',
+  '- Ativar apenas itens selecionados e não instalados',
+  '- Group: '+f.group,
+  '- Manter estruturas e CDS já existentes sem duplicações',
+  ''];
+  const selected=DLV_VIP_ITEMS.filter(x=>dlvVipCustomItems.has(x.key));
+  const items=[];
+  for(const item of selected){
+   const official=dlvVipValue(item.status)==='SIM';
+   const installed=official||existing.get(item.key);
+   if(installed){lines.push('- '+item.label+': JÁ ATENDIDO (não solicitar)');continue}
+   if(item.key==='mule'||item.key==='cargobob'){
+    lines.push('- '+item.label+': PENDENTE DE SETAGEM MANUAL PELO STAFF; informar ID no checklist');continue;
+   }
+   if(item.key==='telao'){
+    lines.push('- Telão: incluir prop '+(b.telaoNome||'{PROP}')+', CDS '+(b.telaoCds||'{CDS}'));
+    lines.push('- Postit: '+(b.telaoPostit||'{CDS}')+'; caixas: '+[1,2,3,4].map(n=>b['telaoCaixa'+n]).filter(Boolean).join(' / '));
+   }else lines.push('- '+item.label+': instalar, configurar ou confirmar o que faltar');
+   items.push(item.key);
+  }
+  if(items.length) add('VIP_PERSONALIZADO','VIP Org personalizado · Itens pendentes',lines.join('\n'));
+ }
  if($('#dNotes').value.trim())add('GERAL','Personalização / Alteração estrutural',['Assunto: Alteração / personalização de estrutura do QG',
 '',
 'Solicitação:',
@@ -5705,6 +5742,7 @@ plano:$('#dPlano').value.trim()||(dlvSelectedVipPackage()==='ORG_ULTRA'?'Org Ult
 pacoteVip:dlvSelectedVipPackage(),
 pacoteVipConferencia:dlvSelectedVipPackage()?dlvUltraAssessment(dlvMergedBenefits()).map(x=>({item:x.key,atendido:x.ok,origem:x.sourceOk?'CADASTRO':x.confirmed?'CONFIRMACAO_STAFF':'PENDENTE',descricao:x.detail})):[],
 setagensManuais:dlvSelectedVipPackage()?{mule:!!$('#dVipMuleSet')?.checked,cargobob:!!$('#dVipCargobobSet')?.checked}:{},
+pacoteVipItens:dlvSelectedVipPackage()==='PERSONALIZADO'?[...dlvVipCustomItems]:[],
 beneficiosAtivos:active,
 beneficiosSolicitados:[...isNew],
 personalizacoes:$('#dNotes').value.trim(),
@@ -5728,7 +5766,7 @@ createdBy:currentUser.email};
    lider:payload.lider,
    staff:payload.staff,
    dataEntrega:payload.dataEntrega,
-   ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,pacoteVip:payload.pacoteVip,pacoteVipConferencia:payload.pacoteVipConferencia,setagensManuais:payload.setagensManuais,beneficiosAtivos:active,beneficiosSolicitados:[...isNew]},
+   ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,pacoteVip:payload.pacoteVip,pacoteVipConferencia:payload.pacoteVipConferencia,setagensManuais:payload.setagensManuais,pacoteVipItens:payload.pacoteVipItens,beneficiosAtivos:active,beneficiosSolicitados:[...isNew]},
    updatedBy:currentUser.email};
 
   // O bot cria o tópico em facs-entregues e posta o extrato como anúncio.
