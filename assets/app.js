@@ -5220,6 +5220,7 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
    rows:[{values:[{userEnteredValue:{stringValue:value}}]}],fields:'userEnteredValue'}});
  }
  if(requests.length)await facSheetFetch(url+':batchUpdate',{token,method:'POST',body:{requests}});
+ for(const [label,value] of edits){if(dlvCurrent.vip?.[label])dlvCurrent.vip[label].value=value;}
  dlvSheetCache={at:0,tabs:null,promise:null,error:'',source:''};
  if(!silent){await fillDeliveryFromGroup(group,{force:true});const fb=$('#dVipSheetFeedback');if(fb)fb.textContent='Checklist salvo no Google Sheets • '+requests.length+' campo(s) atualizado(s).'}
  return true;
@@ -5245,10 +5246,10 @@ function dlvUltraAssessment(base=dlvMergedBenefits()){
  const uniformeQtd=dlvUltraNumber(b.uniformesQuantidade||b.uniformesQtd||0);
  const mochila=present(b.mochila);
  const list=[
-  {key:'salario',label:'Salário R$ 1.200 a cada 40 minutos',
-   ok:salary>=1200&&minutes>0&&minutes<=40,
+  {key:'salario',label:'Salário R$ 1.200 a cada 30 minutos',
+   ok:salary>=1200&&minutes>0&&minutes<=30,
    detail:salary?('Atual: R$ '+salary.toLocaleString('pt-BR')+(minutes?' / '+minutes+' min':' / intervalo não confirmado')):'Sem salário configurado',
-   action:'Configurar ou ajustar salário para R$ 1.200 a cada 40 minutos (preservar valor maior e intervalo menor, se já existentes)'},
+   action:'Configurar ou ajustar salário para R$ 1.200 a cada 30 minutos (preservar valor maior e intervalo menor, se já existentes)'},
   {key:'chatFaccao',label:'Chat interno da organização',ok:present(b.chatFaccao),
    detail:present(b.chatFaccao)?'Já cadastrado':'Não localizado',
    action:'Ativar chat interno da organização'},
@@ -5264,9 +5265,10 @@ function dlvUltraAssessment(base=dlvMergedBenefits()){
   {key:'bau',label:'Baú com capacidade de 2.000 kg',ok:bauPresent&&capacity>=2000,
    detail:bauPresent?'Baú existente'+(capacity?' · '+capacity+' kg':' · capacidade não informada'):'Nenhum baú localizado',
    action:bauPresent?'Conferir e, se necessário, ampliar o baú existente para 2.000 kg (não criar outro baú)':'Adicionar baú com capacidade de 2.000 kg e informar CDS'},
-  {key:'roupasFaccao',label:'2 peças de uniforme + mochila',ok:uniform&&uniformeQtd>=2&&mochila,
+  {key:'roupasFaccao',label:'2 peças de uniforme',ok:uniform&&uniformeQtd>=2,
    detail:uniform?'Uniforme cadastrado; conferir quantidade e mochila':'Uniforme e mochila não confirmados',
-   action:uniform?'Conferir 2 peças de uniforme e mochila; fornecer apenas o que faltar':'Disponibilizar 2 peças de uniforme e mochila'},
+   action:uniform?'Conferir a entrega das 2 peças de uniforme':'Disponibilizar 2 peças de uniforme'},
+  {key:'mochila',label:'Mochila entregue',ok:mochila,detail:mochila?'Mochila confirmada':'Mochila não confirmada',action:'Disponibilizar mochila à facção'}, 
   {key:'radio',label:'Rádio exclusiva',ok:present(b.radio),
    detail:present(b.radio)?'Rádio existente: '+String(b.radio):'Não localizada',
    action:'Ativar rádio exclusiva e registrar a frequência'},
@@ -5274,7 +5276,17 @@ function dlvUltraAssessment(base=dlvMergedBenefits()){
    detail:present(b.rotaExclusiva)||present(b.rotaBlips)?'Rota exclusiva identificada':'Somente iniciar rota não comprova rota exclusiva',
    action:'Ativar rota de farm exclusiva com as respectivas CDS (não confundir com INICIAR ROTA)'}
  ];
- return list.map(item=>({...item,sourceOk:item.ok,confirmed:dlvUltraStaffConfirmed.has(item.key),ok:item.ok||dlvUltraStaffConfirmed.has(item.key)}));
+ return list.map(item=>{
+  const vipItem=DLV_VIP_ITEMS.find(x=>x.key===item.key);
+  const status=String(vipItem?dlvVipValue(vipItem.status):'').toUpperCase();
+  const origin=vipItem?dlvVipValue(vipItem.origin):'';
+  const statusFromSheet=['SIM','NÃO','PENDENTE'].includes(status);
+  const sheetOk=status==='SIM';
+  const sourceOk=statusFromSheet?sheetOk:item.ok;
+  const confirmed=dlvUltraStaffConfirmed.has(item.key);
+  return {...item,detail:item.detail+(statusFromSheet?' · Planilha: '+status:'')+(origin?' · Origem: '+origin:''),
+   sourceOk,confirmed,ok:sourceOk||confirmed};
+ });
 }
 function dlvRenderUltraReview(){
  const el=$('#dVipUltraReview'),body=$('#dVipUltraItems');
@@ -5575,7 +5587,7 @@ b.helipontoSpawn?`- Spawn: ${fmtCds(b.helipontoSpawn)}`:'',
 `- Group: ${f.group}.`].join('\n'));
 
  if(ultra){
-  const unmet=dlvUltraAssessment(base).filter(item=>!item.ok);
+  const unmet=dlvUltraAssessment(base).filter(item=>!item.ok&&!item.manual);
   if(unmet.length){
    const lines=['Assunto: Complementação de benefícios VIP Org Ultra',
     '',
