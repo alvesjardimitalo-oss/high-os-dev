@@ -4476,6 +4476,7 @@ function initDeliveryUi(){
  $('#newDeliveryModal')?.addEventListener('click',e=>{if(e.target.id==='newDeliveryModal')$('#newDeliveryModal').classList.add('hidden')});
 
  $('#dGroup')?.addEventListener('change',()=>{
+  dlvUltraStaffConfirmed.clear();
   if($('#dVipPackage'))$('#dVipPackage').value='';
   fillDeliveryFromGroup($('#dGroup').value);
  });
@@ -4499,6 +4500,7 @@ function initDeliveryUi(){
 'dPlano',
 'dNotes'].forEach(id=>$('#'+id)?.addEventListener('input',updateNewDeliveryPreview));
  $('#dVipPackage')?.addEventListener('change',()=>{
+  dlvUltraStaffConfirmed.clear();
   renderDeliveryBenefits(dlvSnapshotForm());
   updateNewDeliveryPreview();
  });
@@ -4857,6 +4859,7 @@ function openNewDelivery(group=''){
 sel.innerHTML='<option value="">SELECIONE O GROUP</option>'+faccoes.filter(f=>!f.removido).map(f=>{const st=situacaoGroup(f);return `<option value="${esc(f.group)}" ${st==='SEM_QG'||st==='REVISAR'?'disabled':''}>${esc(f.group)} — ${esc(f.qg||'SEM LOCAL')} ${st==='ASSUMIDA'?'['+esc(f.faccao)+' • TROCA]':st==='SEM_QG'?'[SEM QG]':st==='REVISAR'?'[REVISAR]':'[DISPONÍVEL]'}</option>`}).join('');
 
  $('#newDeliveryForm').reset();
+ dlvUltraStaffConfirmed.clear();
 dlvCurrent.group='';
 if(group){sel.value=group;
 fillDeliveryFromGroup(group)}else{fillDeliveryFromGroup('')};
@@ -5089,6 +5092,7 @@ function dlvMergedBenefits(){
 /* VIP Org Ultra é um pacote OPCIONAL por entrega e não a garagem VIP já instalada.
    A avaliação usa somente instalações anteriores (base): proposta/pedido não é execução. */
 const DLV_ULTRA_PACKAGE_KEYS=new Set(['vipOrg','salario','chatFaccao','radio','garagemVip','bau','roupasFaccao','rotaExclusiva']);
+const dlvUltraStaffConfirmed=new Set();
 function dlvSelectedVipPackage(){return $('#dVipPackage')?.value==='ORG_ULTRA'?'ORG_ULTRA':''}
 function dlvUltraNumber(value){
  const x=String(value??'').replace(/[^\d,.]/g,'').trim();
@@ -5137,7 +5141,7 @@ function dlvUltraAssessment(base=dlvMergedBenefits()){
    detail:present(b.rotaExclusiva)||present(b.rotaBlips)?'Rota exclusiva identificada':'Somente iniciar rota não comprova rota exclusiva',
    action:'Ativar rota de farm exclusiva com as respectivas CDS (não confundir com INICIAR ROTA)'}
  ];
- return list;
+ return list.map(item=>({...item,sourceOk:item.ok,confirmed:dlvUltraStaffConfirmed.has(item.key),ok:item.ok||dlvUltraStaffConfirmed.has(item.key)}));
 }
 function dlvRenderUltraReview(){
  const el=$('#dVipUltraReview'),body=$('#dVipUltraItems');
@@ -5148,7 +5152,12 @@ function dlvRenderUltraReview(){
  const items=dlvUltraAssessment();
  const ready=items.filter(x=>x.ok).length;
  body.innerHTML='<div class="dlv-vip-entry"><b>CONFERÊNCIA DO ULTRA</b><small>'+ready+' de '+items.length+' itens verificados. O restante será solicitado ou conferido, sem reimplantar o que já existe.</small></div>'
- +items.map(item=>'<div class="dlv-vip-entry '+(item.ok?'is-present':'')+'"><b>'+esc(item.label)+'</b><span class="vip-state">'+(item.ok?'JÁ ATENDIDO':'PENDENTE / CONFERIR')+'</span><small>'+esc(item.detail)+'</small></div>').join('');
+ +items.map(item=>'<div class="dlv-vip-entry '+(item.ok?'is-present':'')+'"><b>'+esc(item.label)+'</b><span class="vip-state">'+(item.sourceOk?'JÁ CADASTRADO':item.confirmed?'CONFIRMADO PELO STAFF':'PENDENTE / CONFERIR')+'</span><small>'+esc(item.detail)+'</small>'+(item.sourceOk?'':'<label class="dlv-vip-confirm"><input type="checkbox" data-vip-confirma="'+esc(item.key)+'" '+(item.confirmed?'checked':'')+'> Confirmar que este item já existe no Group</label>')+'</div>').join('');
+ body.querySelectorAll('[data-vip-confirma]').forEach(input=>input.addEventListener('change',()=>{
+  if(input.checked)dlvUltraStaffConfirmed.add(input.dataset.vipConfirma);
+  else dlvUltraStaffConfirmed.delete(input.dataset.vipConfirma);
+  dlvRenderUltraReview();updateNewDeliveryPreview();
+ }));
 }
 function dlvSnapshotForm(){
  const checks={},fields={};
@@ -5537,7 +5546,7 @@ staff:$('#dStaff').value.trim(),
 dataEntrega:$('#dData').value.trim(),
 plano:$('#dPlano').value.trim()||(dlvSelectedVipPackage()?'Org Ultra':''),
 pacoteVip:dlvSelectedVipPackage(),
-pacoteVipConferencia:dlvSelectedVipPackage()?dlvUltraAssessment(dlvMergedBenefits()).map(x=>({item:x.key,atendido:x.ok,descricao:x.detail})):[],
+pacoteVipConferencia:dlvSelectedVipPackage()?dlvUltraAssessment(dlvMergedBenefits()).map(x=>({item:x.key,atendido:x.ok,origem:x.sourceOk?'CADASTRO':x.confirmed?'CONFIRMACAO_STAFF':'PENDENTE',descricao:x.detail})):[],
 setagensManuais:dlvSelectedVipPackage()?{mule:!!$('#dVipMuleSet')?.checked,cargobob:!!$('#dVipCargobobSet')?.checked}:{},
 beneficiosAtivos:active,
 beneficiosSolicitados:[...isNew],
