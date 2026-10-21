@@ -5240,7 +5240,7 @@ function selectedDeliveryBenefits(){const selected=[...document.querySelectorAll
    digitado para os que ainda não existem. */
 function deliveryBenefitState(){
  const base=dlvMergedBenefits(),active=selectedDeliveryBenefits(),b={...base},isNew=new Set();
- active.forEach(k=>{if(isInstalled(base,k))return;isNew.add(k);
+ active.forEach(k=>{if(k==='vipOrg'&&dlvSelectedVipPackage())return; if(isInstalled(base,k))return;isNew.add(k);
   document.querySelectorAll(`[data-dlv-key="${k}"] [data-dlv-field]`).forEach(x=>{const v=x.value.trim();if(v)b[x.dataset.dlvField]=v});
   if(['chatFaccao','telao','garagemPublica','garagemPublica2','garagemDeluxe','heliponto','rotaExclusiva','roupasFaccao'].includes(k))b[k]=true});
  return {b,base,active,isNew};
@@ -5285,7 +5285,7 @@ function currentDeliveryRequests(){
 if(!f)return[];
 const {b,base,active:a,isNew}=deliveryBenefitState(),
 ultra=dlvSelectedVipPackage()==='ORG_ULTRA',
-has=k=>a.includes(k)&&!(ultra&&DLV_ULTRA_PACKAGE_KEYS.has(k)),
+has=k=>a.includes(k)&&!(ultra&&DLV_ULTRA_PACKAGE_KEYS.has(k))&&(!ultra||isNew.has(k)),
 novo=k=>isNew.has(k)?' (NOVA INSTALAÇÃO)':'',
 R=[],
 add=(tipo,titulo,texto)=>R.push({tipo,
@@ -5535,7 +5535,10 @@ faccao,
 lider:$('#dLider').value.trim(),
 staff:$('#dStaff').value.trim(),
 dataEntrega:$('#dData').value.trim(),
-plano:$('#dPlano').value.trim(),
+plano:$('#dPlano').value.trim()||(dlvSelectedVipPackage()?'Org Ultra':''),
+pacoteVip:dlvSelectedVipPackage(),
+pacoteVipConferencia:dlvSelectedVipPackage()?dlvUltraAssessment(dlvMergedBenefits()).map(x=>({item:x.key,atendido:x.ok,descricao:x.detail})):[],
+setagensManuais:dlvSelectedVipPackage()?{mule:!!$('#dVipMuleSet')?.checked,cargobob:!!$('#dVipCargobobSet')?.checked}:{},
 beneficiosAtivos:active,
 beneficiosSolicitados:[...isNew],
 personalizacoes:$('#dNotes').value.trim(),
@@ -5559,7 +5562,7 @@ createdBy:currentUser.email};
    lider:payload.lider,
    staff:payload.staff,
    dataEntrega:payload.dataEntrega,
-   ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,beneficiosAtivos:active,beneficiosSolicitados:[...isNew]},
+   ocupacaoAtual:{faccao,lider:payload.lider,staff:payload.staff,dataEntrega:payload.dataEntrega,plano:payload.plano,pacoteVip:payload.pacoteVip,pacoteVipConferencia:payload.pacoteVipConferencia,setagensManuais:payload.setagensManuais,beneficiosAtivos:active,beneficiosSolicitados:[...isNew]},
    updatedBy:currentUser.email};
 
   // O bot cria o tópico em facs-entregues e posta o extrato como anúncio.
