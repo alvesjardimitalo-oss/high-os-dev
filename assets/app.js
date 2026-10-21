@@ -5326,11 +5326,11 @@ function dlvUltraAssessment(base=dlvMergedBenefits()){
  const f=faccoes.find(x=>x.group===dlvCurrent.group)||{};
  const t=f.perfilTecnico||{}, b=base||{};
  const present=v=>!!v&&!dlvNegative(v);
- const salary=dlvUltraNumber(b.salario),minutes=dlvUltraNumber(b.salarioMinutos);
+ const salary=dlvUltraNumber(dlvVipValue('SALÁRIO VALOR')||b.salario),minutes=dlvUltraNumber(dlvVipValue('SALÁRIO INTERVALO (MIN)')||b.salarioMinutos);
  const garagePresent=!!(b.garagemVipBlip||b.garagemVipSpawn||t?.operacional?.garagens?.some(g=>dlvAlnum(g.tipo)==='faccao'&&g.blip));
  const vehicles=[b.garagemVipVeiculos,...(t?.operacional?.garagens||[]).map(g=>g.veiculos)].filter(Boolean).join(' ').toUpperCase();
  const bauPresent=present(b.bau)||present(t?.operacional?.bau?.cds);
- const capacity=dlvUltraNumber(b.bauCapacidade||t?.operacional?.bau?.capacidade);
+ const capacity=dlvUltraNumber(dlvVipValue('CAPACIDADE BAÚ KG')||b.bauCapacidade||t?.operacional?.bau?.capacidade);
  const uniform=present(b.roupasFaccao);
  const uniformeQtd=dlvUltraNumber(b.uniformesQuantidade||b.uniformesQtd||0);
  const mochila=present(b.mochila);
@@ -5358,8 +5358,8 @@ function dlvUltraAssessment(base=dlvMergedBenefits()){
    detail:uniform?'Uniforme cadastrado; conferir quantidade e mochila':'Uniforme e mochila não confirmados',
    action:uniform?'Conferir a entrega das 2 peças de uniforme':'Disponibilizar 2 peças de uniforme'},
   {key:'mochila',label:'Mochila entregue',ok:mochila,detail:mochila?'Mochila confirmada':'Mochila não confirmada',action:'Disponibilizar mochila à facção'}, 
-  {key:'radio',label:'Rádio exclusiva',ok:present(b.radio),
-   detail:present(b.radio)?'Rádio existente: '+String(b.radio):'Não localizada',
+  {key:'radio',label:'Rádio exclusiva',ok:present(dlvVipValue('FREQUÊNCIA RÁDIO')||b.radio),
+   detail:present(dlvVipValue('FREQUÊNCIA RÁDIO')||b.radio)?'Rádio existente: '+String(dlvVipValue('FREQUÊNCIA RÁDIO')||b.radio):'Não localizada',
    action:'Ativar rádio exclusiva e registrar a frequência'},
   {key:'rotaExclusiva',label:'Rota de farm exclusiva',ok:present(b.rotaExclusiva)||present(b.rotaBlips),
    detail:present(b.rotaExclusiva)||present(b.rotaBlips)?'Rota exclusiva identificada':'Somente iniciar rota não comprova rota exclusiva',
@@ -5371,7 +5371,7 @@ function dlvUltraAssessment(base=dlvMergedBenefits()){
   const origin=vipItem?dlvVipValue(vipItem.origin):'';
   const statusFromSheet=['SIM','NÃO','PENDENTE'].includes(status);
   const sheetOk=status==='SIM';
-  const sourceOk=statusFromSheet?sheetOk:item.ok;
+  const sourceOk=statusFromSheet?(sheetOk&&(['salario','bau','radio'].includes(item.key)?item.ok:true)):item.ok;
   const confirmed=dlvUltraStaffConfirmed.has(item.key);
   return {...item,detail:item.detail+(statusFromSheet?' · Planilha: '+status:'')+(origin?' · Origem: '+origin:''),
    sourceOk,confirmed,ok:sourceOk||confirmed};
