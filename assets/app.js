@@ -5222,6 +5222,21 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
  const edits=new Map(form.filter(x=>x.value!==(baseline.get(x.label)||'')).map(x=>[x.label,x.value]));
  if(fromDelivery){
   const chosen=dlvSelectedVipPackage();
+  const faccao=$('#dFaccao')?.value.trim()||'';
+  const oldOwner=baseline.get('FACÇÃO BENEFICIÁRIA')||'';
+  const changedOwner=!!oldOwner&&dlvAlnum(oldOwner)!==dlvAlnum(faccao);
+  if(faccao)edits.set('FACÇÃO BENEFICIÁRIA',faccao);
+  if($('#dLider')?.value.trim())edits.set('LÍDER / ID',$('#dLider').value.trim());
+  if($('#dData')?.value.trim())edits.set('DATA DA ENTREGA',$('#dData').value.trim());
+  if(changedOwner){
+   // Veículos setados em IDs e entregas pessoais não passam automaticamente ao novo ocupante.
+   for(const [status,id] of [['MULE SETADO','MULE ID'],['CARGOBOB SETADO','CARGOBOB ID']]){
+    edits.set(status,'PENDENTE');edits.set(id,'');
+   }
+   for(const status of ['UNIFORME 2 PEÇAS','MOCHILA ENTREGUE'])edits.set(status,'PENDENTE');
+   edits.set('VIP ORG ATIVO','PENDENTE');
+   if(!chosen)edits.set('PACOTE VIP ORG','NENHUM');
+  }
   if(chosen)edits.set('PACOTE VIP ORG',chosen==='ORG_ULTRA'?'ORG ULTRA':'PERSONALIZADO');
   for(const x of dlvUltraStaffConfirmed){
    const item=DLV_VIP_ITEMS.find(item=>item.key===x);
@@ -5773,6 +5788,7 @@ let trocaParaExecutar=null;
  }}
 
 // A planilha é a base de dados: salvar status/IDs realmente confirmados antes de registrar entrega.
+if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
 try{await dlvSaveVipSheet({fromDelivery:true,silent:true})}
 catch(error){return alert('A entrega não foi concluída: checklist VIP não pôde ser salvo na planilha. '+(error?.message||error))}
 if(trocaParaExecutar){
