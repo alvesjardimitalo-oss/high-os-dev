@@ -916,18 +916,25 @@
       <label>Group / QG<select id="dGroup" required></select></label><label>Facção que assume<input id="dFaccao" list="orgOptions" required placeholder="Selecione ou cadastre a organização"><datalist id="orgOptions"></datalist></label>
       <label>Líder / ID / Telefone<input id="dLider"></label><label>Staff responsável<input id="dStaff"></label>
       <label>Data da entrega<input id="dData" placeholder="dd/mm/aaaa"></label><label>Plano / observação comercial<input id="dPlano" placeholder="Informação complementar (opcional)"></label>
-      <label>VIP Org na entrega<select id="dVipPackage"><option value="">Sem pacote VIP Org</option><option value="ORG_ULTRA">Org Ultra</option></select></label>
+      <label>VIP Org na entrega<select id="dVipPackage"><option value="">Sem pacote VIP Org</option><option value="ORG_ULTRA">Org Ultra</option><option value="PERSONALIZADO">Pacote personalizado</option></select></label>
     </div>
     <section class="dlv-panel">
       <div class="dlv-panel-head"><div><div class="eyebrow">PLANILHA + CADASTRO DO GROUP</div><h3>BENEFÍCIOS DA ENTREGA</h3></div><button type="button" id="dSheetRefresh" class="btn-secondary compact">ATUALIZAR DA PLANILHA</button></div>
       <p id="dSheetStatus" class="dlv-status">Selecione um Group para ler os benefícios da planilha.</p>
+      <section id="dVipSheetPanel" class="dlv-vip-review" hidden>
+        <div class="dlv-vip-title"><b>VIP ORG · BANCO DE DADOS DA PLANILHA</b><span>BLIPS COORDENADAS • dados por Group</span></div>
+        <p class="dlv-vip-help">Registre somente o que foi efetivamente instalado, com origem, ID e confirmação. Benefícios adquiridos avulsos não tornam o pacote Ultra ativo.</p>
+        <div id="dVipSheetMeta" class="dlv-vip-items"></div>
+        <div id="dVipSheetChecklist" class="dlv-vip-checklist"></div>
+        <div class="dlv-vip-actions"><button type="button" id="dVipSheetSave" class="btn-secondary compact">SALVAR CHECKLIST NA PLANILHA</button><small id="dVipSheetFeedback">Os campos vazios continuam pendentes.</small></div>
+      </section>
       <section id="dVipUltraReview" class="dlv-vip-review" hidden>
         <div class="dlv-vip-title"><b>ORG ULTRA · CONFERÊNCIA DO PACOTE</b><span>Ofertado nesta entrega, não no cadastro permanente do QG</span></div>
         <p class="dlv-vip-help">O High OS compara cada item com o que já existe na planilha e solicita somente o que falta. Dados não comprovados ficam pendentes de conferência.</p>
         <div id="dVipUltraItems" class="dlv-vip-items"></div>
         <div class="dlv-vip-manual"><b>SETAGEM MANUAL DO STAFF</b>
-          <label><input id="dVipMuleSet" type="checkbox"> Mule setado por mim</label>
-          <label><input id="dVipCargobobSet" type="checkbox"> Cargobob setado por mim</label>
+          <label><input id="dVipMuleSet" type="checkbox"> Mule setado por mim</label><label>ID: <input id="dVipMuleId" type="text" placeholder="ID do jogador"></label>
+          <label><input id="dVipCargobobSet" type="checkbox"> Cargobob setado por mim</label><label>ID: <input id="dVipCargobobId" type="text" placeholder="ID do jogador"></label>
           <small>Esses veículos não geram solicitações de instalação automática. Confirme apenas após setar.</small>
         </div>
       </section>
