@@ -6,8 +6,8 @@
 const SHEET_ID="1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4";
 const TAB_GID=2037219913;
 const GROUP_COLS=Array.from({length:11},(_,i)=>6+i*7);
-const TEMPLATE_START=33; // linha 34: Munição (modelo visual)
-const TEMPLATE_ROWS=20;
+// Campos podem chegar a 45+ linhas após ampliação do quadro.
+const MAX_FIELDS_SCAN=90;
 
 function plain(v){if(v==null||typeof v==="boolean"||typeof v==="object")return "";return String(v).trim();}
 function fold(v){
@@ -61,7 +61,32 @@ function valuesFor(f){
   ACADEMIA:first(b.academia),
   BAR:first(op.bar?.cds,fromExtra.bar),
   HELIPONTO:first(joinPairs(hei),pair({blip:b.helipontoBlip,spawn:b.helipontoSpawn})),
-  BLINDADOS:first(pair(op.blindados),b.blindados)
+  BLINDADOS:first(pair(op.blindados),b.blindados),
+  FARM:first(t.farm?.cds,b.farm),
+  ROTAEXCLUSIVA:b.rotaExclusiva?"SIM":"",
+  CDSROTAEXCLUSIVA:first(t.rota?.pontos,b.rotaBlips),
+  GARAGEMPUBLICA2:first(joinPairs(garage("PUBLICA2")),pair({blip:b.garagemPublica2Blip,spawn:b.garagemPublica2Spawn})),
+  TATUAGEM:first(op.tatuagem?.cds,b.tatuagem),
+  ATM:first(b.atm),
+  ARENA:first(b.arena),
+  TELAO:first(op.telao?.cds,b.telaoCds),
+  TELAOMODELO:first(op.telao?.modelo,b.telaoNome),
+  TELAOPOSTIT:first(op.telao?.postit,b.telaoPostit),
+  TELAOCAIXA1:first(op.telao?.sons?.[0],b.telaoCaixa1),
+  TELAOCAIXA2:first(op.telao?.sons?.[1],b.telaoCaixa2),
+  TELAOCAIXA3:first(op.telao?.sons?.[2],b.telaoCaixa3),
+  TELAOCAIXA4:first(op.telao?.sons?.[3],b.telaoCaixa4),
+  SINUCA:first(b.sinuca),
+  RADIO:first(b.radio),
+  SALARIO:first(b.salario),
+  INTERVALOSALARIO:first(b.salarioMinutos),
+  VIPORG:b.vipOrg?plain(b.vipOrg===true?"SIM":b.vipOrg):"",
+  CHATFACCAO:b.chatFaccao?"SIM":"",
+  UNIFORME:b.roupasFaccao?"SIM":"",
+  CAPACIDADEBAU:first(b.bauCapacidade),
+  BAR:first(op.bar?.cds,fromExtra.bar),
+  ACADEMIA:first(b.academia),
+  VEICULOSVIP:first(b.garagemVipVeiculos) 
  };
 }
 async function sheets(url,token,method="GET",body){
@@ -81,16 +106,19 @@ function sectionsIn(rows){
  for(let i=0;i<rows.length;i++){
   const name=cell(rows,i,4),key=fold(name);
   if(!["ARMAS","MUNICAO","DROGAS","LAVAGEM","DESMANCHE","EXTRA1","APOIO","ESTELIONATARIOS","GALPOES","CONTRABANDO","OUTROS"].includes(key))continue;
-  const header=Array.from({length:20},(_,d)=>i+d).find(r=>GROUP_COLS.some(c=>fold(cell(rows,r,c-1))==="GROUP"));
+  const header=Array.from({length:Math.min(20,rows.length-i)},(_,d)=>i+d).find(r=>GROUP_COLS.some(c=>fold(cell(rows,r,c-1))==="GROUP"));
   if(header===undefined)continue;
-  sections.push({sector:key,title:name,sectionRow:i,headerRow:header,
-   entries:GROUP_COLS.map(c=>({col:c,name:cell(rows,header,c)})),reserved:new Set()});
+  const footer=Array.from({length:Math.min(MAX_FIELDS_SCAN,rows.length-header)},(_,d)=>header+d)
+   .find(r=>GROUP_COLS.some(c=>fold(cell(rows,r,c-1))==="TRUE"));
+  if(footer===undefined)continue;
+  sections.push({sector:key,title:name,sectionRow:i,headerRow:header,footerRow:footer,
+   entries:GROUP_COLS.filter(c=>fold(cell(rows,header,c-1))==="GROUP").map(c=>({col:c,name:cell(rows,header,c)})),reserved:new Set()});
  }
  return sections;
 }
 function safeBlank(rows,sec,entry){
  if(fold(entry.name)!=="NA"&&plain(entry.name)!=="")return false;
- for(let r=sec.headerRow+1;r<Math.min(sec.headerRow+14,rows.length);r++){
+ for(let r=sec.headerRow+1;r<Math.min(sec.footerRow,rows.length);r++){
   // A seção tem seis colunas de dados entre este Group e o próximo título.
   for(let c=entry.col;c<entry.col+6;c++){
    if(cell(rows,r,c))return false;
