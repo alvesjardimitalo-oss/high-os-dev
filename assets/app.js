@@ -4965,7 +4965,8 @@ function dlvSheetEntries(tab,group){
  }
  if(out.length)return out;
  // 2) Tabela com coluna GROUP.
- for(let hi=0;hi<Math.min(cells.length,15);hi++){const head=cells[hi]||[];
+ for(let hi=0;hi<Math.min(cells.length,200);hi++){const head=cells[hi]||[];
+  if(head.some(x=>dlvFold(x)==='pacote vip org'))continue;
   const gc=head.findIndex(x=>/^(group|grupo)\b/.test(dlvFold(x)));
   if(gc<0)continue;
   for(let ri=hi+1;ri<cells.length;ri++){const r=cells[ri]||[];
@@ -4975,7 +4976,7 @@ function dlvSheetEntries(tab,group){
   if(out.length)return out;
  }
  // 3) Um Group por coluna, rótulo na primeira coluna.
- for(let hi=0;hi<Math.min(cells.length,15);hi++){const head=cells[hi]||[];
+ for(let hi=0;hi<Math.min(cells.length,200);hi++){const head=cells[hi]||[];
   const gc=head.findIndex(x=>dlvAlnum(x)===want);
   if(gc<0)continue;
   for(let ri=hi+1;ri<cells.length;ri++){const r=cells[ri]||[];if(r[0])out.push({label:r[0],value:r[gc]||''})}
@@ -5037,7 +5038,7 @@ function dlvSheetBenefits(group,tabs){
 async function dlvReadOfficialTabs(token){
  const base='https://sheets.googleapis.com/v4/spreadsheets/1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4/values/';
  const specs=[
-  {name:'BENEFICIOS FACÇÕES',range:"'BENEFICIOS FACÇÕES'!A:AF"},
+  {name:'BENEFICIOS FACÇÕES',range:"'BENEFICIOS FACÇÕES'!A:AU"},
   {name:'BLIPS COORDENADAS',range:"'BLIPS COORDENADAS'!A:CD"}
  ];
  return Promise.all(specs.map(async item=>{
@@ -5119,35 +5120,47 @@ function dlvMergedBenefits(){
    Coordenadas e benefícios físicos são independentes do pacote comercial. */
 const dlvVipCustomItems=new Set();
 const DLV_VIP_ITEMS=[
- {key:'salario',label:'Salário de R$ 1.200 / 30 min',status:'VIP | SALARIO 1200/30',origin:'VIP | SALARIO ORIGEM'},
- {key:'bau',label:'Baú com capacidade de 2.000 kg',status:'VIP | BAU 2000KG',origin:'VIP | BAU ORIGEM'},
- {key:'roupasFaccao',label:'Duas peças de uniforme entregues',status:'VIP | UNIFORME 2PCS',origin:'VIP | UNIFORME ORIGEM'},
- {key:'mochila',label:'Mochila entregue',status:'VIP | MOCHILA',origin:'VIP | MOCHILA ORIGEM'},
- {key:'radio',label:'Rádio exclusiva ativa',status:'VIP | RADIO ATIVA',origin:'VIP | RADIO ORIGEM'},
- {key:'rotaExclusiva',label:'Rota exclusiva ativa',status:'VIP | ROTA EXCLUSIVA',origin:'VIP | ROTA ORIGEM'},
- {key:'chatFaccao',label:'Chat da facção ativo',status:'VIP | CHAT FACCAO',origin:'VIP | CHAT ORIGEM'},
- {key:'xmaxx',label:'xMaxx na garagem',status:'VIP | XMAXX',origin:'VIP | XMAXX ORIGEM'},
- {key:'bm4g82',label:'BM4G82 na garagem',status:'VIP | BM4G82',origin:'VIP | BM4G82 ORIGEM'},
- {key:'garagemVip',label:'Garagem VIP Fac instalada',status:'VIP | GARAGEM VIP',origin:'VIP | GARAGEM ORIGEM'},
- {key:'mule',label:'Mule setado manualmente',status:'VIP | MULE SETADO',origin:'VIP | MULE ORIGEM',id:'VIP | MULE ID'},
- {key:'cargobob',label:'Cargobob setado manualmente',status:'VIP | CARGOBOB SETADO',origin:'VIP | CARGOBOB ORIGEM',id:'VIP | CARGOBOB ID'},
- {key:'telao',label:'Telão instalado (prop e caixas nas CDS)',status:'VIP | TELAO',origin:'VIP | TELAO ORIGEM'}
+ {key:'salario',label:'Salário R$ 1.200 / 30 min',status:'SALÁRIO ATIVO',origin:'SALÁRIO ORIGEM',extra:['SALÁRIO VALOR','SALÁRIO INTERVALO (MIN)']},
+ {key:'bau',label:'Baú de 2.000 kg',status:'BAÚ 2000KG ATIVO',origin:'BAÚ ORIGEM',extra:['CAPACIDADE BAÚ KG']},
+ {key:'roupasFaccao',label:'2 peças de uniforme',status:'UNIFORME 2 PEÇAS',origin:'UNIFORME ORIGEM'},
+ {key:'mochila',label:'Mochila entregue',status:'MOCHILA ENTREGUE',origin:'MOCHILA ORIGEM'},
+ {key:'radio',label:'Rádio exclusiva',status:'RÁDIO EXCLUSIVA ATIVA',origin:'RÁDIO ORIGEM',extra:['FREQUÊNCIA RÁDIO']},
+ {key:'rotaExclusiva',label:'Rota exclusiva',status:'ROTA EXCLUSIVA ATIVA',origin:'ROTA ORIGEM'},
+ {key:'chatFaccao',label:'Chat da facção',status:'CHAT FACÇÃO ATIVO',origin:'CHAT ORIGEM'},
+ {key:'xmaxx',label:'xMaxx',status:'XMAXX ATIVA',origin:'XMAXX ORIGEM'},
+ {key:'bm4g82',label:'BM4G82',status:'BM4G82 ATIVA',origin:'BM4G82 ORIGEM'},
+ {key:'garagemVip',label:'Garagem VIP Fac',status:'GARAGEM VIP ATIVA',origin:'GARAGEM ORIGEM'},
+ {key:'mule',label:'Mule setado',status:'MULE SETADO',origin:'MULE ORIGEM',id:'MULE ID'},
+ {key:'cargobob',label:'Cargobob setado',status:'CARGOBOB SETADO',origin:'CARGOBOB ORIGEM',id:'CARGOBOB ID'},
+ {key:'telao',label:'Telão (prop + caixas na aba BLIPS)',status:'TELÃO ATIVO',origin:'TELÃO ORIGEM'}
 ];
-const DLV_VIP_META=['VIP | PACOTE','VIP | ATIVO','VIP | ORIGEM GERAL','VIP | OBSERVACOES'];
+const DLV_VIP_META=['PACOTE VIP ORG','VIP ORG ATIVO','ORIGEM DO PACOTE','OBSERVAÇÕES'];
 const DLV_VIP_ORIGINS=['','PACOTE ULTRA','PACOTE PERSONALIZADO','AVULSO','BENEFÍCIO BASE','OUTRO','NÃO INFORMADO'];
 const DLV_VIP_STATUSES=['','SIM','NÃO','PENDENTE'];
 const DLV_VIP_PACKAGES=['','NENHUM','ORG ULTRA','PERSONALIZADO','AVULSO'];
 const DLV_VIP_SHEET_ID='1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4';
-const DLV_VIP_SHEET_GID=2037219913;
+const DLV_VIP_SHEET_GID=1358800909;
 function dlvVipRead(group,tabs=[]){
- const tab=tabs.find(t=>dlvAlnum(t.name)==='blipscoordenadas');
- const entries=tab?dlvSheetEntries(tab,group):[];
- const record={};
- for(const e of entries){
-  const label=String(e.label||'').trim().toUpperCase();
-  if(label.startsWith('VIP |'))record[label]={label,value:String(e.value??'').trim(),row:e.row,col:e.col};
+ const tab=tabs.find(t=>dlvAlnum(t.name)==='beneficiosfaccoes');
+ const cells=tab?.grid?.cells||[],want=dlvAlnum(group),result={};
+ if(!want||!cells.length)return result;
+ let header=-1,gc=-1;
+ for(let i=0;i<cells.length;i++){
+  const row=cells[i]||[],g=row.findIndex(x=>dlvFold(x)==='group');
+  if(g>=0&&dlvFold(row[g+3])==='pacote vip org'){header=i;gc=g;break}
  }
- return record;
+ if(header<0)return result;
+ let match=-1;
+ for(let r=header+1;r<cells.length;r++)if(dlvAlnum(cells[r]?.[gc])===want){
+  if(match>=0)throw new Error('Group duplicado no inventário VIP: '+group);
+  match=r;
+ }
+ if(match<0)return result;
+ for(let col=gc;col<(cells[header]||[]).length;col++){
+  const label=String(cells[header][col]||'').trim().toUpperCase();
+  if(label)result[label]={label,value:String(cells[match]?.[col]??'').trim(),row:match,col};
+ }
+ return result;
 }
 function dlvVipValue(label){return dlvCurrent.vip?.[label]?.value||''}
 function dlvVipSelect(label,options){
