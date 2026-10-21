@@ -5225,6 +5225,13 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
    edits.set(item.status,'SIM');
   }
  }
+ // Setagem confirmada de veículos precisa identificar o membro.
+ for(const key of ['mule','cargobob']){
+  const item=DLV_VIP_ITEMS.find(x=>x.key===key);
+  const status=edits.has(item.status)?edits.get(item.status):dlvVipValue(item.status);
+  const id=edits.has(item.id)?edits.get(item.id):dlvVipValue(item.id);
+  if(status==='SIM'&&!/^\d+$/.test(String(id||'')))throw Error('Informe o ID do membro que recebeu o '+(key==='mule'?'Mule':'Cargobob')+' antes de marcar SIM.');
+ }
  if(!edits.size)return true;
  const token=await facSheetAuthorize();
  // Buscar o quadro do Group no momento da gravação, nunca usar posições antigas.
