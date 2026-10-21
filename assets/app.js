@@ -4501,6 +4501,18 @@ function initDeliveryUi(){
 'dData',
 'dPlano',
 'dNotes'].forEach(id=>$('#'+id)?.addEventListener('input',updateNewDeliveryPreview));
+ $('#dVipSheetSave')?.addEventListener('click',async()=>{
+  const btn=$('#dVipSheetSave'),fb=$('#dVipSheetFeedback');
+  if(btn)btn.disabled=true;
+  try{await dlvSaveVipSheet();}catch(err){if(fb)fb.textContent='Falha ao salvar: '+(err?.message||err);alert('Checklist não foi salvo: '+(err?.message||err))}
+  finally{if(btn)btn.disabled=false}
+ });
+ $('#dVipSheetPanel')?.addEventListener('change',e=>{
+  if(!e.target?.dataset?.vipSheetField)return;
+  const fb=$('#dVipSheetFeedback');
+  if(fb)fb.textContent='Alterações ainda não salvas na planilha.';
+  dlvRenderUltraReview();updateNewDeliveryPreview();
+ });
  $('#dVipPackage')?.addEventListener('change',()=>{
   dlvUltraStaffConfirmed.clear();
   renderDeliveryBenefits(dlvSnapshotForm());
@@ -5214,7 +5226,7 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
 }
 const DLV_ULTRA_PACKAGE_KEYS=new Set(['vipOrg','salario','chatFaccao','radio','garagemVip','bau','roupasFaccao','rotaExclusiva']);
 const dlvUltraStaffConfirmed=new Set();
-function dlvSelectedVipPackage(){return $('#dVipPackage')?.value==='ORG_ULTRA'?'ORG_ULTRA':''}
+function dlvSelectedVipPackage(){const value=$('#dVipPackage')?.value;return value==='ORG_ULTRA'||value==='PERSONALIZADO'?value:''}
 function dlvUltraNumber(value){
  const x=String(value??'').replace(/[^\d,.]/g,'').trim();
  if(!x)return 0;
@@ -5352,7 +5364,7 @@ async function fillDeliveryFromGroup(group,{force=false}={}){
  const f=faccoes.find(x=>x.group===group);
  const keep=dlvCurrent.group===group?dlvSnapshotForm():null;
  dlvCurrent={group:f?group:'',stored:{...(f?.beneficios||{}),rotaInicio:f?.beneficios?.rotaInicio||f?.perfilTecnico?.rota?.inicio||f?.perfilFonte?.['INICIAR ROTA']||''},sheet:{b:{},src:{},found:0,unknown:[]},status:f?'loading':''};
- if(!f){renderDeliveryBenefits();updateNewDeliveryPreview();return}
+ if(!f){renderDeliveryBenefits();dlvRenderVipSheet();updateNewDeliveryPreview();return}
  const p=f.perfilEntrega||{};
  if(!keep){
   $('#dPlano').value=p.planoPadrao||'';
@@ -5362,8 +5374,8 @@ async function fillDeliveryFromGroup(group,{force=false}={}){
  renderDeliveryBenefits(keep);updateNewDeliveryPreview();
  const cache=await dlvLoadSheet(force);
  if(dlvCurrent.group!==group)return; // trocou de Group enquanto carregava
- dlvCurrent.sheet=dlvSheetBenefits(group,cache.tabs||[]);dlvCurrent.status='';
- renderDeliveryBenefits(dlvSnapshotForm());updateNewDeliveryPreview();
+ dlvCurrent.sheet=dlvSheetBenefits(group,cache.tabs||[]);dlvCurrent.vip=dlvVipRead(group,cache.tabs||[]);dlvCurrent.status='';
+ renderDeliveryBenefits(dlvSnapshotForm());dlvRenderVipSheet();updateNewDeliveryPreview();
 }
 function selectedDeliveryBenefits(){const selected=[...document.querySelectorAll('[data-delivery-benefit]:checked')].map(x=>x.dataset.deliveryBenefit);if(dlvSelectedVipPackage()&&!selected.includes('vipOrg'))selected.push('vipOrg');return selected}
 /* Benefícios usados no extrato e nas solicitações: os do Group + o que foi
@@ -5396,12 +5408,12 @@ if(!f)return '';
 `Staff responsável: ${$('#dStaff').value.trim()||'{STAFF}'}`,
 `Data: ${$('#dData').value.trim()||'{DATA}'}`];
 
- if(dlvSelectedVipPackage())lines.push('Pacote VIP Org: ORG ULTRA (ofertado nesta entrega)');
+ if(dlvSelectedVipPackage())lines.push('Pacote VIP Org: '+(dlvSelectedVipPackage()==='ORG_ULTRA'?'ORG ULTRA':'PERSONALIZADO')+' (ofertado nesta entrega)');
  if($('#dPlano').value.trim())lines.push(`Plano / observação: ${$('#dPlano').value.trim()}`);
 // Mesmo formato do anúncio em facs-entregues: só os nomes do que foi marcado.
 lines.push('','');
  if(!active.length)lines.push('Nenhum benefício selecionado');
- else active.forEach(k=>lines.push(k==='vipOrg'&&dlvSelectedVipPackage()?'VIP ORG ULTRA':(INSTALLATIONS.find(x=>x[0]===k)?.[1]||k).toUpperCase()));
+ else active.forEach(k=>lines.push(k==='vipOrg'&&dlvSelectedVipPackage()?(dlvSelectedVipPackage()==='ORG_ULTRA'?'VIP ORG ULTRA':'VIP ORG PERSONALIZADO'):(INSTALLATIONS.find(x=>x[0]===k)?.[1]||k).toUpperCase()));
 
  if(dlvSelectedVipPackage())lines.push('','VEÍCULOS MANUAIS DO VIP ULTRA:',
  'Mule: '+($('#dVipMuleSet')?.checked?'SETADO PELO STAFF':'PENDENTE · STAFF RESPONSÁVEL'),
@@ -5647,6 +5659,9 @@ if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que
   try{await recolherParaTrocaV14(f,faccao,just.trim())}catch(err){return alert('Não foi possível recolher a facção anterior: '+err.message)}
  }}
 
+// A planilha é a base de dados: salvar status/IDs realmente confirmados antes de registrar entrega.
+try{await dlvSaveVipSheet({fromDelivery:true,silent:true})}
+catch(error){return alert('A entrega não foi concluída: checklist VIP não pôde ser salvo na planilha. '+(error?.message||error))}
 // Sem data informada, a entrega vale para hoje (o anúncio não sai com {DATA}).
 if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
 const {b:beneficiosConfigurados,isNew}=deliveryBenefitState(),
@@ -5665,7 +5680,7 @@ faccao,
 lider:$('#dLider').value.trim(),
 staff:$('#dStaff').value.trim(),
 dataEntrega:$('#dData').value.trim(),
-plano:$('#dPlano').value.trim()||(dlvSelectedVipPackage()?'Org Ultra':''),
+plano:$('#dPlano').value.trim()||(dlvSelectedVipPackage()==='ORG_ULTRA'?'Org Ultra':dlvSelectedVipPackage()==='PERSONALIZADO'?'VIP Org personalizado':''),
 pacoteVip:dlvSelectedVipPackage(),
 pacoteVipConferencia:dlvSelectedVipPackage()?dlvUltraAssessment(dlvMergedBenefits()).map(x=>({item:x.key,atendido:x.ok,origem:x.sourceOk?'CADASTRO':x.confirmed?'CONFIRMACAO_STAFF':'PENDENTE',descricao:x.detail})):[],
 setagensManuais:dlvSelectedVipPackage()?{mule:!!$('#dVipMuleSet')?.checked,cargobob:!!$('#dVipCargobobSet')?.checked}:{},
