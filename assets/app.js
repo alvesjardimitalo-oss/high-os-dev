@@ -4477,6 +4477,8 @@ function initDeliveryUi(){
 
  $('#dGroup')?.addEventListener('change',()=>{
   dlvUltraStaffConfirmed.clear();
+  if($('#dVipMuleSet'))$('#dVipMuleSet').checked=false;
+  if($('#dVipCargobobSet'))$('#dVipCargobobSet').checked=false;
   if($('#dVipPackage'))$('#dVipPackage').value='';
   fillDeliveryFromGroup($('#dGroup').value);
  });
