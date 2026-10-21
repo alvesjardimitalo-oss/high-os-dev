@@ -5661,6 +5661,7 @@ if(!facSheetAccessToken){
 }
 const pendentes=deliveryMissingData();
 if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que ainda não existem no Group:\n\n• '+pendentes.join('\n• ')+'\n\nPreencha os campos ou desmarque o benefício.');
+let trocaParaExecutar=null;
 /* V14 — travas de ocupação */
 {const st=situacaoGroup(f);
  if(st==='SEM_QG')return alert('Este Group não tem QG/favela cadastrado. Cadastre o QG antes de entregar.');
@@ -5672,12 +5673,16 @@ if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que
   if(!confirm(`TROCA DE OCUPANTE\n\n${f.group} está ocupado por ${f.faccao}.\nAo confirmar, ${f.faccao} é recolhida (com anúncio de recolhimento) e ${faccao} assume.\n\nContinuar?`))return;
   const just=prompt(`Justificativa da troca (${f.faccao} → ${faccao}):`,'');
   if(!just||!just.trim())return alert('A troca precisa de justificativa.');
-  try{await recolherParaTrocaV14(f,faccao,just.trim())}catch(err){return alert('Não foi possível recolher a facção anterior: '+err.message)}
+  trocaParaExecutar={f,faccao,justificativa:just.trim()};
  }}
 
 // A planilha é a base de dados: salvar status/IDs realmente confirmados antes de registrar entrega.
 try{await dlvSaveVipSheet({fromDelivery:true,silent:true})}
 catch(error){return alert('A entrega não foi concluída: checklist VIP não pôde ser salvo na planilha. '+(error?.message||error))}
+if(trocaParaExecutar){
+ try{await recolherParaTrocaV14(trocaParaExecutar.f,trocaParaExecutar.faccao,trocaParaExecutar.justificativa)}
+ catch(err){return alert('Não foi possível recolher a facção anterior: '+err.message)}
+}
 // Sem data informada, a entrega vale para hoje (o anúncio não sai com {DATA}).
 if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
 const {b:beneficiosConfigurados,isNew}=deliveryBenefitState(),
