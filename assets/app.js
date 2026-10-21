@@ -4987,8 +4987,8 @@ function dlvSheetBenefits(group,tabs){
 async function dlvReadOfficialTabs(token){
  const base='https://sheets.googleapis.com/v4/spreadsheets/1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4/values/';
  const specs=[
-  {name:'BENEFICIOS FACÇÕES',range:"'BENEFICIOS FACÇÕES'!A1:AF69"},
-  {name:'BLIPS COORDENADAS',range:"'BLIPS COORDENADAS'!A1:CD1006"}
+  {name:'BENEFICIOS FACÇÕES',range:"'BENEFICIOS FACÇÕES'!A:AF"},
+  {name:'BLIPS COORDENADAS',range:"'BLIPS COORDENADAS'!A:CD"}
  ];
  return Promise.all(specs.map(async item=>{
   const url=base+encodeURIComponent(item.range)+'?valueRenderOption=FORMATTED_VALUE';
