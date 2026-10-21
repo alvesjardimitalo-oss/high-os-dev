@@ -5382,6 +5382,13 @@ const faccao=$('#dFaccao').value.trim();
 if(!faccao)return alert('Informe a facção que está assumindo.');
 // O bot recusa entrega sem líder (passaporte + nome); avisa aqui antes de enviar.
 if(!$('#dLider').value.trim())return alert('Informe o líder (passaporte e nome) da facção que está assumindo.');
+// A entrada de Group só é iniciada após conceder acesso de escrita à planilha.
+// Não altera o cadastro do outro ocupante se a autorização falhar.
+if(!facSheetAccessToken){
+ try{await facSheetAuthorize()}catch(error){
+  return alert('Não foi possível autorizar a sincronização com a planilha. Entrega não iniciada.\n\n'+(error?.message||error));
+ }
+}
 /* V14 — travas de ocupação */
 {const st=situacaoGroup(f);
  if(st==='SEM_QG')return alert('Este Group não tem QG/favela cadastrado. Cadastre o QG antes de entregar.');
@@ -5448,7 +5455,7 @@ createdBy:currentUser.email};
    ...deliveredGroup,
    anuncioEntrega:{title:titulo,description:corpo.join('\n').trim()}
   });
-  await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
+  const sheetSynced=await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
 
   $('#newDeliveryModal').classList.add('hidden');
   const previousIds=new Set(previous.map(d=>d.id));
@@ -5459,7 +5466,7 @@ createdBy:currentUser.email};
   queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('entregas',Date.now());
   cacheEscrever('entregas_resumo',entregas);
   renderFaccoes();renderDeliveries();renderOrganizations();
-  alert('Entrega registrada no High OS Discord.');
+  alert(sheetSynced?'Entrega registrada no High OS Discord e sincronizada com as planilhas.':'Entrega registrada no High OS Discord, mas a planilha NÃO foi sincronizada. Conecte o Google Sheets e sincronize novamente.');
 
 
  }catch(err){alert('Erro ao concluir entrega: '+err.message)}
@@ -11165,11 +11172,11 @@ async function syncGroupsToOfficialSheet(groups=[],{quiet=false,
 forceAuthorize=false}={}){
  const clean=groups.filter(Boolean);
 if(!clean.length)return true;
-await syncBlipsGroups(clean,{quiet:true});
 let token=facSheetAccessToken;
 if(!token&&forceAuthorize)token=await facSheetAuthorize();
 if(!token){facSheetRenderStatus('warn','High OS salvo. Conecte o Google Sheets para enviar as alterações pendentes à planilha.');
 return false}
+ const blipsOk=await syncBlipsGroups(clean,{quiet:true});
  try{facSheetRenderStatus('busy',`Enviando ${clean.length} Group(s) para a planilha...`);
 if(!facSheetRowMap.size)await facSheetReadAll();
 const title=await facSheetResolveTitle(token);
@@ -11191,8 +11198,8 @@ values},
 token});
 facSheetRowMap.clear()}}
  facSheetSetLastCheck();
-facSheetRenderStatus('online',`${clean.length} Group(s) sincronizado(s) com a planilha.`);
-return true}catch(e){facSheetRenderStatus('warn','High OS foi salvo, mas a planilha não recebeu a atualização: '+e.message);
+facSheetRenderStatus(blipsOk?'online':'warn',blipsOk?`${clean.length} Group(s) sincronizado(s) com as planilhas.`:'Documento das facções atualizado, mas BLIPS COORDENADAS não sincronizou.');
+return blipsOk}catch(e){facSheetRenderStatus('warn','High OS foi salvo, mas a planilha não recebeu a atualização: '+e.message);
 if(!quiet)alert('High OS salvo, mas houve erro ao atualizar a planilha: '+e.message);
 return false}
 }
