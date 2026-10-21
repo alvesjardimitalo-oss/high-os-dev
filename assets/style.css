@@ -737,3 +737,7 @@ body[data-access-mode="custom"] .nav-item[style*="display: none"]{pointer-events
 .dlv-vip-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;border-top:1px solid #392d48;padding-top:12px}
 .dlv-vip-actions small{font-size:11px;color:#b7a6c8}
 .dlv-vip-manual input[type=text]{max-width:140px;background:#24182f;border:1px solid #5a426e;border-radius:7px;padding:6px;color:#f8f3fc}
+
+.dlv-vip-existing{grid-column:1/-1;font-size:10px;color:#9f91b2;word-break:break-word}
+.dlv-vip-sheet-row .dlv-vip-custom{grid-column:1/-1;display:flex;align-items:center;flex-direction:row;gap:7px;border:1px solid #67477a;border-radius:7px;padding:6px 8px;color:#e5d4f7}
+.dlv-vip-custom input{width:16px!important;height:16px;accent-color:#9a4fe8;flex:none}
