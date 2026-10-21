@@ -25,7 +25,7 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
-import { syncBlipsCoordinates } from './modules/blips-sheet-sync.js?v=1.0.1';
+import { syncBlipsCoordinates } from './modules/blips-sheet-sync.js?v=1.1.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.0';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
@@ -4404,7 +4404,7 @@ function renderDefaultDeliveryProfile(f){
 
 function installedValue(b,k){
  if(k==='garagemVip') return [b.garagemVipBlip,b.garagemVipSpawn].filter(Boolean).join(' / ');
- if(['garagemPublica','garagemDeluxe','heliponto'].includes(k)){const pre=k==='heliponto'?'heliponto':k,c=[b[pre+'Blip'],b[pre+'Spawn']].filter(Boolean).join(' / ');if(c)return c}
+ if(['garagemPublica','garagemPublica2','garagemDeluxe','heliponto'].includes(k)){const pre=k==='heliponto'?'heliponto':k,c=[b[pre+'Blip'],b[pre+'Spawn']].filter(Boolean).join(' / ');if(c)return c}
  if(k==='radio') return b.radio||''; if(k==='salario') return b.salario?`${b.salario} / ${b.salarioMinutos||40} min`:'';
  if(typeof b[k]==='boolean') return b[k]?'SIM':''; return b[k]||'';
 }
@@ -5389,6 +5389,8 @@ if(!facSheetAccessToken){
   return alert('Não foi possível autorizar a sincronização com a planilha. Entrega não iniciada.\n\n'+(error?.message||error));
  }
 }
+const pendentes=deliveryMissingData();
+if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que ainda não existem no Group:\n\n• '+pendentes.join('\n• ')+'\n\nPreencha os campos ou desmarque o benefício.');
 /* V14 — travas de ocupação */
 {const st=situacaoGroup(f);
  if(st==='SEM_QG')return alert('Este Group não tem QG/favela cadastrado. Cadastre o QG antes de entregar.');
@@ -5402,8 +5404,7 @@ if(!facSheetAccessToken){
   if(!just||!just.trim())return alert('A troca precisa de justificativa.');
   try{await recolherParaTrocaV14(f,faccao,just.trim())}catch(err){return alert('Não foi possível recolher a facção anterior: '+err.message)}
  }}
-const pendentes=deliveryMissingData();
-if(pendentes.length)return alert('Faltam dados para solicitar os benefícios que ainda não existem no Group:\n\n• '+pendentes.join('\n• ')+'\n\nPreencha os campos ou desmarque o benefício.');
+
 // Sem data informada, a entrega vale para hoje (o anúncio não sai com {DATA}).
 if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
 const {b:beneficiosConfigurados,isNew}=deliveryBenefitState(),
