@@ -4475,7 +4475,10 @@ function initDeliveryUi(){
 
  $('#newDeliveryModal')?.addEventListener('click',e=>{if(e.target.id==='newDeliveryModal')$('#newDeliveryModal').classList.add('hidden')});
 
- $('#dGroup')?.addEventListener('change',()=>fillDeliveryFromGroup($('#dGroup').value));
+ $('#dGroup')?.addEventListener('change',()=>{
+  if($('#dVipPackage'))$('#dVipPackage').value='';
+  fillDeliveryFromGroup($('#dGroup').value);
+ });
  $('#dSheetRefresh')?.addEventListener('click',async()=>{
   const button=$('#dSheetRefresh');
   if(button)button.disabled=true;
@@ -4495,6 +4498,11 @@ function initDeliveryUi(){
 'dData',
 'dPlano',
 'dNotes'].forEach(id=>$('#'+id)?.addEventListener('input',updateNewDeliveryPreview));
+ $('#dVipPackage')?.addEventListener('change',()=>{
+  renderDeliveryBenefits(dlvSnapshotForm());
+  updateNewDeliveryPreview();
+ });
+ ['dVipMuleSet','dVipCargobobSet'].forEach(id=>$('#'+id)?.addEventListener('change',updateNewDeliveryPreview));
 
  $('#deliverySearch')?.addEventListener('input',renderDeliveries);
  $('#deliveryStatus')?.addEventListener('change',renderDeliveries);
@@ -5055,7 +5063,7 @@ const DLV_NEEDS={
  heliponto:[['helipontoBlip','Blip (CDS)','x, y, z'],['helipontoSpawn','Spawn (CDS)','x, y, z, h',true]],
  rotaInicio:[['rotaInicio','CDS para iniciar a rota','x, y, z, h']],
  rotaExclusiva:[['rotaBlips','Pontos da rota (uma CDS por linha)','x, y, z',false,true]],
- telao:[['telaoNome','Modelo do telão','',true],['telaoCds','CDS do telão','x, y, z'],['telaoPostit','CDS do postit','x, y, z',true],
+ telao:[['telaoNome','Prop / modelo do telão','Ex.: prop_telao',false],['telaoCds','CDS do telão','x, y, z'],['telaoPostit','CDS do postit','x, y, z',true],
   // Caixas de som: até 4; a próxima aparece quando a anterior é preenchida.
   ['telaoCaixa1','CDS da caixa de som 1','x, y, z',true],['telaoCaixa2','CDS da caixa de som 2','x, y, z',true,false,'telaoCaixa1'],['telaoCaixa3','CDS da caixa de som 3','x, y, z',true,false,'telaoCaixa2'],['telaoCaixa4','CDS da caixa de som 4','x, y, z',true,false,'telaoCaixa3']],
  lojaRoupas:[['lojaRoupas','CDS da loja','x, y, z']],
@@ -5077,6 +5085,70 @@ function dlvMergedBenefits(){
  const out={...(dlvCurrent.stored||{})};
  Object.entries(dlvCurrent.sheet?.b||{}).forEach(([k,v])=>{if(v!==''&&v!=null)out[k]=v});
  return out;
+}
+/* VIP Org Ultra é um pacote OPCIONAL por entrega e não a garagem VIP já instalada.
+   A avaliação usa somente instalações anteriores (base): proposta/pedido não é execução. */
+const DLV_ULTRA_PACKAGE_KEYS=new Set(['vipOrg','salario','chatFaccao','radio','garagemVip','bau','roupasFaccao','rotaExclusiva']);
+function dlvSelectedVipPackage(){return $('#dVipPackage')?.value==='ORG_ULTRA'?'ORG_ULTRA':''}
+function dlvUltraNumber(value){
+ const x=String(value??'').replace(/[^\d,.]/g,'').trim();
+ if(!x)return 0;
+ return Number(x.includes(',')?x.replace(/\./g,'').replace(',','.'):x.replace(/\.(?=\d{3}(?:\.|$))/g,''))||0;
+}
+function dlvUltraAssessment(base=dlvMergedBenefits()){
+ const f=faccoes.find(x=>x.group===dlvCurrent.group)||{};
+ const t=f.perfilTecnico||{}, b=base||{};
+ const present=v=>!!v&&!dlvNegative(v);
+ const salary=dlvUltraNumber(b.salario),minutes=dlvUltraNumber(b.salarioMinutos);
+ const garagePresent=!!(b.garagemVipBlip||b.garagemVipSpawn||t?.operacional?.garagens?.some(g=>dlvAlnum(g.tipo)==='faccao'&&g.blip));
+ const vehicles=[b.garagemVipVeiculos,...(t?.operacional?.garagens||[]).map(g=>g.veiculos)].filter(Boolean).join(' ').toUpperCase();
+ const bauPresent=present(b.bau)||present(t?.operacional?.bau?.cds);
+ const capacity=dlvUltraNumber(b.bauCapacidade||t?.operacional?.bau?.capacidade);
+ const uniform=present(b.roupasFaccao);
+ const uniformeQtd=dlvUltraNumber(b.uniformesQuantidade||b.uniformesQtd||0);
+ const mochila=present(b.mochila);
+ const list=[
+  {key:'salario',label:'Salário R$ 1.200 a cada 40 minutos',
+   ok:salary>=1200&&minutes>0&&minutes<=40,
+   detail:salary?('Atual: R$ '+salary.toLocaleString('pt-BR')+(minutes?' / '+minutes+' min':' / intervalo não confirmado')):'Sem salário configurado',
+   action:'Configurar ou ajustar salário para R$ 1.200 a cada 40 minutos (preservar valor maior e intervalo menor, se já existentes)'},
+  {key:'chatFaccao',label:'Chat interno da organização',ok:present(b.chatFaccao),
+   detail:present(b.chatFaccao)?'Já cadastrado':'Não localizado',
+   action:'Ativar chat interno da organização'},
+  {key:'garagemVip',label:'Estrutura da garagem VIP Fac',ok:garagePresent,
+   detail:garagePresent?'Aproveitar blip/garagem existente':'Não foi encontrada garagem VIP Fac',
+   action:'Adicionar garagem VIP Fac apenas se não houver nenhuma; manter a estrutura existente e suas CDS'},
+  {key:'xmaxx',label:'Garagem / veículo xMaxx',ok:vehicles.includes('XMAXX'),
+   detail:vehicles.includes('XMAXX')?'xMaxx já identificado':'Não identificado nos veículos da garagem',
+   action:'Conferir ou configurar xMaxx na garagem VIP (aproveitar o blip existente quando possível)'},
+  {key:'bm4g82',label:'Garagem / veículo BM4G82',ok:vehicles.includes('BM4G82'),
+   detail:vehicles.includes('BM4G82')?'BM4G82 já identificado':'Não identificado nos veículos da garagem',
+   action:'Conferir ou configurar BM4G82 na garagem VIP (aproveitar o blip existente quando possível)'},
+  {key:'bau',label:'Baú com capacidade de 2.000 kg',ok:bauPresent&&capacity>=2000,
+   detail:bauPresent?'Baú existente'+(capacity?' · '+capacity+' kg':' · capacidade não informada'):'Nenhum baú localizado',
+   action:bauPresent?'Conferir e, se necessário, ampliar o baú existente para 2.000 kg (não criar outro baú)':'Adicionar baú com capacidade de 2.000 kg e informar CDS'},
+  {key:'roupasFaccao',label:'2 peças de uniforme + mochila',ok:uniform&&uniformeQtd>=2&&mochila,
+   detail:uniform?'Uniforme cadastrado; conferir quantidade e mochila':'Uniforme e mochila não confirmados',
+   action:uniform?'Conferir 2 peças de uniforme e mochila; fornecer apenas o que faltar':'Disponibilizar 2 peças de uniforme e mochila'},
+  {key:'radio',label:'Rádio exclusiva',ok:present(b.radio),
+   detail:present(b.radio)?'Rádio existente: '+String(b.radio):'Não localizada',
+   action:'Ativar rádio exclusiva e registrar a frequência'},
+  {key:'rotaExclusiva',label:'Rota de farm exclusiva',ok:present(b.rotaExclusiva)||present(b.rotaBlips),
+   detail:present(b.rotaExclusiva)||present(b.rotaBlips)?'Rota exclusiva identificada':'Somente iniciar rota não comprova rota exclusiva',
+   action:'Ativar rota de farm exclusiva com as respectivas CDS (não confundir com INICIAR ROTA)'}
+ ];
+ return list;
+}
+function dlvRenderUltraReview(){
+ const el=$('#dVipUltraReview'),body=$('#dVipUltraItems');
+ if(!el||!body)return;
+ const ultra=dlvSelectedVipPackage()==='ORG_ULTRA';
+ el.hidden=!ultra;
+ if(!ultra)return;
+ const items=dlvUltraAssessment();
+ const ready=items.filter(x=>x.ok).length;
+ body.innerHTML='<div class="dlv-vip-entry"><b>CONFERÊNCIA DO ULTRA</b><small>'+ready+' de '+items.length+' itens verificados. O restante será solicitado ou conferido, sem reimplantar o que já existe.</small></div>'
+ +items.map(item=>'<div class="dlv-vip-entry '+(item.ok?'is-present':'')+'"><b>'+esc(item.label)+'</b><span class="vip-state">'+(item.ok?'JÁ ATENDIDO':'PENDENTE / CONFERIR')+'</span><small>'+esc(item.detail)+'</small></div>').join('');
 }
 function dlvSnapshotForm(){
  const checks={},fields={};
@@ -5119,7 +5191,7 @@ function renderDeliveryBenefits(keep=null){
    ${coords.length?`<div class="dlv-coords">${coords.map(([l,c])=>`<div class="dlv-coord"><span>${esc(l)}</span><code>${esc(c).replace(/,/g,',<wbr>')}</code><button type="button" class="dlv-copy" data-copy="${esc(c)}">COPIAR</button></div>`).join('')}</div>`:''}
    ${installed?'':`<div class="dlv-needs">${needs||'<p>Sem dados extras: a solicitação de ativação é gerada automaticamente.</p>'}</div>`}
   </div>`};
- const inst=INSTALLATIONS.filter(([k])=>isInstalled(b,k)),miss=INSTALLATIONS.filter(([k])=>!isInstalled(b,k));
+ const inst=INSTALLATIONS.filter(([k])=>k!=='vipOrg'&&isInstalled(b,k)),miss=INSTALLATIONS.filter(([k])=>k!=='vipOrg'&&!isInstalled(b,k));
  box.innerHTML=`${inst.length?`<div class="dlv-group-title">INSTALADOS NO GROUP <span>${inst.length}</span></div><div class="dlv-grid">${inst.map(item).join('')}</div>`:''}
   <div class="dlv-group-title">NÃO INSTALADOS · MARQUE PARA SOLICITAR <span>${miss.length}</span></div><div class="dlv-grid">${miss.map(item).join('')}</div>`;
  box.querySelectorAll('[data-delivery-benefit]').forEach(x=>x.addEventListener('change',()=>{x.dataset.touched='1';x.closest('.dlv-item')?.classList.toggle('is-on',x.checked);updateNewDeliveryPreview()}));
@@ -5129,7 +5201,7 @@ function renderDeliveryBenefits(keep=null){
   if(next&&x.value.trim())next.hidden=false;
   updateNewDeliveryPreview()}));
  box.querySelectorAll('.dlv-copy').forEach(x=>x.addEventListener('click',()=>copyText(x.dataset.copy,x)));
- dlvRenderStatus();
+ dlvRenderStatus();dlvRenderUltraReview();
 }
 
 function dlvRenderStatus(){
@@ -5163,14 +5235,14 @@ async function fillDeliveryFromGroup(group,{force=false}={}){
  dlvCurrent.sheet=dlvSheetBenefits(group,cache.tabs||[]);dlvCurrent.status='';
  renderDeliveryBenefits(dlvSnapshotForm());updateNewDeliveryPreview();
 }
-function selectedDeliveryBenefits(){return [...document.querySelectorAll('[data-delivery-benefit]:checked')].map(x=>x.dataset.deliveryBenefit)}
+function selectedDeliveryBenefits(){const selected=[...document.querySelectorAll('[data-delivery-benefit]:checked')].map(x=>x.dataset.deliveryBenefit);if(dlvSelectedVipPackage()&&!selected.includes('vipOrg'))selected.push('vipOrg');return selected}
 /* Benefícios usados no extrato e nas solicitações: os do Group + o que foi
    digitado para os que ainda não existem. */
 function deliveryBenefitState(){
  const base=dlvMergedBenefits(),active=selectedDeliveryBenefits(),b={...base},isNew=new Set();
  active.forEach(k=>{if(isInstalled(base,k))return;isNew.add(k);
   document.querySelectorAll(`[data-dlv-key="${k}"] [data-dlv-field]`).forEach(x=>{const v=x.value.trim();if(v)b[x.dataset.dlvField]=v});
-  if(['vipOrg','chatFaccao','telao','garagemPublica','garagemPublica2','garagemDeluxe','heliponto','rotaExclusiva','roupasFaccao'].includes(k))b[k]=true});
+  if(['chatFaccao','telao','garagemPublica','garagemPublica2','garagemDeluxe','heliponto','rotaExclusiva','roupasFaccao'].includes(k))b[k]=true});
  return {b,base,active,isNew};
 }
 function deliveryMissingData(){
@@ -5194,12 +5266,16 @@ if(!f)return '';
 `Staff responsável: ${$('#dStaff').value.trim()||'{STAFF}'}`,
 `Data: ${$('#dData').value.trim()||'{DATA}'}`];
 
- if($('#dPlano').value.trim())lines.push(`Plano / Pacote: ${$('#dPlano').value.trim()}`);
+ if(dlvSelectedVipPackage())lines.push('Pacote VIP Org: ORG ULTRA (ofertado nesta entrega)');
+ if($('#dPlano').value.trim())lines.push(`Plano / observação: ${$('#dPlano').value.trim()}`);
 // Mesmo formato do anúncio em facs-entregues: só os nomes do que foi marcado.
 lines.push('','');
  if(!active.length)lines.push('Nenhum benefício selecionado');
- else active.forEach(k=>lines.push((INSTALLATIONS.find(x=>x[0]===k)?.[1]||k).toUpperCase()));
+ else active.forEach(k=>lines.push(k==='vipOrg'&&dlvSelectedVipPackage()?'VIP ORG ULTRA':(INSTALLATIONS.find(x=>x[0]===k)?.[1]||k).toUpperCase()));
 
+ if(dlvSelectedVipPackage())lines.push('','VEÍCULOS MANUAIS DO VIP ULTRA:',
+ 'Mule: '+($('#dVipMuleSet')?.checked?'SETADO PELO STAFF':'PENDENTE · STAFF RESPONSÁVEL'),
+ 'Cargobob: '+($('#dVipCargobobSet')?.checked?'SETADO PELO STAFF':'PENDENTE · STAFF RESPONSÁVEL'));
  if($('#dNotes').value.trim())lines.push('','PERSONALIZAÇÕES / ALTERAÇÕES:',$('#dNotes').value.trim());
 return lines.join('\n');
 
