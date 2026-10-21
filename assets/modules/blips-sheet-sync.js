@@ -227,7 +227,7 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
    put(requests,TAB_GID,r,existingAnchor,value);
   }
   if(s.newBlock)put(requests,TAB_GID,s.sectionRow,8,String(s.reserved.size));
-  if(isNew){created++;entry.name=f.group;occupiedAdded.add(key);}else updated++;
+  if(isNew){created++;entry.name=f.group;}else updated++;
  }
  if(requests.length){
   // Limite defensivo: uma falha não deve apagar a planilha preexistente.
