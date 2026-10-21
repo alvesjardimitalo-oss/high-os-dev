@@ -5175,7 +5175,9 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
  const group=dlvCurrent.group;
  if(!group)throw Error('Selecione um Group.');
  const form=dlvVipFormChanges();
- const edits=new Map(form.map(x=>[x.label,x.value]));
+ const baseline=new Map(Object.entries(dlvCurrent.vip||{}).map(([label,x])=>[label,String(x.value??'').trim()]));
+ // Somente campos ALTERADOS pelo operador. Não reenviar campos intactos.
+ const edits=new Map(form.filter(x=>x.value!==(baseline.get(x.label)||'')).map(x=>[x.label,x.value]));
  if(fromDelivery){
   const chosen=dlvSelectedVipPackage();
   if(chosen)edits.set('VIP | PACOTE',chosen==='ORG_ULTRA'?'ORG ULTRA':'PERSONALIZADO');
@@ -5215,7 +5217,9 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
   const item=found.get(label);
   if(!item)throw Error('O campo '+label+' não existe no quadro '+group+'.');
   if(!Number.isInteger(item.row)||!Number.isInteger(item.col)||item.col<0)throw Error('Posição inválida para '+label);
-  if(String(item.value??'').trim()===value)continue;
+  const remote=String(item.value??'').trim(),old=baseline.get(label)||'';
+  if(remote===value)continue;
+  if(remote!==old)throw Error('O campo '+label+' do '+group+' foi alterado na planilha por outra pessoa. Atualize a planilha e revise antes de salvar.');
   requests.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:item.row,columnIndex:item.col},
    rows:[{values:[{userEnteredValue:{stringValue:value}}]}],fields:'userEnteredValue'}});
  }
@@ -5439,7 +5443,7 @@ function currentDeliveryRequests(){
 if(!f)return[];
 const {b,base,active:a,isNew}=deliveryBenefitState(),
 ultra=dlvSelectedVipPackage()==='ORG_ULTRA',
-has=k=>a.includes(k)&&!(ultra&&DLV_ULTRA_PACKAGE_KEYS.has(k))&&(!isInstalled(base,k)||isNew.has(k)),
+has=k=>a.includes(k)&&!(k==='vipOrg'&&dlvSelectedVipPackage())&&!(ultra&&DLV_ULTRA_PACKAGE_KEYS.has(k))&&(!isInstalled(base,k)||isNew.has(k)),
 novo=k=>isNew.has(k)?' (NOVA INSTALAÇÃO)':'',
 R=[],
 add=(tipo,titulo,texto)=>R.push({tipo,
