@@ -4388,9 +4388,9 @@ function openUserActivity(email){activateAppPage('administracao');loadUserAudit(
 let entregas=[];
 const INSTALLATIONS=[
  ['vipOrg','VIP Org'],['chatFaccao','Chat da Facção'],['radio','Rádio Exclusiva'],['salario','Salário'],
- ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaInicio','Rota'],['rotaExclusiva','Rota Exclusiva'],
+ ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['garagemPublica2','Garagem Pública 2'],['heliponto','Heliponto'],['blindados','Blindados'],['rotaInicio','Rota'],['rotaExclusiva','Rota Exclusiva'],
  ['telao','Telão'],['lojaRoupas','Loja de Roupas'],['barbearia','Barbearia'],['tatuagem','Tatuagem'],['shopExclusivo','Shop Exclusivo'],
- ['bau','Baú'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['sinuca','Sinuca'],['roupasFaccao','Uniforme'],['farm','Farm'],['craft','Craft'],['arena','Arena']
+ ['bau','Baú'],['bar','Bar'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['sinuca','Sinuca'],['roupasFaccao','Uniforme'],['farm','Farm'],['craft','Craft'],['arena','Arena']
 ];
 function renderDefaultDeliveryProfile(f){
  const p=f?.perfilEntrega||{}, b=f?.beneficios||{}, selected=new Set(p.beneficiosPadrao||[]);
@@ -4876,8 +4876,11 @@ const dlvAffirmative=v=>/^(sim|s|x|ok|✓|✔|✅|true|ativo|ativa|possui|tem|in
 const DLV_LABEL_RULES=[
  ['garagemDeluxe',/garag.*deluxe/],
  ['garagemVip',/garag.*(vip|fac|org)|(vip|fac).*garag/],
+ ['garagemPublica2',/garag.*publ.*2/],
  ['garagemPublica',/garag.*publ/],
  ['heliponto',/heli/],
+ ['blindados',/blindad/],
+ ['bar',/^bar$/],
  ['telao',/telao/],
  ['roupasFaccao',/roupas? (de |da )?(fac|org)|uniforme/],
  ['lojaRoupas',/roupa|^loja de r$/],
@@ -4899,7 +4902,7 @@ const DLV_LABEL_RULES=[
  ['farm',/\bfarm\b/],
  ['vipOrg',/\bvip\b/]
 ];
-const DLV_SPAWNABLE={garagemDeluxe:'garagemDeluxeSpawn',garagemVip:'garagemVipSpawn',garagemPublica:'garagemPublicaSpawn',heliponto:'helipontoSpawn'};
+const DLV_SPAWNABLE={garagemDeluxe:'garagemDeluxeSpawn',garagemVip:'garagemVipSpawn',garagemPublica:'garagemPublicaSpawn',garagemPublica2:'garagemPublica2Spawn',heliponto:'helipontoSpawn'};
 const DLV_IGNORE=/^(group|grupo|local|qg|localizacao|segmento|produto|status|lider|proprietario|organizacao|organizacoes|faccao|staff|entregue por|data|data de entrega|contingente|quantidade contingente|observac|obs|n|no|numero|cds|coordenada|coordenadas|anuncio|coluna \d+|true|false|completo|pendente|disp|ocup|setado|remover|vencimentos?|legendas?|vips? (esmeralda|prata|ouro|deluxe|obsidian|premium))\b/;
 
 function dlvLabelKey(label){const l=dlvFold(label);for(const [k,re] of DLV_LABEL_RULES)if(re.test(l))return k;return ''}
@@ -4917,11 +4920,12 @@ function dlvSheetEntries(tab,group){
    let end=line.length;for(let k=ci+1;k<line.length;k++)if(/^(group|grupo)$/.test(dlvFold(line[k]))){end=k;break}
    const pick=r=>{for(let k=ci+1;k<end;k++)if(cells[r]?.[k])return k;return -1};
    const gi=pick(ri);if(gi<0||dlvAlnum(cells[ri][gi])!==want)continue;
-   let blanks=0;
-   for(let rj=ri+1;rj<cells.length;rj++){const label=cells[rj]?.[ci]||'';
-    if(/^(group|grupo)$/.test(dlvFold(label)))break;
-    if(!label){if(++blanks>=2)break;continue}
-    blanks=0;const vi=pick(rj);out.push({label,value:vi>=0?cells[rj][vi]:''});
+   // Quadros completos possuem linhas vazias e agora até 45+ campos.
+   // Não interromper após duas linhas sem rótulo; finalizar no rodapé TRUE.
+   for(let rj=ri+1;rj<Math.min(cells.length,ri+90);rj++){const label=cells[rj]?.[ci]||'';
+    if(/^(group|grupo|true)$/.test(dlvFold(label)))break;
+    if(!label)continue;
+    const vi=pick(rj);out.push({label,value:vi>=0?cells[rj][vi]:''});
    }
   }
  }
@@ -4956,6 +4960,16 @@ function dlvSheetBenefits(group,tabs){
    const l=dlvFold(label),v=String(value||'').trim();
    // Spawn logo abaixo da garagem/heliponto.
    if(/^(spawn|saida|vaga)/.test(l)&&DLV_SPAWNABLE[last]){if(v&&!dlvNegative(v))set(DLV_SPAWNABLE[last],v,last,tab.name,label);continue}
+   // Campos extras de um quadro expandido: não confundir telão/garagens.
+   const tel=l.match(/^telao (modelo|postit|caixa [1-4])$/);
+   if(tel){if(v&&!dlvNegative(v)){
+    const f=tel[1]==='modelo'?'telaoNome':tel[1]==='postit'?'telaoPostit':'telaoCaixa'+tel[1].slice(-1);
+    set(f,v,'telao',tab.name,label);set('telao',true,'telao',tab.name,label);
+   }continue}
+   if(l==='intervalo salario'){if(v&&!dlvNegative(v))set('salarioMinutos',v,'salario',tab.name,label);continue}
+   if(l==='capacidade bau'){if(v&&!dlvNegative(v))set('bauCapacidade',v,'bau',tab.name,label);continue}
+   if(l==='veiculos vip'){if(v&&!dlvNegative(v))set('garagemVipVeiculos',v,'garagemVip',tab.name,label);continue}
+   if(l==='cds rota exclusiva'){if(v&&!dlvNegative(v)){set('rotaBlips',v,'rotaExclusiva',tab.name,label);set('rotaExclusiva',true,'rotaExclusiva',tab.name,label)}continue}
    // Campo que lista vários benefícios ("Benefícios: Loja de roupa, Barbearia...").
    if(/benef|estrutura|instala|setage/.test(l)&&v&&!dlvLabelKey(label)){
     v.split(/[,;\n•|/]+/).map(x=>x.trim()).filter(Boolean).forEach(item=>{const k=dlvLabelKey(item);if(k&&!b[k])set(k,'SIM',k,tab.name,label);else if(!k)unknown.push(item)});
@@ -4965,7 +4979,7 @@ function dlvSheetBenefits(group,tabs){
    if(!key){if(v&&!dlvNegative(v)&&!DLV_IGNORE.test(l))unknown.push(label);continue}
    if(!v||dlvNegative(v))continue;
    const spawn=/spawn|saida/.test(l);
-   if(['garagemVip','garagemPublica','garagemDeluxe'].includes(key)){
+   if(['garagemVip','garagemPublica','garagemPublica2','garagemDeluxe'].includes(key)){
     // Na planilha a garagem vem como "blip / spawn" na mesma célula.
     const parts=v.split(/\s+\/\s*|\s*\/\s+/).map(x=>x.trim()).filter(x=>x&&!dlvNegative(x));
     if(spawn)set(key+'Spawn',parts[0]||v,key,tab.name,label);
@@ -5031,6 +5045,8 @@ const DLV_NEEDS={
  salario:[['salario','Valor do salário','Ex.: 5000'],['salarioMinutos','A cada (minutos)','40',true]],
  garagemVip:[['garagemVipBlip','Blip (CDS)','x, y, z'],['garagemVipSpawn','Spawn (CDS)','x, y, z, h']],
  garagemPublica:[['garagemPublicaBlip','Blip (CDS)','x, y, z'],['garagemPublicaSpawn','Spawn (CDS)','x, y, z, h']],
+ garagemPublica2:[['garagemPublica2Blip','Blip (CDS)','x, y, z'],['garagemPublica2Spawn','Spawn (CDS)','x, y, z, h']],
+ blindados:[['blindados','CDS / configuração dos blindados','x, y, z, h']],
  garagemDeluxe:[['garagemDeluxeBlip','Blip (CDS)','x, y, z'],['garagemDeluxeSpawn','Spawn (CDS)','x, y, z, h']],
  shopDeluxe:[['shopDeluxe','CDS do Shop Deluxe','x, y, z']],
  academia:[['academia','CDS da academia','x, y, z']],
@@ -5050,6 +5066,7 @@ const DLV_NEEDS={
  bau:[['bau','CDS do baú','x, y, z'],['bauCapacidade','Capacidade','',true]],
  farm:[['farm','CDS / descrição do farm','x, y, z']],
  craft:[['craft','CDS do craft','x, y, z']],
+ bar:[['bar','CDS do bar','x, y, z']],
  arena:[['arena','CDS da arena','x, y, z']]
 };
 
@@ -5071,7 +5088,7 @@ function dlvSnapshotForm(){
 /* CDS de cada benefício instalado, separadas para conferir/testar in game.
    Garagem/heliponto: Blip e Spawn (na planilha vêm na mesma célula, "blip / spawn").
    Baú etc.: uma linha por CDS separada por "/". O texto é copiado exatamente como está. */
-const DLV_BLIP_SPAWN=['garagemVip','garagemPublica','garagemDeluxe','heliponto'];
+const DLV_BLIP_SPAWN=['garagemVip','garagemPublica','garagemPublica2','garagemDeluxe','heliponto'];
 function dlvCoordParts(v){return String(v||'').split(/\s*\/\s*|\n+/).map(x=>x.trim()).filter(x=>/-?\d+(?:\.\d+)?\s*,\s*-?\d+/.test(x))}
 function dlvCoordRows(k,b){
  if(DLV_BLIP_SPAWN.includes(k)){
@@ -5153,7 +5170,7 @@ function deliveryBenefitState(){
  const base=dlvMergedBenefits(),active=selectedDeliveryBenefits(),b={...base},isNew=new Set();
  active.forEach(k=>{if(isInstalled(base,k))return;isNew.add(k);
   document.querySelectorAll(`[data-dlv-key="${k}"] [data-dlv-field]`).forEach(x=>{const v=x.value.trim();if(v)b[x.dataset.dlvField]=v});
-  if(['vipOrg','chatFaccao','telao','garagemPublica','garagemDeluxe','heliponto','rotaExclusiva','roupasFaccao'].includes(k))b[k]=true});
+  if(['vipOrg','chatFaccao','telao','garagemPublica','garagemPublica2','garagemDeluxe','heliponto','rotaExclusiva','roupasFaccao'].includes(k))b[k]=true});
  return {b,base,active,isNew};
 }
 function deliveryMissingData(){
