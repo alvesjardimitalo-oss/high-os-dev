@@ -5156,6 +5156,23 @@ function dlvVipSelect(label,options){
   +options.map(x=>'<option value="'+esc(x)+'"'+(x===value?' selected':'')+'>'+(x?esc(x):'Não informado')+'</option>').join('')
   +'</select>';
 }
+function dlvVipExistingDetail(item){
+ const b=dlvMergedBenefits();
+ const text={
+  salario:b.salario?'R$ '+b.salario+' / '+(b.salarioMinutos||'?')+' min':'',
+  bau:[b.bau,b.bauCapacidade?b.bauCapacidade+' kg':''].filter(Boolean).join(' · '),
+  roupasFaccao:b.roupasFaccao?'Uniformes cadastrados; entrega pendente de confirmação':'',
+  mochila:b.mochila?'Mochila cadastrada':'',
+  radio:b.radio?'Frequência: '+b.radio:'',
+  rotaExclusiva:b.rotaBlips?'CDS: '+b.rotaBlips:(b.rotaInicio?'Início da rota comum: '+b.rotaInicio:''),
+  chatFaccao:b.chatFaccao?'Chat encontrado':'',
+  xmaxx:b.garagemVipVeiculos?'Veículos: '+b.garagemVipVeiculos:'',
+  bm4g82:b.garagemVipVeiculos?'Veículos: '+b.garagemVipVeiculos:'',
+  garagemVip:[b.garagemVipBlip,b.garagemVipSpawn].filter(Boolean).join(' / '),
+  telao:[b.telaoNome,b.telaoCds,b.telaoPostit,...[1,2,3,4].map(i=>b['telaoCaixa'+i])].filter(Boolean).join(' / ')
+ }[item.key]||'';
+ return text?'<small class="dlv-vip-existing">Dados cadastrados: '+esc(text)+'</small>':'';
+}
 function dlvRenderVipSheet(){
  const panel=$('#dVipSheetPanel'),list=$('#dVipSheetChecklist'),meta=$('#dVipSheetMeta');
  if(!panel||!list||!meta)return;
@@ -5170,7 +5187,7 @@ function dlvRenderVipSheet(){
   +'<label class="dlv-vip-field"><b>VIP Org ativado</b>'+dlvVipSelect('VIP | ATIVO',DLV_VIP_STATUSES)+'</label>'
   +'<label class="dlv-vip-field"><b>Origem geral</b>'+dlvVipSelect('VIP | ORIGEM GERAL',DLV_VIP_ORIGINS)+'</label>';
  list.innerHTML=DLV_VIP_ITEMS.map(item=>
-  '<div class="dlv-vip-sheet-row"><b>'+esc(item.label)+'</b>'+
+  '<div class="dlv-vip-sheet-row"><b>'+esc(item.label)+'</b>'+dlvVipExistingDetail(item)+
   (dlvSelectedVipPackage()==='PERSONALIZADO'?'<label class="dlv-vip-custom"><input type="checkbox" data-vip-custom-item="'+esc(item.key)+'" '+(dlvVipCustomItems.has(item.key)?'checked':'')+'> Incluir neste pacote</label>':'')+
   '<label>Status'+dlvVipSelect(item.status,DLV_VIP_STATUSES)+'</label>'+
   '<label>Origem'+dlvVipSelect(item.origin,DLV_VIP_ORIGINS)+'</label>'+
