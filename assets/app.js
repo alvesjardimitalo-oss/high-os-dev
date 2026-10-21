@@ -4476,7 +4476,18 @@ function initDeliveryUi(){
  $('#newDeliveryModal')?.addEventListener('click',e=>{if(e.target.id==='newDeliveryModal')$('#newDeliveryModal').classList.add('hidden')});
 
  $('#dGroup')?.addEventListener('change',()=>fillDeliveryFromGroup($('#dGroup').value));
- $('#dSheetRefresh')?.addEventListener('click',()=>fillDeliveryFromGroup($('#dGroup').value,{force:true}));
+ $('#dSheetRefresh')?.addEventListener('click',async()=>{
+  const button=$('#dSheetRefresh');
+  if(button)button.disabled=true;
+  try{
+   // O botão consulta a planilha ORIGINAL. O espelho do bot pode estar truncado.
+   await authorizeSheets();
+   await fillDeliveryFromGroup($('#dGroup').value,{force:true});
+  }catch(error){
+   dlvSheetCache={...dlvSheetCache,error:'Não foi possível consultar a planilha original: '+(error?.message||error)};
+   dlvRenderStatus();
+  }finally{if(button)button.disabled=false}
+ });
 
  ['dFaccao',
 'dLider',
@@ -4970,15 +4981,42 @@ function dlvSheetBenefits(group,tabs){
  return {b,src,found,unknown:[...new Set(unknown)].slice(0,12)};
 }
 
+/* Leitura direta da planilha oficial: as fichas vão até CD, além do corte
+   de 40 colunas que existia no espelho do Discord (LAVAGEM09 fica em BK).
+   Esta consulta é somente leitura e não altera nenhuma célula. */
+async function dlvReadOfficialTabs(token){
+ const base='https://sheets.googleapis.com/v4/spreadsheets/1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4/values/';
+ const specs=[
+  {name:'BENEFICIOS FACÇÕES',range:"'BENEFICIOS FACÇÕES'!A1:AF69"},
+  {name:'BLIPS COORDENADAS',range:"'BLIPS COORDENADAS'!A1:CD1006"}
+ ];
+ return Promise.all(specs.map(async item=>{
+  const url=base+encodeURIComponent(item.range)+'?valueRenderOption=FORMATTED_VALUE';
+  const data=await sheetsFetch(url,token);
+  return {name:item.name,grid:{cells:data.values||[]},receivedAt:new Date().toISOString()};
+ }));
+}
 async function dlvLoadSheet(force=false){
- if(!force&&dlvSheetCache.tabs&&Date.now()-dlvSheetCache.at<DLV_SHEET_TTL)return dlvSheetCache;
+ if(!force&&dlvSheetCache.tabs&&Date.now()-dlvSheetCache.at<DLV_SHEET_TTL&&!(sheetsAccessToken&&dlvSheetCache.source!=='original'))return dlvSheetCache;
  if(dlvSheetCache.promise)return dlvSheetCache.promise;
  dlvSheetCache.promise=(async()=>{
+  let directError='';
+  if(sheetsAccessToken){
+   try{
+    const tabs=await dlvReadOfficialTabs(sheetsAccessToken);
+    dlvSheetCache={at:Date.now(),tabs,promise:null,error:'',source:'original'};
+    return dlvSheetCache;
+   }catch(error){
+    directError=error?.message||String(error);
+    console.warn('[ENTREGA] Google Sheets original indisponível; tentando espelho:',error);
+   }
+  }
   const tabs=[],errors=[];
   for(const slug of DLV_SHEET_TABS){
    try{tabs.push(await highOsStoreGet('planilha',slug))}catch(e){errors.push(slug+': '+e.message)}
   }
-  dlvSheetCache={at:Date.now(),tabs,promise:null,error:tabs.length?'':(errors.join(' • ')||'abas não encontradas')};
+  dlvSheetCache={at:Date.now(),tabs,promise:null,source:'espelho',
+   error:directError?'Falha ao ler a planilha original: '+directError:(tabs.length?'':(errors.join(' • ')||'abas não encontradas'))};
   return dlvSheetCache;
  })().catch(e=>{dlvSheetCache={...dlvSheetCache,promise:null,error:e.message};return dlvSheetCache});
  return dlvSheetCache.promise;
@@ -5081,10 +5119,10 @@ function dlvRenderStatus(){
  const fmt=when?new Date(when).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
  let html;
  if(dlvCurrent.status==='loading')html='<b>Lendo a planilha…</b> BENEFICIOS FACÇÕES e BLIPS COORDENADAS.';
- else if(dlvSheetCache.error)html=`<b class="warn">Planilha indisponível.</b> Usando só o cadastro do High OS. <small>${esc(dlvSheetCache.error)}</small>`;
+ else if(dlvSheetCache.error)html=`<b class="warn">Leitura da planilha incompleta.</b> Os benefícios podem não estar atualizados. <small>${esc(dlvSheetCache.error)}</small>`;
  else if(!dlvCurrent.group)html='Selecione um Group para ler os benefícios da planilha.';
  else if(!s.found)html=`<b class="warn">${esc(dlvCurrent.group)} não foi encontrado</b> nas abas BENEFICIOS FACÇÕES / BLIPS COORDENADAS${fmt?` (recebidas ${fmt})`:''}. Usando só o cadastro do High OS.`;
- else html=`<b>Planilha lida</b>${fmt?` · recebida ${fmt}`:''} · ${Object.keys(s.src||{}).length} benefício(s) do Group encontrados.`;
+ else html=`<b>${dlvSheetCache.source==='original'?'Planilha original lida':'Espelho da planilha lido'}</b>${fmt?` · recebida ${fmt}`:''} · ${Object.keys(s.src||{}).length} benefício(s) do Group encontrados.`;
  if(s.unknown?.length)html+=`<br><small>Itens da planilha não reconhecidos: ${s.unknown.map(esc).join(', ')}</small>`;
  el.innerHTML=html;
 }
