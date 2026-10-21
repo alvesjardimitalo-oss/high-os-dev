@@ -5439,7 +5439,7 @@ function currentDeliveryRequests(){
 if(!f)return[];
 const {b,base,active:a,isNew}=deliveryBenefitState(),
 ultra=dlvSelectedVipPackage()==='ORG_ULTRA',
-has=k=>a.includes(k)&&!(ultra&&DLV_ULTRA_PACKAGE_KEYS.has(k))&&(!ultra||isNew.has(k)),
+has=k=>a.includes(k)&&!(ultra&&DLV_ULTRA_PACKAGE_KEYS.has(k))&&(!isInstalled(base,k)||isNew.has(k)),
 novo=k=>isNew.has(k)?' (NOVA INSTALAÇÃO)':'',
 R=[],
 add=(tipo,titulo,texto)=>R.push({tipo,
