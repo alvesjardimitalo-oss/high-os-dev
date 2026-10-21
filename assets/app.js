@@ -5283,8 +5283,9 @@ return lines.join('\n');
 function currentDeliveryRequests(){
  const f=faccoes.find(x=>x.group===$('#dGroup').value);
 if(!f)return[];
-const {b,active:a,isNew}=deliveryBenefitState(),
-has=k=>a.includes(k),
+const {b,base,active:a,isNew}=deliveryBenefitState(),
+ultra=dlvSelectedVipPackage()==='ORG_ULTRA',
+has=k=>a.includes(k)&&!(ultra&&DLV_ULTRA_PACKAGE_KEYS.has(k)),
 novo=k=>isNew.has(k)?' (NOVA INSTALAÇÃO)':'',
 R=[],
 add=(tipo,titulo,texto)=>R.push({tipo,
@@ -5312,7 +5313,7 @@ texto});
 'sinuca',
 'roupasFaccao'];
 
- if(a.some(k=>vipKeys.includes(k))){let L=['Assunto: Ativação de benefícios de uma organização e alguns blips',
+ if(a.some(k=>vipKeys.includes(k)&&has(k))){let L=['Assunto: Ativação de benefícios de uma organização e alguns blips',
 '',
 'Solicitação:',
 '',
@@ -5380,7 +5381,7 @@ add('ROTA_FARM','Rota de Farm Exclusiva'+novo('rotaExclusiva'),['Assunto: Ativa�
 '- Ativação de Telão Hall em uma Organização Ilegal.',
 '',
 `- Group: ${f.group}`,
-`- Telão usado: ${b.telaoNome||'{modelo_do_telao}'}`,
+`- Prop / modelo do telão: ${b.telaoNome||'{PROP_DO_TELAO}'}`,
 '',
 `- Local/Coordenadas postit: ${fmtCds(b.telaoPostit)}`,
 `- Local/Coordenadas cds: ${fmtCds(b.telaoCds)}`,
@@ -5431,6 +5432,25 @@ b.helipontoSpawn?`- Spawn: ${fmtCds(b.helipontoSpawn)}`:'',
 '',
 `- Group: ${f.group}.`].join('\n'));
 
+ if(ultra){
+  const unmet=dlvUltraAssessment(base).filter(item=>!item.ok);
+  if(unmet.length){
+   const lines=['Assunto: Complementação de benefícios VIP Org Ultra',
+    '',
+    'Solicitação:',
+    '- Ativar SOMENTE os benefícios pendentes do pacote Org Ultra',
+    '- Group: '+f.group,
+    '- Aproveitar instalações e coordenadas existentes, sem duplicá-las',
+    '',
+    '- Benefícios faltantes ou não confirmados:',
+    ...unmet.map(item=>'- '+item.action)];
+   if(unmet.some(item=>item.key==='radio')&&b.radio)lines.push('- Frequência informada: '+b.radio);
+   if(unmet.some(item=>item.key==='rotaExclusiva')&&b.rotaBlips)lines.push('- CDS da rota exclusiva: '+b.rotaBlips);
+   if(unmet.some(item=>item.key==='bau')&&b.bau)lines.push('- Baú existente: '+b.bau);
+   if(unmet.some(item=>item.key==='garagemVip')&&b.garagemVipBlip)lines.push('- Blip da garagem VIP: '+b.garagemVipBlip);
+   add('VIP_ORG_ULTRA','VIP Org Ultra · Somente pendências',lines.join('\n'));
+  }
+ }
  if($('#dNotes').value.trim())add('GERAL','Personalização / Alteração estrutural',['Assunto: Alteração / personalização de estrutura do QG',
 '',
 'Solicitação:',
