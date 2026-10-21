@@ -705,3 +705,22 @@ body[data-access-mode="custom"] .nav-item[style*="display: none"]{pointer-events
 .admin-group-create-footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:16px}
 .admin-group-create-footer span{font-size:11px;color:#a99bb7;margin-right:auto}
 @media(max-width:700px){.admin-group-head-actions{justify-content:flex-start}.admin-group-create-grid{grid-template-columns:1fr}.admin-group-create-footer>*{flex:1 1 auto}.admin-group-create-footer span{flex-basis:100%}}
+
+/* VIP Org Ultra: conferência por Group, sem confundir posse física com pacote adquirido. */
+.dlv-vip-review{margin:14px 0;border:1px solid #7542aa;border-radius:12px;padding:14px;background:#171022;color:#dfd3ef}
+.dlv-vip-review[hidden]{display:none}
+.dlv-vip-title{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.dlv-vip-title b{font-size:12px;color:#fff;letter-spacing:.05em}
+.dlv-vip-title span,.dlv-vip-help,.dlv-vip-manual small{font-size:11px;color:#b7a6c8}
+.dlv-vip-help{margin:8px 0 12px}
+.dlv-vip-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:8px}
+.dlv-vip-entry{padding:10px;border:1px solid #392d48;border-radius:9px;background:#100d18}
+.dlv-vip-entry b{display:block;font-size:12px;color:#efe5fa}
+.dlv-vip-entry small{display:block;font-size:11px;line-height:1.4;margin-top:4px;color:#ae9fbd}
+.dlv-vip-entry .vip-state{font-size:10px;font-weight:750;letter-spacing:.04em;color:#f2bb71}
+.dlv-vip-entry.is-present .vip-state{color:#87d0a6}
+.dlv-vip-manual{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;border-top:1px solid #392d48;padding-top:12px}
+.dlv-vip-manual>b{font-size:11px;color:#e1cef2}
+.dlv-vip-manual label{display:flex;align-items:center;gap:6px;margin:0;font-size:11px}
+.dlv-vip-manual input{accent-color:#9f5ce4}
+.dlv-vip-manual small{flex-basis:100%}
