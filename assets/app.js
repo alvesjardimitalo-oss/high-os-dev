@@ -4388,7 +4388,7 @@ function openUserActivity(email){activateAppPage('administracao');loadUserAudit(
 let entregas=[];
 const INSTALLATIONS=[
  ['vipOrg','VIP Org'],['chatFaccao','Chat da Facção'],['radio','Rádio Exclusiva'],['salario','Salário'],
- ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaExclusiva','Rota Exclusiva'],
+ ['garagemVip','Garagem VIP'],['garagemPublica','Garagem Pública'],['heliponto','Heliponto'],['rotaInicio','Rota'],['rotaExclusiva','Rota Exclusiva'],
  ['telao','Telão'],['lojaRoupas','Loja de Roupas'],['barbearia','Barbearia'],['tatuagem','Tatuagem'],['shopExclusivo','Shop Exclusivo'],
  ['bau','Baú'],['atm','ATM'],['garagemDeluxe','Garagem Deluxe'],['shopDeluxe','Shop Deluxe'],['academia','Academia'],['sinuca','Sinuca'],['roupasFaccao','Uniforme'],['farm','Farm'],['craft','Craft'],['arena','Arena']
 ];
@@ -4892,6 +4892,7 @@ const DLV_LABEL_RULES=[
  ['radio',/radio/],
  ['salario',/salario/],
  ['chatFaccao',/chat/],
+ ['rotaInicio',/^(iniciar rota|rota inicio|inicio da rota|rota)$/],
  ['rotaExclusiva',/rota exclusiva|rota de farm exclusiva|^rota (fac|org)/],
  ['arena',/arena/],
  ['craft',/craft|fabrica/],
@@ -4899,7 +4900,7 @@ const DLV_LABEL_RULES=[
  ['vipOrg',/\bvip\b/]
 ];
 const DLV_SPAWNABLE={garagemDeluxe:'garagemDeluxeSpawn',garagemVip:'garagemVipSpawn',garagemPublica:'garagemPublicaSpawn',heliponto:'helipontoSpawn'};
-const DLV_IGNORE=/^(group|grupo|local|qg|localizacao|segmento|produto|status|lider|proprietario|organizacao|organizacoes|faccao|staff|entregue por|data|data de entrega|contingente|quantidade contingente|observac|obs|n|no|numero|cds|coordenada|coordenadas|anuncio|coluna \d+|iniciar rota|true|false|completo|pendente|disp|ocup|setado|remover|vencimentos?|legendas?|vips? (esmeralda|prata|ouro|deluxe|obsidian|premium))\b/;
+const DLV_IGNORE=/^(group|grupo|local|qg|localizacao|segmento|produto|status|lider|proprietario|organizacao|organizacoes|faccao|staff|entregue por|data|data de entrega|contingente|quantidade contingente|observac|obs|n|no|numero|cds|coordenada|coordenadas|anuncio|coluna \d+|true|false|completo|pendente|disp|ocup|setado|remover|vencimentos?|legendas?|vips? (esmeralda|prata|ouro|deluxe|obsidian|premium))\b/;
 
 function dlvLabelKey(label){const l=dlvFold(label);for(const [k,re] of DLV_LABEL_RULES)if(re.test(l))return k;return ''}
 
@@ -5036,6 +5037,7 @@ const DLV_NEEDS={
  sinuca:[['sinuca','CDS da sinuca','x, y, z']],
  roupasFaccao:[],
  heliponto:[['helipontoBlip','Blip (CDS)','x, y, z'],['helipontoSpawn','Spawn (CDS)','x, y, z, h',true]],
+ rotaInicio:[['rotaInicio','CDS para iniciar a rota','x, y, z, h']],
  rotaExclusiva:[['rotaBlips','Pontos da rota (uma CDS por linha)','x, y, z',false,true]],
  telao:[['telaoNome','Modelo do telão','',true],['telaoCds','CDS do telão','x, y, z'],['telaoPostit','CDS do postit','x, y, z',true],
   // Caixas de som: até 4; a próxima aparece quando a anterior é preenchida.
@@ -5130,7 +5132,7 @@ function dlvRenderStatus(){
 async function fillDeliveryFromGroup(group,{force=false}={}){
  const f=faccoes.find(x=>x.group===group);
  const keep=dlvCurrent.group===group?dlvSnapshotForm():null;
- dlvCurrent={group:f?group:'',stored:f?.beneficios||{},sheet:{b:{},src:{},found:0,unknown:[]},status:f?'loading':''};
+ dlvCurrent={group:f?group:'',stored:{...(f?.beneficios||{}),rotaInicio:f?.beneficios?.rotaInicio||f?.perfilTecnico?.rota?.inicio||f?.perfilFonte?.['INICIAR ROTA']||''},sheet:{b:{},src:{},found:0,unknown:[]},status:f?'loading':''};
  if(!f){renderDeliveryBenefits();updateNewDeliveryPreview();return}
  const p=f.perfilEntrega||{};
  if(!keep){
@@ -5253,6 +5255,14 @@ if(has('garagemVip'))L.push('',`- ${isNew.has('garagemVip')?'Adicionar':'Ativar'
 'Sinuca']].forEach(([k,
 n])=>{if(has(k))L.push('',`- ${n}${novo(k)}: ${fmtCds(b[k]&&b[k]!=='SIM'?b[k]:'')}`)});
 add('BENEFICIOS','VIP Org / Benefícios e Setagens',L.filter(x=>x!==undefined).join('\n'))}
+ if(has('rotaInicio'))add('ROTA_INICIO','Rota'+novo('rotaInicio'),[
+ 'Assunto: Ativação do ponto de início da rota',
+ '',
+ 'Solicitação:',
+ '- Ativar o ponto de início da rota',
+ `- Group: ${f.group}`,
+ `- Local/Coordenadas: ${fmtCds(b.rotaInicio)}`
+ ].join('\n'));
  if(has('rotaExclusiva')){const pts=(b.rotaBlips||'').split(/\r?\n/).filter(Boolean);
 add('ROTA_FARM','Rota de Farm Exclusiva'+novo('rotaExclusiva'),['Assunto: Ativação de rota de farm exclusiva',
 '',
