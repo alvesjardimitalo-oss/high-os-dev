@@ -41,16 +41,42 @@ export function cleanActionEntry(input,{oldName='',published=[],managed=[]}={}){
  const cooldown=finite(input.cooldown_segundos)??0;
  if(cooldown<0||cooldown>86400||!Number.isInteger(cooldown))
   throw Error('Tempo de espera inválido.');
- const tipo_acao=['blipada','atm','registradora','outros'].includes(input.tipo_acao)?input.tipo_acao:'blipada';
+ const tipo_acao=['blipada','atm','registradora','casas','outros'].includes(input.tipo_acao)?input.tipo_acao:'blipada';
  return {...input,nome,tipo_acao,status,premio_min:min,premio_max:max,cooldown_segundos:cooldown,
   itens,regras_confronto:rules,
   locais:Array.isArray(input.locais)?input.locais.slice(0,50):[]};
 }
+export const NPC_MARKET_KEYS=Object.freeze(['CASAS','ARMAS_QUEBRADAS']);
+const emptyMarket=()=>({items:[],history:[],updatedAt:null});
 export function cleanRegistry(raw){
  const data=raw&&typeof raw==='object'?raw:{};
  const entries=data.entries&&typeof data.entries==='object'&&!Array.isArray(data.entries)?data.entries:{};
  const hidden=data.hidden&&typeof data.hidden==='object'&&!Array.isArray(data.hidden)?data.hidden:{};
- return {revision:Math.max(0,Number(data.revision)||0),entries:{...entries},hidden:{...hidden}};
+ const old=data.npcMarkets&&typeof data.npcMarkets==='object'?data.npcMarkets:{};
+ const npcMarkets=Object.fromEntries(NPC_MARKET_KEYS.map(key=>{
+  const v=old[key]&&typeof old[key]==='object'?old[key]:emptyMarket();
+  return [key,{items:Array.isArray(v.items)?v.items.slice(0,150):[],
+   history:Array.isArray(v.history)?v.history.slice(-60):[],
+   updatedAt:typeof v.updatedAt==='string'?v.updatedAt:null}];
+ }));
+ return {revision:Math.max(0,Number(data.revision)||0),entries:{...entries},hidden:{...hidden},npcMarkets};
+}
+export function cleanNpcProducts(products){
+ if(!Array.isArray(products)||products.length>150)throw Error('Cadastre até 150 itens por NPC.');
+ const prepared=products.map(row=>{
+  const nome=String(row?.nome||'').trim().replace(/\\s+/g,' ');
+  const codigo=String(row?.codigo||'').trim().replace(/\\s+/g,' ');
+  const precoSujo=finite(row?.precoSujo);
+  const quantidadeNpc=finite(row?.quantidadeNpc);
+  if(!nome||nome.length>100||codigo.length>100||precoSujo===null||
+    precoSujo<0||precoSujo>1e10||
+    quantidadeNpc!==null&&(!Number.isInteger(quantidadeNpc)||quantidadeNpc<0||quantidadeNpc>1e9))
+   throw Error('Informe nome, preço em dinheiro sujo e quantidade inteira não negativa (ou em branco).');
+  return {nome,codigo,precoSujo,quantidadeNpc};
+ });
+ const identities=prepared.map(x=>normalizeActionName(x.codigo||x.nome));
+ if(new Set(identities).size!==identities.length)throw Error('Há itens repetidos no cadastro do NPC.');
+ return prepared;
 }
 export function mergeActionRegistry(official,raw){
  const registry=cleanRegistry(raw),byKey=new Map();
@@ -68,6 +94,7 @@ export function mergeActionRegistry(official,raw){
 }
 export function applyRegistryMutation(raw,{kind,entry,name,oldName},official=[]){
  const current=cleanRegistry(raw),entries={...current.entries},hidden={...current.hidden};
+ const npcMarkets={...current.npcMarkets};
  const officialNames=new Set((official||[]).map(a=>normalizeActionName(a.nome)));
  const key=normalizeActionName(name||oldName||entry?.nome);
  if(kind==='save'){
@@ -80,6 +107,16 @@ export function applyRegistryMutation(raw,{kind,entry,name,oldName},official=[])
   }
   entries[nextKey]=prepared;
   delete hidden[nextKey];
+ }else if(kind==='npc-save'){
+  const market=String(entry?.market||'').toUpperCase();
+  if(!NPC_MARKET_KEYS.includes(market))throw Error('Comprador NPC não reconhecido.');
+  const products=cleanNpcProducts(entry?.items);
+  const oldMarket=npcMarkets[market]||emptyMarket();
+  const now=new Date().toISOString();
+  npcMarkets[market]={items:products,updatedAt:now,history:[
+   ...(oldMarket.history||[]),
+   {at:now,items:products.map(x=>({codigo:x.codigo,nome:x.nome,precoSujo:x.precoSujo,quantidadeNpc:x.quantidadeNpc}))}
+  ].slice(-60)};
  }else if(kind==='archive'){
   if(!key||!officialNames.has(key))throw Error('Somente uma ação oficial pode ser arquivada.');
   hidden[key]=true;
@@ -90,5 +127,5 @@ export function applyRegistryMutation(raw,{kind,entry,name,oldName},official=[])
   if(!entries[key])throw Error('O cadastro interno não foi encontrado.');
   delete entries[key];delete hidden[key];
  }else throw Error('Operação de cadastro inválida.');
- return {...current,revision:current.revision+1,entries,hidden};
+ return {...current,revision:current.revision+1,entries,hidden,npcMarkets};
 }
