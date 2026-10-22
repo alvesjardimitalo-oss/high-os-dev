@@ -11,7 +11,7 @@ const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percen
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
 let approveHandler=null,approvedThisSession=new Set();
 let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecisions=null,onReadSheet=null;
-let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null,workspace=null;
+let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null,workspace=null,pricePollTimer=null,pricesLoading=false;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,listLimit:24,quantities:{},prices:{},manualPayout:null,manualMaxPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:DEFAULT_MANAGER_WIN_CHANCE,targetHourly:0};
 const management={filter:'TODAS',sort:'PRIORIDADE',search:'',showAll:false,
@@ -149,6 +149,8 @@ async function saveReference(){
  }catch(e){status.textContent='Não foi possível salvar a referência: '+(e.message||String(e));}
 }
 async function refreshPriceCatalog(){
+ if(pricesLoading)return;
+ pricesLoading=true;
  const button=el('apRefreshPrices');if(button)button.disabled=true;
  try{
   const responses=await Promise.all([fetch(ACOES_SOURCE,{cache:'no-store'}),fetch(CATALOGO_SOURCE,{cache:'no-store'})]);
@@ -160,10 +162,10 @@ async function refreshPriceCatalog(){
   if(!action())selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
   render();
   lastPriceRead=new Date().toISOString();
-  el('apSource').textContent='Mercado Negro • catálogo consultado agora • '+catalog.itens.length+
+  el('apSource').textContent='Mercado Negro publicado • catálogo consultado agora • '+catalog.itens.length+
    ' produtos • '+actions.length+' ações'+(sheetOverrides.length?' • prêmios da planilha sobrepostos':'');
  }catch(e){el('apPriceAlertIntro').textContent='Não foi possível atualizar o Mercado Negro: '+(e.message||String(e));}
- finally{if(button)button.disabled=false;}
+ finally{pricesLoading=false;if(button)button.disabled=false;}
 }
 async function refreshSheetPrizes(){
  if(!onReadSheet)return;
@@ -192,6 +194,15 @@ async function showDecisionHistory(){
  }catch(e){box.textContent='Histórico indisponível: '+(e.message||String(e));}
 }
 
+function enablePublishedPriceChecks(){
+ if(pricePollTimer)return;
+ // O navegador só consegue observar preços já PUBLICADOS no GitHub.
+ // A planilha Google Sheets não possui listener em tempo real neste módulo.
+ pricePollTimer=setInterval(()=>{
+  const page=document.getElementById('page-planejador-acoes');
+  if(ready&&page?.classList.contains('active')&&!pricesLoading)refreshPriceCatalog();
+ },120000);
+}
 function rankFormat(mode,value){
  return mode.unit==='percent'?percent(value):money(value);
 }
@@ -760,7 +771,7 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
   onReadRegistry:readRegistry,onMutateRegistry:mutateRegistry});
  if(ready){
   if(onReadReference){try{reference=await onReadReference();}catch(e){console.warn('[AÇÕES] Referência indisponível',e);}}
-  await refreshPriceCatalog();return;
+  await refreshPriceCatalog();enablePublishedPriceChecks();return;
  }
  ready=true;
  try{
@@ -781,7 +792,7 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
   selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
   state.team=action()?defaultTeam(action()):0;
   el('apSource').textContent='Mercado Negro — '+actions.length+' ações carregadas • preços publicados em '+(catalog.meta?.atualizado_em||'data não informada')+' • dados oficiais não modificados';
-  listeners();render();
+  listeners();render();enablePublishedPriceChecks();
  }catch(err){
   ready=false;
   root.innerHTML='<div class="ap-error"><b>Não foi possível carregar os dados do Mercado Negro.</b><p>'+safe(err?.message||err)+'</p><button type="button" class="ap-button" id="apRetry">Tentar novamente</button></div>';
