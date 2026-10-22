@@ -1,6 +1,6 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
-import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=2';
+import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=3';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=1';
 
 const el=id=>document.getElementById(id);
@@ -267,6 +267,10 @@ function showMainRecommendation(d){
    '</div>'+
   '<div class="ap-recommend-band"><span><b>Diferença:</b> '+safe(changeLabel)+'</span>'+
    '<span><b>Chance de vitória (premissa):</b> '+safe(d.winChance===null?'Não informada':percent(d.winChance))+'</span>'+
+   '<span><b>Lucro ao vencer (atual):</b> '+safe(money(p.netMin))+'</span>'+
+   '<span><b>Prejuízo na derrota:</b> '+safe(money(p.loss))+'</span>'+
+   '<span><b>Resultado esperado atual:</b> '+safe(money(d.expected))+'</span>'+
+   '<span><b>Resultado esperado com proposta:</b> '+safe(money(d.recommendedExpected))+'</span>'+
    '<span><b>Lucro por membro com o prêmio recomendado:</b> '+safe(money(d.recommendedPerMember))+'</span></div>'+
   '<div class="ap-recommend-foot"><small>'+safe(p.team)+' invasores • custo de reposição '+
    safe(money(p.kit.winCost))+' • capital em risco '+safe(money(p.kit.total))+
@@ -429,15 +433,20 @@ function summary(){
  risk.innerHTML=[
   kpi('Decisão sugerida',d.direction,'gold'),
   kpi('Prêmio recomendado',money(d.recommendedMin),'gold'),
-  kpi('Taxa mínima para empatar',percent(d.breakEven)),
-  kpi('Resultado esperado com chance configurada',money(d.expected),d.expected===null?'':d.expected>=0?'good':'bad'),
+  kpi('Lucro se vencer (atual)',money(p.netMin),cs(p.netMin)),
+  kpi('Prejuízo se perder (atual)',money(p.loss),'bad'),
+  kpi('Taxa mínima de vitória para empatar',percent(d.breakEven)),
+  kpi('Prêmio teórico para empatar com risco (NÃO é sugestão)',money(d.riskBreakEvenMin)),
+  kpi('Resultado esperado atual',money(d.expected),cs(d.expected)),
+  kpi('Resultado esperado após sugestão',money(d.recommendedExpected),cs(d.recommendedExpected)),
   kpi('Lucro mínimo/jogador/hora',money(d.hourly),d.hourly===null?'':d.hourly>=0?'good':'bad'),
   kpi('Tempo total estimado',d.totalMinutes===null?'Não informado':d.totalMinutes+' min')
  ].join('')+'<p class="ap-row-muted">'+d.remarks.map(safe).join(' ')+'</p>';
  const out=el('apResult');out.className='ap-result'+(d.direction==='CONSIDERAR BUFF'?' warning':'');
  out.innerHTML='<strong>'+safe(d.direction)+'</strong><span>'+safe(
-  'Ajuste proposto sobre prêmio mínimo. Lucro por membro '+money(p.perPlayer)+
-  ' • derrota '+money(p.loss)+'. A decisão final é da gestão.')+'</span>';
+  'Lucro ao vencer: '+money(p.netMin)+' • prejuízo ao perder: '+money(p.loss)+
+  ' • resultado esperado atual: '+money(d.expected)+' • com proposta: '+money(d.recommendedExpected)+
+  '. Sugestão moderada: não garante eliminar todo o risco. A decisão final é da gestão.')+'</span>';
  el('apProposal').textContent='Cenário: '+p.team+' jogadores • prêmio '+(d.modeled?'HIPOTÉTICO proporcional':'publicado')+
   ' • lavado '+percent(p.tax)+' • capital '+money(p.kit.total)+
   ' • reposição '+money(p.kit.winCost)+' • perda total ao ser derrotado '+money(p.kit.lossCost)+
@@ -489,7 +498,10 @@ async function copyProposal(){
  'SALDO NO CAIXA AO VENCER NA PRIMEIRA AÇÃO COM KIT NOVO: '+money(p.firstRunNetMin),
  'PREJUÍZO SE PERDER: '+money(p.loss)+' (sem prêmio; equipamento perdido)',
  'META POR JOGADOR: '+money(p.targetPerPlayer)+' / META ROI DO KIT: '+percent(p.targetROI),
- 'PRÊMIO MÍNIMO RECOMENDADO: '+money(d.recommendedMin),
+ 'RESULTADO ESPERADO ATUAL (CHANCE GERENCIAL): '+money(d.expected),
+ 'RESULTADO ESPERADO APÓS PROPOSTA: '+money(d.recommendedExpected),
+ 'PONTO DE EQUILÍBRIO TEÓRICO, NÃO SUGESTÃO: '+money(d.riskBreakEvenMin),
+ 'PRÊMIO MÍNIMO RECOMENDADO (AJUSTE MODERADO): '+money(d.recommendedMin),
  'PRÊMIO MÁXIMO INDICATIVO: '+money(d.recommendedMax),
  'PRÊMIO MÁXIMO PUBLICADO: '+money(p.max),
  'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
@@ -584,10 +596,13 @@ function exportAnalysis(){
   'Lucro mínimo na vitória','Lucro máximo na vitória','Lucro por jogador','Saldo em caixa primeira vitória','Prejuízo na derrota',
   'Prêmio sugerido min','Prêmio sugerido max','Avaliação','Pendências'];
  const rows=actions.map(a=>{
-  const p=calculateAction(a,catalog,{...options(),team:defaultTeam(a),location:null,quantities:{},prices:{}});
+  const d=analyzeDecision(a,catalog,{...options(),team:defaultTeam(a),referenceTeam:defaultTeam(a),
+   location:null,kitMode:'oficial',priceMode:state.priceMode,quantities:{},prices:{},
+   winChance:state.winChance});
+  const p=d.calc;
   return [a.nome,a.status,p.team,p.rule?.policiais??'',state.priceMode,state.priceShift,state.ammoUse,
    p.kit.total,p.kit.winCost,p.kit.weapons,p.kit.retained,p.min,p.max,p.netMin,p.netMax,p.perPlayer,
-   p.firstRunNetMin,p.loss,p.payoutNeeded,p.payoutMax,p.status,p.kit.missing.join(' / ')];
+   p.firstRunNetMin,p.loss,d.recommendedMin,d.recommendedMax,d.direction,p.kit.missing.join(' / ')];
  });
  const body='\ufeff'+[headers,...rows].map(row=>row.map(csvCell).join(';')).join('\r\n');
  const url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));
