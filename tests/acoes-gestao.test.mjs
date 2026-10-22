@@ -114,5 +114,23 @@ test('elementos de navegação e painel gerencial integrados à página original
  assert.match(ui,/buildManagementBoard/);
  assert.match(ui,/filterManagementEntries/);
  assert.match(ui,/data-ap-manage/);
- assert.match(app,/acoes-planejador-ui\.js\?v=7/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=8/);
+});
+
+test('Planejador de Ações herda a identidade global do High OS sem afetar outras páginas',()=>{
+ const css=readFileSync(new URL('../assets/acoes-planejador.css',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ assert.match(html,/assets\/acoes-planejador\.css\?v=8/);
+ assert.doesNotMatch(html,/id="apStatusFilter"[^>]*style=/);
+ assert.match(css,/#page-planejador-acoes \.ap-root\{/);
+ for(const token of ['--surface-0','--h-panel-2','--line-soft','--text-1','--brand-soft','--ok','--err','--warn']){
+  assert.ok(css.includes('var('+token+','),'Identidade compartilhada ausente: '+token);
+ }
+ assert.match(css,/--ap-heading:"Chakra Petch"/);
+ assert.match(css,/--ap-font:Inter/);
+ for(const part of ['.ap-management','.ap-rank-hub','.ap-recommend-main','.ap-outcome','.ap-management-scroll','.ap-price-alert']){
+  assert.ok(css.includes(part),'Componente nao padronizado: '+part);
+ }
+ assert.match(css,/#page-planejador-acoes \.ap-root \.ap-choice\[aria-pressed="true"\]/);
+ assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 });
