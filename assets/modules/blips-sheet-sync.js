@@ -48,7 +48,6 @@ export function valuesFor(f){
   LOCAL:first(op.localizacao?.nome,f.qg),
   PRODUTO:first(f.produto),
   COORDENADA:first(op.localizacao?.cdsPrincipal,f.cds),
-  INICIARROTA:first(t.rota?.inicio,b.iniciarRota,b.rotaInicio,f.perfilFonte?.["INICIAR ROTA"]),
   CRAFT:first(t.craft?.cds,b.craft),
   BARBEARIA:first(op.barbearia?.cds,b.barbearia),
   BAU:first(op.bau?.cds,b.bau,b.bauCds,fromExtra.bau,f.perfilFonte?.BAU),
@@ -75,7 +74,6 @@ export function valuesFor(f){
   TELAOCAIXA2:first(op.telao?.sons?.[1],b.telaoCaixa2),
   TELAOCAIXA3:first(op.telao?.sons?.[2],b.telaoCaixa3),
   TELAOCAIXA4:first(op.telao?.sons?.[3],b.telaoCaixa4),
-  RADIO:first(b.radio),
   /* Benefícios e rota exclusiva NÃO pertencem à aba de coordenadas. */
  };
 }
@@ -217,6 +215,7 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
    // Só uma alteração EXPLÍCITA pode limpar valor antigo.
    if(!value&&!explicitChange)continue;
    const found=s.newBlock?"":first(...Array.from({length:6},(_,i)=>cell(rows,r,col+i)));
+   if(!value&&!found)continue;
    if(!isNew&&value===found)continue;
    if(!isNew&&onlyMissing)continue;
    if(!isNew&&preserveExisting&&found&&!explicitChange)continue; // entrega não altera instalações preexistentes
