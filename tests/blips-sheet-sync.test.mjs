@@ -104,7 +104,7 @@ test('Prefixo canônico do Group prevalece sobre segmento inconsistente (Mecâni
   const g={group:'IlegalMechanic02',segmento:'Drogas',perfilTecnico:{operacional:{}}};
   const result=await syncBlipsCoordinates({token:'mock',groups:[g]});
   assert.equal(result.created,0);
-  assert.deepEqual(result.categoryMismatches,[{group:'IlegalMechanic02',actual:'DROGAS',expected:'APOIO'}]);
+  assert.deepEqual(result.categoryMismatches,[{group:'IlegalMechanic02',actual:'DROGAS',expected:'MECANICAILEGAL'}]);
   assert.equal(batches.length,0);
  });
 });
@@ -131,4 +131,21 @@ test('Alteração explícita bloqueia campo histórico dividido em várias célu
   );
   assert.equal(batches.length,0,'falha deve ocorrer antes de qualquer batchUpdate');
  });
+});
+
+test('Mecânica Ilegal e Hospital Ilegal permanecem separados de Apoio',async()=>{
+ for(const [group,segment,expected] of [
+  ['IlegalMechanic01','Mecânica Ilegal','MECANICAILEGAL'],
+  ['IlegalMechanic02','Mecânica Ilegal','MECANICAILEGAL'],
+  ['IlegalMedic01','Hospital Ilegal','HOSPITALILEGAL'],
+  ['IlegalMedic2','Hospital Ilegal','HOSPITALILEGAL']
+ ]){
+  const rows=fakeSheet();rows[0][4]='APOIO';rows[1][6]=group;
+  await withSheet(rows,async batches=>{
+   const result=await syncBlipsCoordinates({token:'mock',groups:[{group,segmento:segment}]});
+   assert.deepEqual(result.categoryMismatches,[{group,actual:'APOIO',expected}]);
+   assert.equal(result.created,0);
+   assert.equal(batches.length,0);
+  });
+ }
 });
