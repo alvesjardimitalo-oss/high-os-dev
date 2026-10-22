@@ -485,17 +485,15 @@ function exportManagement(){
  const headers=['Ação','Situação','Equipe','Prioridade','Pendências e critérios','Capital inicial',
   'Custo reposição vitória','Prêmio mínimo sujo','Lucro mínimo vitória','Lucro mínimo por jogador',
   'Prejuízo derrota','Resultado esperado hipotético','Resultado esperado por jogador/hora',
-  'Variação do capital desde referência','Variação do lucro por jogador desde referência'];
+  'Variação do capital desde referência','Variação do lucro por jogador desde referência',
+  'Chance de vitória simulada (%)','Espera da polícia (min)','Duração da ação (min)'];
  const rows=board.entries.map(x=>[x.nome,x.status,x.team,x.priority,x.reason.join(' / '),
   x.capital,x.winCost,x.calc.min,x.netMin,x.perPlayer,x.loss,
-  x.expected,x.expectedMemberHour,x.change?.difference??'',x.change?.deltaPerMember??'']);
- const lines=['# HIGH OS • Cenário da carteira — sem aprovação automática',
-  '# Chance hipotética: '+(management.winChance===null?'não informada':Math.round(management.winChance*100)+'%')+
-  ' • Espera: '+(management.policeWaitMinutes??'não informada')+
-  ' • Duração: '+(management.estimatedActionMinutes??'não informada')+
-  ' • Não inclui cooldown',
-  [headers,...rows].map(row=>row.map(csvCell).join(';')).join('\r\n')];
- const url=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+  x.expected,x.expectedMemberHour,x.change?.difference??'',x.change?.deltaPerMember??'',
+  management.winChance===null?'':management.winChance*100,
+  management.policeWaitMinutes??'',management.estimatedActionMinutes??'']);
+ const csv='\ufeff'+[headers,...rows].map(row=>row.map(csvCell).join(';')).join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
  const link=document.createElement('a');link.href=url;link.download='high-os-carteira-acoes.csv';link.click();
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
