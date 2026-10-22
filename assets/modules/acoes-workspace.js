@@ -71,6 +71,9 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
    '<div class="ap-editor-row ap-editor-item">'+
    '<label>Item<input data-entry-field="nome" list="apItemNames" maxlength="100" value="'+safe(it.nome)+'" placeholder="Nome no Mercado Negro"></label>'+
    '<label>Quantidade<input type="number" min="1" max="10000" data-entry-field="quantidade" value="'+safe(it.quantidade)+'"></label>'+
+   '<label>Preço unitário (vazio = Mercado Negro)<input type="number" min="0" step="1" data-entry-field="preco_unitario" placeholder="Preço dinâmico" value="'+safe(it.preco_unitario??'')+'"></label>'+
+   '<label>Tratamento<select data-entry-field="categoria_item">'+
+    [['','Automático'],['consumivel','Consumível'],['arma','Arma reutilizável'],['municao','Munição'],['colete','Colete'],['acesso','Acesso/pendrive']].map(([v,l])=>'<option value="'+v+'"'+((it.categoria_item||'')===v?' selected':'')+'>'+l+'</option>').join('')+'</select></label>'+
    '<button type="button" class="ap-button ap-row-remove" data-ap-item-remove="'+i+'" aria-label="Remover item">✕</button></div>').join('');
  }
  function collectRows(){
@@ -80,7 +83,8 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   draft.regras_confronto=rows('.ap-editor-rule').map(row=>({
    invasores:read(row,'invasores'),policiais:read(row,'policiais'),refens:read(row,'refens')
   }));
-  draft.itens=rows('.ap-editor-item').map(row=>({nome:read(row,'nome'),quantidade:read(row,'quantidade')}));
+  draft.itens=rows('.ap-editor-item').map(row=>({nome:read(row,'nome'),quantidade:read(row,'quantidade'),
+   categoria_item:read(row,'categoria_item'),preco_unitario:read(row,'preco_unitario')}));
  }
  function openEditor(a=null){
   if(!writable())return;
@@ -88,6 +92,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   draft=a?JSON.parse(JSON.stringify(a)):blankAction();
   $('apEditorHeading').textContent=a?'Editar ação • '+a.nome:'Cadastrar nova ação';
   $('apEntryName').value=draft.nome;
+  $('apEntryType').value=draft.tipo_acao||'blipada';
   $('apEntryName').readOnly=!!a&&published().some(p=>normalizeActionName(p.nome)===normalizeActionName(a.nome));
   $('apEntryStatus').value=draft.status==='inativo'?'inativo':'ativo';
   $('apEntryMin').value=draft.premio_min||'';
@@ -107,7 +112,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  async function save(){
   if(!draft||!writable()||busy)return;
   collectRows();
-  const entry={...draft,nome:$('apEntryName').value,status:$('apEntryStatus').value,
+  const entry={...draft,nome:$('apEntryName').value,tipo_acao:$('apEntryType').value,status:$('apEntryStatus').value,
    premio_min:$('apEntryMin').value,premio_max:$('apEntryMax').value,
    cooldown_segundos:$('apEntryCooldown').value};
   const button=$('apSaveEntry');busy=true;button.disabled=true;$('apEditorError').hidden=true;
@@ -154,7 +159,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
    collectRows();draft.regras_confronto.push({invasores:2,policiais:4,refens:0});editorRows();return;
   }
   if(ev.target.closest('#apAddItem')){
-   collectRows();draft.itens.push({nome:'',quantidade:1});editorRows();return;
+   collectRows();draft.itens.push({nome:'',quantidade:1,categoria_item:'',preco_unitario:''});editorRows();return;
   }
   const remRule=ev.target.closest('[data-ap-rule-remove]');
   if(remRule){
@@ -164,6 +169,11 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   if(remItem){
    collectRows();draft.itens.splice(Number(remItem.dataset.apItemRemove),1);editorRows();return;
   }
+ });
+ root.addEventListener('change',ev=>{
+  if(ev.target.id!=='apEntryType'||!draft)return;
+  collectRows();draft.tipo_acao=ev.target.value;
+  if(draft.tipo_acao==='atm'&&!draft.itens.length){draft.itens=[{nome:'C4',quantidade:1,categoria_item:'consumivel',preco_unitario:null}];editorRows();}
  });
  root.addEventListener('submit',ev=>{
   if(ev.target.id!=='apActionForm')return;
