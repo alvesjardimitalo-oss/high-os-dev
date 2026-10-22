@@ -375,23 +375,56 @@ async function copyProposal(){
  try{await navigator.clipboard.writeText(text);status.textContent='Análise copiada. Verifique os cenários antes de qualquer alteração oficial.';}
  catch{status.textContent='Área de transferência indisponível no navegador.';}
 }
-async function approveProposal(){
+async function approveProposal(mode='sugestao'){
  if(!approveHandler)return;
- const a=action(),p=calculateAction(a,catalog,options());
- if(!['BUFF','NERF'].includes(p.status)||approvedThisSession.has(a.nome)||state.priceShift!==0||Object.keys(state.prices).length||Object.keys(state.quantities).length)return;
- const button=el('apApprove'),message=el('apCopyStatus');
- button.disabled=true;message.textContent='Verificando a aba original e aguardando aprovação segura...';
+ const a=action(),d=decision(),p=d.calc;
+ const manual=mode==='manual',value=manual?state.manualPayout:d.suggested;
+ if(!d.eligibleForSheet||approvedThisSession.has(a.nome)||!Number.isFinite(value)||
+    value<=0||Math.abs(value-p.min)<=1){
+  el('apCopyStatus').textContent='Prêmio inválido ou cenário hipotético. Restaure os preços e o prêmio publicados antes de aprovar.';
+  return;
+ }
+ const buttons=[el('apApprove'),el('apApproveManual'),el('apReject')].filter(Boolean);
+ buttons.forEach(x=>x.disabled=true);
+ const message=el('apCopyStatus'),reason=el('apDecisionReason')?.value?.trim()||'';
+ message.textContent='Conferindo células, fórmulas e premiação oficial da planilha...';
  try{
-  const result=await approveHandler({name:a.nome,officialMin:p.min,proposedMin:p.payoutNeeded,
-    team:p.team,cost:p.kit.total,tax:p.tax});
-  if(result?.cancelled){message.textContent='Aprovação cancelada. Nenhuma célula foi alterada.';return;}
-  if(!result?.updated)throw Error('A sincronização não confirmou a alteração.');
+  const result=await approveHandler({name:a.nome,officialMin:p.min,proposedMin:value,
+   team:p.team,cost:p.kit.total,tax:p.tax,reason,
+   source:manual?'manual':'sugestao'});
+  if(result?.cancelled){message.textContent='Aprovação cancelada. Nada foi alterado.';return;}
+  if(!result?.updated)throw Error('A planilha não confirmou a alteração.');
   approvedThisSession.add(a.nome);
-  message.textContent='BUFF/NERF atualizado na aba original. '+(result.verified?'Prêmio conferido.':'Confira o resultado da fórmula no Google Sheets.')+
-    (result.audited?' Auditoria registrada no High OS.':' Histórico do High OS pendente.');
- }catch(error){
-  message.textContent='NÃO SINCRONIZADO: '+(error?.message||String(error));
- }finally{button.disabled=approvedThisSession.has(a.nome)||!['BUFF','NERF'].includes(p.status);}
+  if(result.verified&&Number.isFinite(result.actualMin)&&Number.isFinite(result.actualMax)){
+   const record={name:a.nome,min:result.actualMin,max:result.actualMax};
+   sheetOverrides=sheetOverrides.filter(x=>norm(x.name)!==norm(a.nome)).concat([record]);
+   actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+   render();
+  }
+  message.textContent=result.verified?
+   'Ajuste confirmado na planilha. '+(result.audited?'Histórico registrado. ':'Auditoria pendente. ')+
+   'A publicação no GitHub/Mercado Negro NÃO é automática; confira o status da fonte.':
+   'A planilha recebeu o ajuste, mas a fórmula do prêmio não confirmou o valor. Não tente aprovar novamente sem conferir a aba.';
+  refreshPriceAlerts();
+ }catch(error){message.textContent='SEM CONFIRMAÇÃO DE AJUSTE: '+(error?.message||String(error));}
+ finally{summary();}
+}
+async function rejectProposal(){
+ if(!onRejectAction)return;
+ const a=action(),d=decision();
+ const reason=el('apDecisionReason')?.value?.trim();
+ if(!reason){el('apCopyStatus').textContent='Para recusar, informe o motivo no campo “Motivo da decisão”.';return;}
+ const amount=Number.isFinite(state.manualPayout)&&state.manualPayout>0?state.manualPayout:d.suggested;
+ if(!Number.isFinite(amount)||!d.valid)return;
+ if(!confirm('Registrar recusa da proposta de '+a.nome+'? Isso NÃO modifica a premiação.'))return;
+ const btn=el('apReject');btn.disabled=true;
+ try{
+  const result=await onRejectAction({name:a.nome,oldMin:d.calc.min,newMin:amount,
+   reason,team:d.team,source:state.manualPayout!=null?'manual':'sugestao'});
+  if(!result?.recorded)throw Error('Histórico não confirmado.');
+  el('apCopyStatus').textContent='Proposta recusada e registrada. Nenhum valor da planilha foi alterado.';
+ }catch(e){el('apCopyStatus').textContent='Falha ao registrar recusa: '+(e.message||String(e));}
+ finally{btn.disabled=false;}
 }
 function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"';}
 function exportAnalysis(){
@@ -425,7 +458,13 @@ function listeners(){
   const preset=ev.target.closest('[data-ap-shift]');
   if(preset){state.priceShift=Number(preset.dataset.apShift)/100;el('apPriceShift').value=Math.round(state.priceShift*100);render();return;}
   if(ev.target.closest('#apCopy'))copyProposal();
-  if(ev.target.closest('#apApprove'))approveProposal();
+  if(ev.target.closest('#apApproveManual')){approveProposal('manual');return;}
+  if(ev.target.closest('#apApprove')){approveProposal('sugestao');return;}
+  if(ev.target.closest('#apReject')){rejectProposal();return;}
+  if(ev.target.closest('#apSaveReference')){saveReference();return;}
+  if(ev.target.closest('#apRefreshPrices')){refreshPriceCatalog();return;}
+  if(ev.target.closest('#apReadSheet')){refreshSheetPrizes();return;}
+  if(ev.target.closest('#apHistory')){showDecisionHistory();return;}
   if(ev.target.closest('#apExport'))exportAnalysis();
  });
  root.addEventListener('input',ev=>{
@@ -456,10 +495,16 @@ function listeners(){
    return;
   }
   const fields={apProfitGoal:['targetPerPlayer',1],apRoiGoal:['roi',.01],
-   apTolerance:['tolerance',.01],apTax:['tax',.01],apManual:['manualPayout',1]};
+   apTolerance:['tolerance',.01],apTax:['tax',.01],apManual:['manualPayout',1],
+   apPoliceWait:['policeWaitMinutes',1],apActionDuration:['estimatedActionMinutes',1],
+   apWinChance:['winChance',.01],apHourlyTarget:['targetHourly',1]};
   const f=fields[target.id];if(!f)return;
-  if(target.value===''){if(target.id==='apManual')state.manualPayout=null;}
-  else state[f[0]]=Math.max(0,Number(target.value)||0)*f[1];
+  if(target.value===''){
+   if(['apManual','apPoliceWait','apActionDuration','apWinChance'].includes(target.id))state[f[0]]=null;
+  }else{
+   const v=Number(target.value);
+   if(Number.isFinite(v))state[f[0]]=Math.max(0,v)*f[1];
+  }
   if(target.id==='apTax')actionsList();
   if(target.id==='apTax')rankBoard();
   summary();
@@ -472,10 +517,15 @@ function listeners(){
   else if(e.id==='apKitMode'){state.kitMode=e.value;state.quantities={};render();}
   else if(e.id==='apAccessMode'){state.accessConsumed=e.value==='consumido';render();}
   else if(e.id==='apTeam'){state.team=Number(e.value);state.quantities={};render();}
+  else if(e.id==='apTeamPayout'){state.teamPayout=e.value;render();}
  });
 }
-export async function mountActionPlanner({onApproveAction=null}={}){
+export async function mountActionPlanner({onApproveAction=null,onReadReference:readReference=null,
+ onSaveReference:savePriceReference=null,onRejectAction:rejectAction=null,
+ onReadDecisions:readDecisions=null,onReadSheet:readSheet=null}={}){
  approveHandler=onApproveAction;
+ onReadReference=readReference;onSaveReference=savePriceReference;
+ onRejectAction=rejectAction;onReadDecisions=readDecisions;onReadSheet=readSheet;
  root=el('actionEconomyPlanner');if(!root||ready)return;
  ready=true;
  try{
@@ -483,7 +533,12 @@ export async function mountActionPlanner({onApproveAction=null}={}){
   if(responses.some(r=>!r.ok))throw Error('Falha ao consultar o Mercado Negro. HTTP: '+responses.map(r=>r.status).join(' / '));
   const [data,prices]=await Promise.all(responses.map(r=>r.json()));
   if(!Array.isArray(data.acoes)||!data.acoes.length||!Array.isArray(prices.itens))throw Error('Formato de dados inválido ou incompleto.');
-  actions=data.acoes;catalog=prices;meta=data.meta||{};
+  actions=data.acoes;publishedActions=data.acoes;catalog=prices;meta=data.meta||{};
+  lastPriceRead=new Date().toISOString();
+  if(onReadReference){
+   try{reference=await onReadReference();}
+   catch(e){console.warn('[AÇÕES] Referência de preço indisponível:',e)}
+  }
   const publishedWash=Number(meta.taxa_lavagem);
   state.tax=Number.isFinite(publishedWash)&&publishedWash>=0&&publishedWash<1?publishedWash:.3;
   el('apTax').value=Math.round(state.tax*100);
