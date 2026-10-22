@@ -82,7 +82,7 @@ function refreshPriceAlerts(){
      '<span class="'+(c.difference>0?'ap-alert-up':'ap-alert-down')+'"><b>'+
       (c.difference>0?'+':'')+safe(money(c.difference))+'</b><small>'+
       (c.percent===null?'Variação não informada':percent(c.percent))+
-      ' • '+(c.difference>0?'lucro e capital: avaliar buff':'lucro e capital: avaliar redução')+'</small>'+
+      ' • '+(c.deltaPerMember===null?'verificar insumos':c.deltaPerMember<0?'lucro menor: avaliar compensação':c.deltaPerMember>0?'lucro maior: avaliar equilíbrio':'lucro preservado: revisar capital')+'</small>'+
       '<small>Lucro/membro: '+safe(money(c.oldProfitPerMember))+' → '+safe(money(c.newProfitPerMember))+'</small></span></button>'
    ).join(''):'<p class="ap-hint">Nenhuma alteração de custo encontrada desde a referência salva.</p>';
  }
@@ -142,7 +142,9 @@ async function showDecisionHistory(){
   const items=await onReadDecisions();
   box.innerHTML=items.length?items.map(d=>
    '<div class="ap-decision-history-line"><b>'+safe(d.decisao||d.tipo)+'</b> • '+safe(d.acao||'Referência de preços')+
-   ' • '+safe(d.usuario)+' • '+safe(d.motivo||'Sem justificativa cadastrada')+'</div>'
+   (d.data?' • '+safe(typeof d.data==='string'?new Date(d.data).toLocaleDateString('pt-BR'):'data no histórico'):'')+
+   ' • '+safe(d.usuario)+(Number.isFinite(d.premioMinProposto)?' • proposta '+safe(money(d.premioMinAnterior))+' → '+safe(money(d.premioMinProposto)):'')+
+   ' • '+safe(d.motivo||'Sem justificativa cadastrada')+'</div>'
   ).join(''):'<p class="ap-row-muted">Nenhuma decisão anterior encontrada.</p>';
  }catch(e){box.textContent='Histórico indisponível: '+(e.message||String(e));}
 }
