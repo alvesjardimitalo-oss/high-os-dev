@@ -1,5 +1,5 @@
-import {npcStats,houseLootScenario} from './acoes-npc-core.js?v=1';
-import {priceOf} from './acoes-core.js?v=4';
+import {npcStats,houseLootScenario} from './acoes-npc-core.js?v=2';
+import {priceOf} from './acoes-core.js?v=5';
 
 export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave}){
  const $=id=>root.querySelector('#'+id);
