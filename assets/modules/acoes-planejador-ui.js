@@ -1,6 +1,7 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides} from './acoes-inteligencia.js?v=1';
+import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=1';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -12,6 +13,12 @@ let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecision
 let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:null,targetHourly:0};
+const management={filter:'TODAS',sort:'PRIORIDADE',search:'',
+ winChance:null,policeWaitMinutes:null,estimatedActionMinutes:null};
+const managementOptions=()=>({tax:state.tax,ammoUse:state.ammoUse,
+ accessConsumed:state.accessConsumed,roi:state.roi,targetPerPlayer:state.targetPerPlayer,
+ reference,winChance:management.winChance,policeWaitMinutes:management.policeWaitMinutes,
+ estimatedActionMinutes:management.estimatedActionMinutes});
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
@@ -23,6 +30,48 @@ function choose(name){
  state.team=defaultTeam(action());el('apManual').value='';render();
 }
 
+
+function renderManagement(){
+ if(!catalog||!el('apManagementList'))return;
+ const report=buildManagementBoard(actions,catalog,managementOptions());
+ const k=report.stats;
+ el('apManagementKpis').innerHTML=[
+  kpi('Ações ativas',String(k.active),'gold',k.inactive+' inativas'),
+  kpi('Revisão prioritária',String(k.revisao),k.revisao?'bad':'good','Inclui dados inconsistentes'),
+  kpi('Dados pendentes',String(k.pendentes),k.pendentes?'bad':'good','Preço, prêmio ou equipe'),
+  kpi('Afetadas por preços',report.hasReference?String(k.impactoPrecos):'Sem base',k.impactoPrecos?'gold':'','Variação desde a referência'),
+  kpi('Lucro mediano por jogador',money(k.lucroMedianoMembro),k.lucroMedianoMembro<0?'bad':'good','Vitória com prêmio mínimo')
+ ].join('');
+ const results=filterManagementEntries(report.entries,{filter:management.filter,sort:management.sort,query:management.search});
+ el('apManagementList').innerHTML=results.length?results.map(item=>{
+  const image=actionPhoto(item.action),tone=!item.valid||item.netMin<0?'urgent':item.priority>=3?'warn':'';
+  const reason=item.reason.slice(0,2).join(' • ');
+  return '<tr><td><span class="ap-management-action">'+
+   (image?'<img src="'+safe(image)+'" loading="lazy" alt="">':'')+
+   '<span><b>'+safe(item.nome)+'</b><small>'+safe(item.team)+' invasores'+
+   (item.active?'':' • INATIVA')+'</small></span></span></td>'+
+   '<td><span class="ap-management-diagnosis '+tone+'">'+safe(item.status)+'</span>'+
+   '<small class="ap-management-reason" title="'+safe(item.reason.join(' • '))+'">'+safe(reason)+'</small></td>'+
+   '<td>'+safe(money(item.capital))+'</td>'+
+   '<td>'+safe(money(item.winCost))+'</td>'+
+   '<td class="'+(item.netMin!==null&&item.netMin<0?'ap-negative':'ap-positive')+'">'+safe(money(item.netMin))+'</td>'+
+   '<td class="'+(item.perPlayer!==null&&item.perPlayer<0?'ap-negative':'ap-positive')+'">'+safe(money(item.perPlayer))+'</td>'+
+   '<td class="'+(item.expected!==null&&item.expected<0?'ap-negative':'')+'">'+
+   (item.expected===null?'—':safe(money(item.expected)))+'</td>'+
+   '<td class="'+(item.expectedMemberHour!==null&&item.expectedMemberHour<0?'ap-negative':'')+'">'+
+   (item.expectedMemberHour===null?'—':safe(money(item.expectedMemberHour)))+'</td>'+
+   '<td><button type="button" class="ap-management-open" data-ap-manage="'+safe(item.nome)+'">Analisar →</button></td></tr>';
+ }).join(''):'<tr><td colspan="9" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
+ el('apManagementMethod').textContent=
+  results.length+' ações exibidas • '+k.valid+' ativas com cenário calculável • '+k.emPrejuizo+
+  ' com prejuízo na vitória • capital mediano '+money(k.capitalMediano)+
+  '. '+report.conditions+' Cenários de risco são opcionais, hipotéticos e não incluem cooldown. '+
+  (report.scenario.chance===null?'Sem chance informada, resultado esperado permanece indisponível. ':'')+
+  'Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
+ el('apManagementDate').textContent='Fonte: Mercado Negro'+
+  (lastPriceRead?' • leitura '+new Date(lastPriceRead).toLocaleTimeString('pt-BR'):'')+
+  (sheetOverrides.length?' • prêmios conferidos na planilha':' • prêmio do catálogo');
+}
 
 function refreshPriceAlerts(){
  if(!el('apPriceAlerts')||!catalog)return;
@@ -43,7 +92,7 @@ function refreshPriceAlerts(){
      '<span class="'+(c.difference>0?'ap-alert-up':'ap-alert-down')+'"><b>'+
       (c.difference>0?'+':'')+safe(money(c.difference))+'</b><small>'+
       (c.percent===null?'Variação não informada':percent(c.percent))+
-      ' • '+(c.difference>0?'considerar revisão de buff':'considerar revisão de nerf')+'</small>'+
+      ' • '+(c.deltaPerMember===null?'verificar insumos':c.deltaPerMember<0?'lucro menor: avaliar compensação':c.deltaPerMember>0?'lucro maior: avaliar equilíbrio':'lucro preservado: revisar capital')+'</small>'+
       '<small>Lucro/membro: '+safe(money(c.oldProfitPerMember))+' → '+safe(money(c.newProfitPerMember))+'</small></span></button>'
    ).join(''):'<p class="ap-hint">Nenhuma alteração de custo encontrada desde a referência salva.</p>';
  }
@@ -62,7 +111,7 @@ async function saveReference(){
   const snapshot=makePriceReference(catalog);
   const result=await onSaveReference(snapshot);
   if(!result?.saved)throw Error('O servidor não confirmou a gravação.');
-  reference=snapshot;refreshPriceAlerts();
+  reference=snapshot;refreshPriceAlerts();renderManagement();
   status.textContent='Referência salva. Novas alterações de preço aparecerão aqui quando o módulo consultar o catálogo novamente.';
  }catch(e){status.textContent='Não foi possível salvar a referência: '+(e.message||String(e));}
 }
@@ -74,7 +123,7 @@ async function refreshPriceCatalog(){
   const data=await responses[0].json(),next=await responses[1].json();
   if(!Array.isArray(data.acoes)||!Array.isArray(next.itens))throw Error('Formato inválido.');
   publishedActions=data.acoes;actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
-  catalog=next;meta=data.meta||{};
+  catalog=next;meta=data.meta||{};lastPriceRead=new Date().toISOString();
   if(!action())selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
   if(action())render();
   lastPriceRead=new Date().toISOString();
@@ -103,7 +152,9 @@ async function showDecisionHistory(){
   const items=await onReadDecisions();
   box.innerHTML=items.length?items.map(d=>
    '<div class="ap-decision-history-line"><b>'+safe(d.decisao||d.tipo)+'</b> • '+safe(d.acao||'Referência de preços')+
-   ' • '+safe(d.usuario)+' • '+safe(d.motivo||'Sem justificativa cadastrada')+'</div>'
+   (d.data?' • '+safe(typeof d.data==='string'?new Date(d.data).toLocaleDateString('pt-BR'):'data no histórico'):'')+
+   ' • '+safe(d.usuario)+(Number.isFinite(d.premioMinProposto)?' • proposta '+safe(money(d.premioMinAnterior))+' → '+safe(money(d.premioMinProposto)):'')+
+   ' • '+safe(d.motivo||'Sem justificativa cadastrada')+'</div>'
   ).join(''):'<p class="ap-row-muted">Nenhuma decisão anterior encontrada.</p>';
  }catch(e){box.textContent='Histórico indisponível: '+(e.message||String(e));}
 }
@@ -343,7 +394,7 @@ function summary(){
 }
 function render(){
  if(!action())return;
- actionsList();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
+ actionsList();renderManagement();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
 }
 async function copyProposal(){
  const a=action(),d=decision(),p=d.calc;
@@ -428,6 +479,25 @@ async function rejectProposal(){
  finally{btn.disabled=false;}
 }
 function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"';}
+function exportManagement(){
+ if(!catalog||!actions.length)return;
+ const board=buildManagementBoard(actions,catalog,managementOptions());
+ const headers=['Ação','Situação','Equipe','Prioridade','Pendências e critérios','Capital inicial',
+  'Custo reposição vitória','Prêmio mínimo sujo','Lucro mínimo vitória','Lucro mínimo por jogador',
+  'Prejuízo derrota','Resultado esperado hipotético','Resultado esperado por jogador/hora',
+  'Variação do capital desde referência','Variação do lucro por jogador desde referência',
+  'Chance de vitória simulada (%)','Espera da polícia (min)','Duração da ação (min)'];
+ const rows=board.entries.map(x=>[x.nome,x.status,x.team,x.priority,x.reason.join(' / '),
+  x.capital,x.winCost,x.calc.min,x.netMin,x.perPlayer,x.loss,
+  x.expected,x.expectedMemberHour,x.change?.difference??'',x.change?.deltaPerMember??'',
+  management.winChance===null?'':management.winChance*100,
+  management.policeWaitMinutes??'',management.estimatedActionMinutes??'']);
+ const csv='\ufeff'+[headers,...rows].map(row=>row.map(csvCell).join(';')).join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');link.href=url;link.download='high-os-carteira-acoes.csv';link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 function exportAnalysis(){
  const headers=['Ação','Situação','Invasores','Policiais','Preço de compra','Variação dos preços','Consumo de munição',
   'Capital inicial','Repor após vitória','Armas mantidas','Kit conservado','Prêmio mínimo sujo','Prêmio máximo sujo',
@@ -446,6 +516,8 @@ function exportAnalysis(){
 }
 function listeners(){
  root.addEventListener('click',ev=>{
+  const manage=ev.target.closest('[data-ap-manage]');
+  if(manage){choose(manage.dataset.apManage);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
   const ranked=ev.target.closest('[data-ap-ranked]');
   if(ranked){choose(ranked.dataset.apRanked);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
   const rank=ev.target.closest('[data-ap-rank]');
@@ -467,10 +539,21 @@ function listeners(){
   if(ev.target.closest('#apReadSheet')){refreshSheetPrizes();return;}
   if(ev.target.closest('#apHistory')){showDecisionHistory();return;}
   if(ev.target.closest('#apExport'))exportAnalysis();
+  if(ev.target.closest('#apManagementExport'))exportManagement();
  });
  root.addEventListener('input',ev=>{
   const target=ev.target;
   if(target.id==='apSearch'){state.search=target.value;actionsList();return;}
+  if(target.id==='apManagementSearch'){management.search=target.value;renderManagement();return;}
+  const riskMap={apPortfolioWinChance:['winChance',.01],apPortfolioPoliceWait:['policeWaitMinutes',1],
+   apPortfolioDuration:['estimatedActionMinutes',1]};
+  const risk=riskMap[target.id];
+  if(risk){
+   const max=risk[0]==='winChance'?100:600;
+   const val=target.value===''?null:Number(target.value);
+   management[risk[0]]=val===null||!Number.isFinite(val)?null:Math.max(0,Math.min(max,val))*risk[1];
+   renderManagement();return;
+  }
   const indexQty=target.dataset.apQty,indexPrice=target.dataset.apPrice;
   if(indexQty!==undefined||indexPrice!==undefined){
    const id=Number(indexQty??indexPrice);
@@ -508,11 +591,14 @@ function listeners(){
   }
   if(target.id==='apTax')actionsList();
   if(target.id==='apTax')rankBoard();
+  if(['apTax','apProfitGoal','apRoiGoal'].includes(target.id))renderManagement();
   summary();
  });
  root.addEventListener('change',ev=>{
   const e=ev.target;
-  if(e.id==='apStatusFilter'){state.status=e.value;actionsList();}
+  if(e.id==='apManagementFilter'){management.filter=e.value;renderManagement();}
+  else if(e.id==='apManagementSort'){management.sort=e.value;renderManagement();}
+  else if(e.id==='apStatusFilter'){state.status=e.value;actionsList();}
   else if(e.id==='apRankingLimit'){state.rankLimit=Number(e.value)||10;rankBoard();}
   else if(e.id==='apPriceMode'){state.priceMode=e.value;state.prices={};render();}
   else if(e.id==='apKitMode'){state.kitMode=e.value;state.quantities={};render();}
@@ -527,7 +613,11 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
  approveHandler=onApproveAction;
  onReadReference=readReference;onSaveReference=savePriceReference;
  onRejectAction=rejectAction;onReadDecisions=readDecisions;onReadSheet=readSheet;
- root=el('actionEconomyPlanner');if(!root||ready)return;
+ root=el('actionEconomyPlanner');if(!root)return;
+ if(ready){
+  if(onReadReference){try{reference=await onReadReference();}catch(e){console.warn('[AÇÕES] Referência indisponível',e);}}
+  await refreshPriceCatalog();return;
+ }
  ready=true;
  try{
   const responses=await Promise.all([fetch(ACOES_SOURCE,{cache:'no-store'}),fetch(CATALOGO_SOURCE,{cache:'no-store'})]);
