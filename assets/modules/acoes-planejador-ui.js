@@ -1,6 +1,7 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides} from './acoes-inteligencia.js?v=1';
+import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=1';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -12,6 +13,7 @@ let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecision
 let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:null,targetHourly:0};
+const management={filter:'TODAS',sort:'PRIORIDADE',search:''};
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
@@ -23,6 +25,43 @@ function choose(name){
  state.team=defaultTeam(action());el('apManual').value='';render();
 }
 
+
+function renderManagement(){
+ if(!catalog||!el('apManagementList'))return;
+ const report=buildManagementBoard(actions,catalog,{tax:state.tax,ammoUse:state.ammoUse,
+  accessConsumed:state.accessConsumed,roi:state.roi,targetPerPlayer:state.targetPerPlayer,reference});
+ const k=report.stats;
+ el('apManagementKpis').innerHTML=[
+  kpi('Ações ativas',String(k.active),'gold',k.inactive+' inativas'),
+  kpi('Revisão prioritária',String(k.revisao),k.revisao?'bad':'good','Inclui dados inconsistentes'),
+  kpi('Dados pendentes',String(k.pendentes),k.pendentes?'bad':'good','Preço, prêmio ou equipe'),
+  kpi('Afetadas por preços',report.hasReference?String(k.impactoPrecos):'Sem base',k.impactoPrecos?'gold':'','Variação desde a referência'),
+  kpi('Lucro mediano por jogador',money(k.lucroMedianoMembro),k.lucroMedianoMembro<0?'bad':'good','Vitória com prêmio mínimo')
+ ].join('');
+ const results=filterManagementEntries(report.entries,{filter:management.filter,sort:management.sort,query:management.search});
+ el('apManagementList').innerHTML=results.length?results.map(item=>{
+  const image=actionPhoto(item.action),tone=!item.valid||item.netMin<0?'urgent':item.priority>=3?'warn':'';
+  const reason=item.reason.slice(0,2).join(' • ');
+  return '<tr><td><span class="ap-management-action">'+
+   (image?'<img src="'+safe(image)+'" loading="lazy" alt="">':'')+
+   '<span><b>'+safe(item.nome)+'</b><small>'+safe(item.team)+' invasores'+
+   (item.active?'':' • INATIVA')+'</small></span></span></td>'+
+   '<td><span class="ap-management-diagnosis '+tone+'">'+safe(item.status)+'</span>'+
+   '<small class="ap-management-reason" title="'+safe(item.reason.join(' • '))+'">'+safe(reason)+'</small></td>'+
+   '<td>'+safe(money(item.capital))+'</td>'+
+   '<td>'+safe(money(item.winCost))+'</td>'+
+   '<td class="'+(item.netMin!==null&&item.netMin<0?'ap-negative':'ap-positive')+'">'+safe(money(item.netMin))+'</td>'+
+   '<td class="'+(item.perPlayer!==null&&item.perPlayer<0?'ap-negative':'ap-positive')+'">'+safe(money(item.perPlayer))+'</td>'+
+   '<td><button type="button" class="ap-management-open" data-ap-manage="'+safe(item.nome)+'">Analisar →</button></td></tr>';
+ }).join(''):'<tr><td colspan="7" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
+ el('apManagementMethod').textContent=
+  results.length+' ações exibidas • '+k.valid+' ativas com cenário calculável • '+k.emPrejuizo+
+  ' com prejuízo na vitória • capital mediano '+money(k.capitalMediano)+
+  '. '+report.conditions+' Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
+ el('apManagementDate').textContent='Fonte: Mercado Negro'+
+  (lastPriceRead?' • leitura '+new Date(lastPriceRead).toLocaleTimeString('pt-BR'):'')+
+  (sheetOverrides.length?' • prêmios conferidos na planilha':' • prêmio do catálogo');
+}
 
 function refreshPriceAlerts(){
  if(!el('apPriceAlerts')||!catalog)return;
@@ -43,7 +82,7 @@ function refreshPriceAlerts(){
      '<span class="'+(c.difference>0?'ap-alert-up':'ap-alert-down')+'"><b>'+
       (c.difference>0?'+':'')+safe(money(c.difference))+'</b><small>'+
       (c.percent===null?'Variação não informada':percent(c.percent))+
-      ' • '+(c.difference>0?'considerar revisão de buff':'considerar revisão de nerf')+'</small>'+
+      ' • '+(c.difference>0?'lucro e capital: avaliar buff':'lucro e capital: avaliar redução')+'</small>'+
       '<small>Lucro/membro: '+safe(money(c.oldProfitPerMember))+' → '+safe(money(c.newProfitPerMember))+'</small></span></button>'
    ).join(''):'<p class="ap-hint">Nenhuma alteração de custo encontrada desde a referência salva.</p>';
  }
@@ -62,7 +101,7 @@ async function saveReference(){
   const snapshot=makePriceReference(catalog);
   const result=await onSaveReference(snapshot);
   if(!result?.saved)throw Error('O servidor não confirmou a gravação.');
-  reference=snapshot;refreshPriceAlerts();
+  reference=snapshot;refreshPriceAlerts();renderManagement();
   status.textContent='Referência salva. Novas alterações de preço aparecerão aqui quando o módulo consultar o catálogo novamente.';
  }catch(e){status.textContent='Não foi possível salvar a referência: '+(e.message||String(e));}
 }
@@ -74,7 +113,7 @@ async function refreshPriceCatalog(){
   const data=await responses[0].json(),next=await responses[1].json();
   if(!Array.isArray(data.acoes)||!Array.isArray(next.itens))throw Error('Formato inválido.');
   publishedActions=data.acoes;actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
-  catalog=next;meta=data.meta||{};
+  catalog=next;meta=data.meta||{};lastPriceRead=new Date().toISOString();
   if(!action())selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
   if(action())render();
   lastPriceRead=new Date().toISOString();
@@ -343,7 +382,7 @@ function summary(){
 }
 function render(){
  if(!action())return;
- actionsList();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
+ actionsList();renderManagement();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
 }
 async function copyProposal(){
  const a=action(),d=decision(),p=d.calc;
