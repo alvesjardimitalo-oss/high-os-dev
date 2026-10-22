@@ -114,7 +114,7 @@ test('elementos de navegação e painel gerencial integrados à página original
  assert.match(ui,/buildManagementBoard/);
  assert.match(ui,/filterManagementEntries/);
  assert.match(ui,/data-ap-manage/);
- assert.match(app,/acoes-planejador-ui\.js\?v=8/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=9/);
 });
 
 test('Planejador de Ações herda a identidade global do High OS sem afetar outras páginas',()=>{
