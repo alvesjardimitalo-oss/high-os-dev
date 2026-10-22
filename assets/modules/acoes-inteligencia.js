@@ -68,10 +68,11 @@ export function analyzeDecision(action,catalog,{
  const p=calculateAction(working,catalog,calcOpts);
  const valid=p.teamValid&&action?.status!=='inativo'&&!p.kit.missing.length&&
   p.kit.total!==null&&p.min!==null&&p.min>0&&p.max!==null&&p.max>=p.min;
- const isSimulation=Number(calcOpts.priceShift)!==0&&Number.isFinite(Number(calcOpts.priceShift));
+ const isSimulation=(Number.isFinite(Number(calcOpts.priceShift))&&Number(calcOpts.priceShift)!==0)||
+  Object.keys(calcOpts.prices||{}).length>0;
  const oldCatalog=isSimulation?catalog:Array.isArray(reference?.items)&&reference.items.length?referenceCatalog(reference):null;
  const previous=oldCatalog?calculateAction(working,oldCatalog,{
-  ...calcOpts,priceShift:0
+  ...calcOpts,priceShift:0,prices:{}
  }):null;
  const hasComparison=!!previous&&!previous.kit.missing.length&&
   previous.kit.total!==null&&previous.kit.winCost!==null&&p.kit.winCost!==null;
