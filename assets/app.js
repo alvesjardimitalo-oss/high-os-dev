@@ -25,7 +25,7 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
-import { syncBlipsCoordinates } from './modules/blips-sheet-sync.js?v=1.1.0';
+import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.0';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
@@ -2722,7 +2722,7 @@ extratoEntrega:buildDeliveryExtract(data),
 usuario:currentUser.email,
 data:serverTimestamp()});
 for(const r of generated)await archiveTechnicalRequest(r,data,'ALTERACAO_DO_GROUP');
-await syncGroupsToOfficialSheet([data],{quiet:true});
+await syncGroupsToOfficialSheet([data],{quiet:true,previousGroups:old?[old]:[]});
 queryFreshAt.set('faccoes',Date.now());
 renderFaccoes();renderAvailableFaccoes();renderOrganizations();
 closeGroupProfilePage()}catch(err){alert('Erro ao salvar: '+err.message)}
@@ -2858,18 +2858,18 @@ ultimoRecolhimento:{...recolhimento,
 possuiEvidencia:!!recollectPanelImage},
 observacoes:old.observacoes||'',
 updatedAt:serverTimestamp(),
-updatedBy:currentUser.email};try{let evidenceId='';if(recollectPanelImage){const ev=await addDoc(collection(db,'highos','data','evidencias_recolhimento'),{tipo:'PRINT_PAINEL',
+updatedBy:currentUser.email};try{let committed=false;const recollectBatch=writeBatch(db);let evidenceId='';if(recollectPanelImage){const evidenceRef=doc(collection(db,'highos','data','evidencias_recolhimento'));recollectBatch.set(evidenceRef,{tipo:'PRINT_PAINEL',
 group,
 faccao:old.faccao||'',
 motivo:reason,
 imagemDataUrl:recollectPanelImage,
 createdAt:serverTimestamp(),
 createdAtText:new Date().toISOString(),
-createdBy:currentUser.email});evidenceId=ev.id}recolhimento.evidenciaId=evidenceId;data.ultimoRecolhimento.evidenciaId=evidenceId;
+createdBy:currentUser.email});evidenceId=evidenceRef.id}recolhimento.evidenciaId=evidenceId;data.ultimoRecolhimento.evidenciaId=evidenceId;
 /* O bot posta o extrato (e o print, no baixo contingente) no tópico do Group
    e no canal de recolhidas do Discord do Ilegal. Só vai no PUT; não fica no registro local. */
 const [tituloRec,...corpoRec]=String(recolhimento.extrato||'').split('\n');
-await setDoc(doc(db,'highos','data','faccoes',group),{...data,anuncioRecolhimento:{title:tituloRec,description:corpoRec.join('\n').trim(),imageDataUrl:recollectPanelImage||''}});const recollectBatch=writeBatch(db);
+recollectBatch.set(doc(db,'highos','data','faccoes',group),{...data,anuncioRecolhimento:{title:tituloRec,description:corpoRec.join('\n').trim(),imageDataUrl:recollectPanelImage||''}});
 if(old.faccao){const oid=orgKey(old.faccao);recollectBatch.set(doc(db,'highos','data','organizacoes',oid),{nome:old.faccao,
 status:'SEM_GROUP',
 groupAtual:'',
@@ -2884,8 +2884,7 @@ for(const d of activeDeliveries)recollectBatch.set(doc(db,'highos','data','entre
 recolhimento,
 recolhidaEm:serverTimestamp(),
 recolhidaPor:currentUser.email},{merge:true});
-if(old.faccao||activeDeliveries.length)await recollectBatch.commit();
-await addDoc(histCol,{sessionId:currentSessionId||'',
+recollectBatch.set(doc(histCol),{sessionId:currentSessionId||'',
 tipo:'RECOLHIMENTO',
 group,
 faccao:old.faccao||'',
@@ -2902,7 +2901,10 @@ extratoRecolhimento:recolhimento.extrato,
 antes:snapshot(old),
 depois:snapshot(data),
 usuario:currentUser.email,
-data:serverTimestamp()});await syncGroupsToOfficialSheet([data],{quiet:true});
+data:serverTimestamp()});
+await recollectBatch.commit();
+committed=true;
+const sheetSynced=await syncGroupsToOfficialSheet([data],{quiet:true});
 const fix=faccoes.findIndex(x=>x.group===group);
 if(fix>=0)faccoes[fix]={...clonePlain(data),id:faccoes[fix].id||group,updatedBy:currentUser.email};
 if(old.faccao){
@@ -2914,7 +2916,7 @@ const activeIds=new Set(activeDeliveries.map(d=>d.id));
 entregas=entregas.map(d=>activeIds.has(d.id)?{...d,status:'RECOLHIDA',recolhimento:clonePlain(recolhimento),recolhidaPor:currentUser.email}:d);
 queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('organizacoes',Date.now());queryFreshAt.set('entregas',Date.now());
 renderFaccoes();renderOrganizations();renderDeliveries();
-closeRecollectModal();closeGroupProfilePage();alert('Facção recolhida com sucesso. O extrato e a evidência foram registrados no histórico.')}catch(err){alert('Erro ao recolher: '+err.message)}finally{recollectInFlight=false;if(submitBtn)submitBtn.disabled=false}});
+closeRecollectModal();closeGroupProfilePage();alert(sheetSynced?'Facção recolhida com sucesso. Histórico, organização e evidências registrados.':'Facção recolhida no High OS. Planilha PENDENTE: conecte o Google Sheets e sincronize novamente.')}catch(err){alert('Erro ao recolher: '+err.message)}finally{recollectInFlight=false;if(submitBtn)submitBtn.disabled=false}});
 
 function snapshot(o){if(!o)return null;
 const x={...o};
@@ -3411,7 +3413,6 @@ b.arena]];
    for(const [label,
 saved] of singles){const v=getDetailValue(label,d)||saved;
 if(v)L.push('',`- ${label}:`,`  ${fmtCds(v)}`)}
-   if(b.bauCapacidade)L.push(`- Capacidade do Baú: ${b.bauCapacidade}`);
 
    if(b.outros){L.push('','- Outros benefícios / setagens:');
 L.push(...String(b.outros).split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(x=>`- ${x}`))}
@@ -3555,6 +3556,11 @@ if(d)L.push(d);
  }
  return L.join('\n');
 
+}
+
+function updateRequestPreview(){
+ const preview=$('#reqPreview');
+ if(preview)preview.value=buildRequestText();
 }
 
 function openRequestModal(id='',group=''){
@@ -5854,7 +5860,7 @@ createdBy:currentUser.email};
    ...deliveredGroup,
    anuncioEntrega:{title:titulo,description:corpo.join('\n').trim()}
   });
-  const sheetSynced=await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
+  const sheetSynced=await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true,previousGroups:[f]});
 
   $('#newDeliveryModal').classList.add('hidden');
   const previousIds=new Set(previous.map(d=>d.id));
@@ -11118,6 +11124,7 @@ $('#movementConfirm')?.addEventListener('click', async () => {
   if(!reason) return alert('Informe o motivo da operação.');
   if(!confirm(`Confirmar operação entre ${src.group} e ${dst.group}? Esta ação será registrada no histórico.`)) return;
 
+  let committed = false;
   try{
     const a = {...src};
     const b = {...dst};
@@ -11145,11 +11152,9 @@ $('#movementConfirm')?.addEventListener('click', async () => {
     const batch = writeBatch(db);
     batch.set(doc(db,'highos','data','faccoes',src.group), a);
     batch.set(doc(db,'highos','data','faccoes',dst.group), b);
-    await batch.commit();
-    await syncGroupsToOfficialSheet([a,
-b],{quiet:true});
 
-    await addDoc(histCol, {
+    // Guardar log e vínculos junto com as alterações principais.
+    batch.set(doc(histCol), {
       tipo: movementMode === 'TRANSFER_PANEL' ? 'TRANSFERENCIA_PAINEL' : 'TROCA_QG',
 
       group: src.group,
@@ -11173,11 +11178,33 @@ b],{quiet:true});
 
       data: serverTimestamp()
     });
+    /* V10.31 - sincroniza as organizações movimentadas em uma única
+       confirmação. Em troca de duas facções deixa de fazer duas escritas
+       sequenciais independentes. */
+    
 
-    /* V12.5 - trilha estruturada de ocupação. Não move nem duplica as
-       métricas brutas: registra qual facção passou a ocupar cada Group e
-       a data efetiva. Falha desta trilha não cancela a transferência já
-       concluída; o histórico auditável acima continua preservado. */
+    for(const rec of [a,
+b]){
+      if(rec.faccao){
+        const existing=derivedOrganizations().find(o=>String(o.nome||'').toLowerCase()===String(rec.faccao).toLowerCase())||{};
+        const next={nome:rec.faccao,status:'ATIVA',groupAtual:rec.group,segmentoAtual:rec.segmento||'',qgAtual:rec.qg||'',lider:rec.lider||''};
+        const igual=existing?.id&&Object.keys(next).every(k=>String(existing[k]??'')===String(next[k]??''));
+        if(!igual){
+          batch.set(doc(db,'highos','data','organizacoes',orgKey(rec.faccao)), {
+            ...next,
+            updatedAt:serverTimestamp(),
+            updatedBy:currentUser.email
+          }, {merge:true});
+
+        }
+      }
+    }
+
+    await batch.commit();
+    committed = true;
+    // Ocupações complementares são gravadas após a transação principal:
+    // mantém compatibilidade enquanto firestore.rules ainda não for publicado.
+    let occupationSynced=true;
     if(movementMode === 'TRANSFER_PANEL'){
       try{
         const occupationBatch=writeBatch(db);
@@ -11207,31 +11234,14 @@ b],{quiet:true});
           });
         });
         await occupationBatch.commit();
-      }catch(occErr){console.warn('[OCUPAÇÕES] transferência concluída, mas trilha estruturada não foi gravada:',occErr?.message||occErr)}
-    }
-
-    /* V10.31 - sincroniza as organizações movimentadas em uma única
-       confirmação. Em troca de duas facções deixa de fazer duas escritas
-       sequenciais independentes. */
-    const orgMoveBatch=writeBatch(db);
-    let orgMoveCount=0;
-    for(const rec of [a,
-b]){
-      if(rec.faccao){
-        const existing=derivedOrganizations().find(o=>String(o.nome||'').toLowerCase()===String(rec.faccao).toLowerCase())||{};
-        const next={nome:rec.faccao,status:'ATIVA',groupAtual:rec.group,segmentoAtual:rec.segmento||'',qgAtual:rec.qg||'',lider:rec.lider||''};
-        const igual=existing?.id&&Object.keys(next).every(k=>String(existing[k]??'')===String(next[k]??''));
-        if(!igual){
-          orgMoveBatch.set(doc(db,'highos','data','organizacoes',orgKey(rec.faccao)), {
-            ...next,
-            updatedAt:serverTimestamp(),
-            updatedBy:currentUser.email
-          }, {merge:true});
-          orgMoveCount++;
-        }
+      }catch(occError){
+        occupationSynced=false;
+        console.warn('[OCUPAÇÕES] Log principal salvo; registro complementar pendente:',occError);
       }
     }
-    if(orgMoveCount)await orgMoveBatch.commit();
+    const sheetOk=await syncGroupsToOfficialSheet([a,b],{quiet:true,previousGroups:[src,dst]});
+
+
 
     const localA={...clonePlain(a),id:src.id||src.group,updatedBy:currentUser.email};
     const localB={...clonePlain(b),id:dst.id||dst.group,updatedBy:currentUser.email};
@@ -11248,9 +11258,12 @@ b]){
 
     $('#movementModal')?.classList.add('hidden');
     closeGroupProfilePage();
-    alert('Operação concluída e registrada no histórico.');
+    const pending=[];
+    if(!sheetOk)pending.push('planilha PENDENTE: reconecte o Google Sheets e sincronize');
+    if(!occupationSynced)pending.push('registro complementar de ocupação PENDENTE: publicar as novas regras do Firestore');
+    alert(pending.length?'Operação concluída e auditada no High OS; '+pending.join('; ')+'.':'Operação concluída, auditada e planilhas sincronizadas.');
   }catch(e){
-    alert('Falha na operação: ' + e.message);
+    alert(committed?'Dados gravados no High OS, mas houve falha após a confirmação. Recarregue a página para conferir o resultado: '+e.message:'Falha na operação; nada foi confirmado: ' + e.message);
   }
 });
 
@@ -11554,12 +11567,28 @@ facSheetRenderStatus('online','Alterações da planilha confirmadas e aplicadas 
 alert('High OS atualizado com os dados confirmados da planilha.')}catch(e){alert('Erro ao aplicar alterações: '+e.message)}finally{if(btn){btn.disabled=false;
 btn.textContent='CONFIRMAR E ATUALIZAR HIGH OS'}}
 }
-async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true}={}){
+function blipsChangedFieldsByGroup(previousGroups=[],currentGroups=[]){
+ const before=new Map(previousGroups.filter(Boolean).map(g=>[facSheetNorm(g.group),blipsValuesFor(g)]));
+ const changes={};
+ for(const g of currentGroups.filter(Boolean)){
+  const old=before.get(facSheetNorm(g.group));
+  if(!old)continue;
+  const now=blipsValuesFor(g);
+  changes[g.group]=Object.keys(now).filter(field=>String(now[field]??'')!==String(old[field]??''));
+ }
+ return changes;
+}
+async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true,overwriteFieldsByGroup={}}={}){
  if(!facSheetAccessToken)return false;
  try{
-  const result=await syncBlipsCoordinates({token:facSheetAccessToken,groups:rows,onlyMissing});
+  const result=await syncBlipsCoordinates({token:facSheetAccessToken,groups:rows,onlyMissing,overwriteFieldsByGroup});
   if(result.created)console.info('[BLIPS COORDENADAS] '+result.created+' quadro(s) cadastrado(s) na categoria correta.');
-  return true;
+  const inconsistencies=[...(result.categoryMismatches||[]),...(result.duplicates||[])];
+  if(inconsistencies.length){
+   console.warn('[BLIPS COORDENADAS] Groups que precisam de revisão de categoria/duplicidade:',inconsistencies);
+   if(!quiet)alert('Sincronização parcial: '+inconsistencies.length+' Group(s) precisam de revisão na categoria ou estão duplicados. Consulte o console para detalhes.');
+  }
+  return inconsistencies.length===0;
  }catch(error){
   console.warn('[BLIPS COORDENADAS] Falha de sincronização:',error);
   if(/HTTP (401|403)|unauthorized|invalid authentication credentials/i.test(String(error?.message||error)))facSheetAccessToken='';
@@ -11568,14 +11597,14 @@ async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true}={}){
  }
 }
 async function syncGroupsToOfficialSheet(groups=[],{quiet=false,
-forceAuthorize=false}={}){
+forceAuthorize=false,previousGroups=[]}={}){
  const clean=groups.filter(Boolean);
 if(!clean.length)return true;
 let token=facSheetAccessToken;
 if(!token&&forceAuthorize)token=await facSheetAuthorize();
 if(!token){facSheetRenderStatus('warn','High OS salvo. Conecte o Google Sheets para enviar as alterações pendentes à planilha.');
 return false}
- const blipsOk=await syncBlipsGroups(clean,{quiet:true});
+ const blipsOk=await syncBlipsGroups(clean,{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup(previousGroups,clean)});
  try{facSheetRenderStatus('busy',`Enviando ${clean.length} Group(s) para a planilha...`);
 if(!facSheetRowMap.size)await facSheetReadAll();
 const title=await facSheetResolveTitle(token);
@@ -11962,6 +11991,7 @@ async function persistCurrentTechProfile(group, {reload=true}={}){
 
  const perfilTecnico=getTechProfileFromForm();
  const local=faccoes.find(x=>x.group===group);
+ const previousGroup=clonePlain(local||{group});
  const before=clonePlain(mergedTechProfile(local||{}));
  if(JSON.stringify(before)===JSON.stringify(clonePlain(perfilTecnico))){
    return clonePlain(perfilTecnico);
@@ -11980,7 +12010,9 @@ updatedBy:currentUser?.email||''},{merge:true});
  }else{
    techDraft=clonePlain(perfilTecnico);
  }
- await syncBlipsGroups([{...(local||{group}),perfilTecnico}],{quiet:true});
+ const currentGroup={...(local||{group}),perfilTecnico};
+ const techSheetOk=await syncBlipsGroups([currentGroup],{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup([previousGroup],[currentGroup])});
+ if(!techSheetOk)facSheetRenderStatus('warn','Perfil técnico salvo no High OS; planilha de coordenadas pendente.');
  return clonePlain(perfilTecnico);
 
 }
@@ -13274,7 +13306,7 @@ async function refreshDiscordChat(key){
  try{
   const me=String(currentUser.email||'').toLowerCase(),other=String(chatRecipientEmail||'').toLowerCase(),cid=chatConversationId(me,other);
   const rows=(await highOsStoreList('chat_mensagens')).filter(x=>x.conversationId===cid&&Array.isArray(x.participants)&&x.participants.includes(me)).sort((a,b)=>String(a.createdAtText||'').localeCompare(String(b.createdAtText||''))).slice(-CHAT_PAGE_SIZE);
-  renderChatMessages(rows);if(activeMeetingRoom)renderTeamCallFiles();
+  renderChatMessages(rows);
  }catch(err){console.warn('[HIGH OS][CHAT] Discord storage',err)}
 }
 function subscribeChatConversation(){

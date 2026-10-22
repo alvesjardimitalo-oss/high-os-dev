@@ -32,10 +32,10 @@ function first(...vs){return vs.map(plain).find(Boolean)||"";}
 function pair(x){
  if(!x)return "";
  if(typeof x==="string")return plain(x);
- return [plain(x.blip||x.cds),plain(x.spawn)].filter(Boolean).join(" / ");
+ return [plain(x.blip||x.cds)?"BLIP: "+plain(x.blip||x.cds):"",plain(x.spawn)?"SPAWN: "+plain(x.spawn):""].filter(Boolean).join("\n");
 }
-function joinPairs(items){return (items||[]).map(pair).filter(Boolean).join(" / ");}
-function valuesFor(f){
+function joinPairs(items){return (items||[]).map(pair).filter(Boolean).join("\n\n");}
+export function valuesFor(f){
  const b=f.beneficios||{};
  const t=f.perfilTecnico||{};
  const op=t.operacional||{};
@@ -48,23 +48,21 @@ function valuesFor(f){
   LOCAL:first(op.localizacao?.nome,f.qg),
   PRODUTO:first(f.produto),
   COORDENADA:first(op.localizacao?.cdsPrincipal,f.cds),
-  INICIARROTA:first(t.rota?.inicio,b.iniciarRota,b.rotaInicio,f.perfilFonte?.["INICIAR ROTA"]),
   CRAFT:first(t.craft?.cds,b.craft),
   BARBEARIA:first(op.barbearia?.cds,b.barbearia),
   BAU:first(op.bau?.cds,b.bau,b.bauCds,fromExtra.bau,f.perfilFonte?.BAU),
   LOJADEROUPAS:first(op.roupas?.cds,b.lojaRoupas,f.perfilFonte?.["LOJA DE ROUPAS"]),
   GARAGEMVIPFAC:first(joinPairs(garage("FACCAO")),pair({blip:b.garagemVipBlip,spawn:b.garagemVipSpawn})),
   GARAGEMPUBLICA:first(joinPairs(garage("PUBLICA").concat(garage("PUBLICA2"))),pair({blip:b.garagemPublicaBlip,spawn:b.garagemPublicaSpawn})),
-  GARAGEMDELUXE:first(joinPairs(garage("SERVICO")),b.garagemDeluxeBlip,b.garagemDeluxe,f.perfilFonte?.["GARAGEM DELUXE"]),
+  GARAGEMDELUXE:first(joinPairs(garage("SERVICO").concat(garage("DELUXE"))),pair({blip:b.garagemDeluxeBlip,spawn:b.garagemDeluxeSpawn}),b.garagemDeluxe,f.perfilFonte?.["GARAGEM DELUXE"]),
   SHOPDELUXE:first(op.lojaFac?.cds,b.shopDeluxe,f.perfilFonte?.["SHOP DELUXE"]),
   SHOPEXCLUSIVO:first(op.lojaFac?.cds,b.shopExclusivo,b.shopDeluxe),
   ACADEMIA:first(b.academia),
   BAR:first(op.bar?.cds,fromExtra.bar),
   HELIPONTO:first(joinPairs(hei),pair({blip:b.helipontoBlip,spawn:b.helipontoSpawn})),
-  BLINDADOS:first(pair(op.blindados),b.blindados),
-  FARM:first(t.farm?.cds,b.farm),
-  ROTAEXCLUSIVA:b.rotaExclusiva?"SIM":"",
-  CDSROTAEXCLUSIVA:first(t.rota?.pontos,b.rotaBlips),
+  BLINDADOS:first(joinPairs(Array.isArray(op.blindados)?op.blindados:[op.blindados]),b.blindados),
+  FARM:first(t.farm?.cds,b.farm,b.iniciarFarm),
+  INICIARFARM:first(t.farm?.cds,b.farm,b.iniciarFarm),
   GARAGEMPUBLICA2:first(joinPairs(garage("PUBLICA2")),pair({blip:b.garagemPublica2Blip,spawn:b.garagemPublica2Spawn})),
   TATUAGEM:first(op.tatuagem?.cds,b.tatuagem),
   ATM:first(b.atm),
@@ -76,15 +74,7 @@ function valuesFor(f){
   TELAOCAIXA2:first(op.telao?.sons?.[1],b.telaoCaixa2),
   TELAOCAIXA3:first(op.telao?.sons?.[2],b.telaoCaixa3),
   TELAOCAIXA4:first(op.telao?.sons?.[3],b.telaoCaixa4),
-  SINUCA:first(b.sinuca),
-  RADIO:first(b.radio),
-  SALARIO:first(b.salario),
-  INTERVALOSALARIO:first(b.salarioMinutos),
-  VIPORG:b.vipOrg?plain(b.vipOrg===true?"SIM":b.vipOrg):"",
-  CHATFACCAO:b.chatFaccao?"SIM":"",
-  UNIFORME:b.roupasFaccao?"SIM":"",
-  CAPACIDADEBAU:first(b.bauCapacidade),
-  VEICULOSVIP:first(b.garagemVipVeiculos)
+  /* Benefícios e rota exclusiva NÃO pertencem à aba de coordenadas. */
  };
 }
 async function sheets(url,token,method="GET",body){
@@ -127,7 +117,7 @@ function safeBlank(rows,sec,entry){
 /* Preenche apenas células pertencentes ao quadro do Group; novas seções são
    clonadas ao FIM da aba com o layout expandido, sem inserir linhas dentro de
    quadros vizinhos nem apagar coordenadas antigas. */
-export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,preserveExisting=true}={}){
+export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,preserveExisting=true,overwriteFieldsByGroup={}}={}){
  if(!token)throw new Error("Conecte o Google Sheets para sincronizar Blips e Coordenadas.");
  const list=[...new Map(groups.filter(g=>g&&plain(g.group)).map(g=>[fold(g.group),g])).values()];
  if(!list.length)return {created:0,updated:0,skipped:0};
@@ -143,6 +133,7 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
  if(!sections.length)throw new Error("Quadros da planilha não reconhecidos. Nenhuma alteração feita.");
  const requests=[];
  let created=0,updated=0,skipped=0;
+ const categoryMismatches=[],duplicates=[];
  let nextStart=Math.max(rows.length+3,150),capacity=Number(tab.gridProperties?.rowCount||1006);
  const sectionBlocks=new Map();
  const findSector=key=>sections.filter(s=>s.sector===key);
@@ -194,8 +185,10 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
   // Se já existe em uma seção histórica diferente, atualiza-a sem criar duplicata.
   if(!selected)for(const s of sections){
    const entry=s.entries.find(e=>fold(e.name)===key);
-   if(entry){selected={s,entry};break;}
+   if(entry){selected={s,entry};categoryMismatches.push({group:f.group,actual:s.sector,expected:sectorKey});break;}
   }
+  const matches=sections.flatMap(sec=>sec.entries.filter(e=>fold(e.name)===key).map(e=>sec.sector));
+  if(matches.length>1)duplicates.push({group:f.group,sectors:matches});
   if(selected&&onlyMissing){skipped++;continue;}
   if(!selected){
    for(const s of correct){
@@ -212,16 +205,20 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
   }
   const {s,entry}=selected;
   const fields=valuesFor(f),col=entry.col,header=s.headerRow;
+  const forceFields=new Set((overwriteFieldsByGroup[key]||overwriteFieldsByGroup[f.group]||[]).map(fold));
   // Campos por rótulo, não por posição fixa: há diferenças entre os segmentos.
   for(let r=header;r<Math.min(s.footerRow,header+MAX_FIELDS_SCAN);r++){
    const label=s.newBlock?s.labels[r-header]:cell(rows,r,col-1);
    if(!label||fold(label)==="TRUE")continue;
-   const value=fields[fold(label)];
-   if(!value)continue;
+   const fieldKey=fold(label),value=fields[fieldKey];
+   const explicitChange=forceFields.has(fieldKey);
+   // Só uma alteração EXPLÍCITA pode limpar valor antigo.
+   if(!value&&!explicitChange)continue;
    const found=s.newBlock?"":first(...Array.from({length:6},(_,i)=>cell(rows,r,col+i)));
+   if(!value&&!found)continue;
    if(!isNew&&value===found)continue;
    if(!isNew&&onlyMissing)continue;
-   if(!isNew&&preserveExisting&&found)continue; // nunca sobrescrever CDS já preenchidas ao entregar a facção
+   if(!isNew&&preserveExisting&&found&&!explicitChange)continue; // entrega não altera instalações preexistentes
    const existingAnchor=!s.newBlock&&found
     ? Array.from({length:6},(_,i)=>col+i).find(c=>cell(rows,r,c))??col :col;
    put(requests,TAB_GID,r,existingAnchor,value);
@@ -233,5 +230,5 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
   // Limite defensivo: uma falha não deve apagar a planilha preexistente.
   await sheets(root+":batchUpdate",token,"POST",{requests});
  }
- return {created,updated,skipped,groups:list.length,sectionsAdded:[...sectionBlocks.keys()]};
+ return {created,updated,skipped,groups:list.length,sectionsAdded:[...sectionBlocks.keys()],categoryMismatches,duplicates};
 }

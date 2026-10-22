@@ -110,6 +110,18 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if isAdmin();
     }
+    // Trilha imutável de transferências de ocupação. Sem este match, os
+    // writeBatch de TRANSFER_PANEL são negados pelo bloqueio geral abaixo.
+    match /highos/data/ocupacoes/{docId} {
+      allow read: if canView('faccoes');
+      allow create: if canEdit('faccoes')
+                    && request.resource.data.get('createdBy', '').lower() == myEmail()
+                    && request.resource.data.get('tipo', '') == 'TRANSFERENCIA_GROUP'
+                    && request.resource.data.get('groupOrigem', '') is string
+                    && request.resource.data.get('groupDestino', '') is string;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
     match /highos/data/solicitacoes/{docId} {
       allow read: if canView('solicitacoes');
       allow write: if canEdit('solicitacoes');
@@ -181,8 +193,12 @@ service cloud.firestore {
                   && myEmail() in resource.data.get('participants', []);
       allow create: if activeUser() && canView('chat')
                     && request.resource.data.participants is list
+                    && request.resource.data.participants.size() == 2
                     && myEmail() in request.resource.data.participants;
-      allow update, delete: if activeUser() && canView('chat')
+      allow update: if activeUser() && canView('chat')
+                    && myEmail() in resource.data.get('participants', [])
+                    && request.resource.data.participants == resource.data.participants;
+      allow delete: if activeUser() && canView('chat')
                     && myEmail() in resource.data.get('participants', []);
     }
 
