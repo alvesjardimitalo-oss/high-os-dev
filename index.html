@@ -31,6 +31,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
+  <link rel="stylesheet" href="assets/acoes-planejador.css?v=1">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -96,6 +97,7 @@
           <button class="nav-item" data-page="historico">◷ <span>Histórico</span></button>
           <button class="nav-item" data-page="diario">▦ <span>Diário Operacional</span></button>
           <button class="nav-item" data-page="planejador">◎ <span>Planejador de Missões</span></button>
+          <button class="nav-item" data-page="planejador-acoes">▣ <span>Planejador de Ações</span></button>
           <button class="nav-item admin-only" data-page="usuarios">♟ <span>Usuários</span></button>
           <button class="nav-item admin-only" data-page="administracao">⚠ <span>Administração</span></button>
         </nav>
@@ -282,6 +284,74 @@
             </div>
             <div class="economy-toolbar"><input id="marketSearch" placeholder="Buscar item, categoria, arma, munição, droga, serviço..."></div>
             <div id="marketResults" class="market-results economy-results"><div class="placeholder"><b>$</b><h3>CARREGANDO ECONOMIA</h3></div></div>
+          </div>
+        </section>
+        <section class="page" id="page-planejador-acoes">
+          <div class="page-head">
+            <div><div class="eyebrow">ECONOMIA ILEGAL • MERCADO NEGRO • SEASON 2</div><h2>PLANEJADOR DE AÇÕES</h2>
+              <p class="page-subtitle">Simule o kit por invasor, lavagem, lucro individual, regras de confronto e propostas de buff ou nerf. Nenhum prêmio oficial é modificado pela simulação.</p>
+            </div><span class="dev-badge">GESTÃO ECONÔMICA</span>
+          </div>
+          <div id="actionEconomyPlanner" class="ap-root">
+            <div class="ap-topline" id="apSource">Fonte: Mercado Negro • Ações e preços consultados em tempo real • Simulação de leitura • Prêmios oficiais intocados</div>
+            <div class="ap-shell">
+              <aside class="ap-panel ap-aside">
+                <h3>Escolha a ação</h3>
+                <input class="ap-search" id="apSearch" type="search" placeholder="Buscar ação ou local" aria-label="Buscar ação">
+                <select id="apStatusFilter" class="ap-search" style="margin-top:9px" aria-label="Filtrar ações">
+                  <option value="ATIVAS">Ações ativas</option><option value="TODAS">Todas as ações</option><option value="REVISAR">Custos divergentes</option>
+                </select>
+                <p class="ap-row-muted"><span id="apActionCount">—</span> ações</p>
+                <div id="apActionList" class="ap-action-list"></div>
+              </aside>
+              <div class="ap-columns">
+                <section class="ap-panel">
+                  <div class="ap-heading"><h3 id="apActionTitle">Carregando...</h3><div id="apActionStatus"></div></div>
+                  <div id="apPhotos"></div><div id="apReq"></div>
+                </section>
+                <section class="ap-panel">
+                  <div class="ap-heading"><h3>1. Participantes e investimento</h3><span class="ap-status">Preços do Mercado Negro</span></div>
+                  <div class="ap-filter-row">
+                    <label class="ap-field">Invasores<select id="apTeam"></select></label>
+                    <label class="ap-field">Composição do kit<select id="apKitMode"><option value="por-jogador">1 kit por jogador</option><option value="oficial">Quantidade cadastrada</option></select></label>
+                    <label class="ap-field">Preço de referência<select id="apPriceMode"><option value="pista">Preço de pista</option><option value="parceria">Preço de parceria</option></select></label>
+                    <label class="ap-field">Reaproveitamento estimado (%)<input id="apReuse" type="number" min="0" max="100" step="5" value="0"></label>
+                  </div>
+                  <div class="ap-table-scroll"><table><thead><tr><th>ITEM</th><th>QTD</th><th>VALOR UNIT.</th><th>TOTAL</th></tr></thead>
+                    <tbody id="apKitRows"></tbody><tfoot><tr><td colspan="3">INVESTIMENTO TOTAL NO KIT</td><td id="apTotal">—</td></tr></tfoot></table></div>
+                  <p id="apKitComputed" class="ap-row-muted"></p><p id="apWarnings" class="ap-hint"></p>
+                </section>
+                <section class="ap-panel">
+                  <h3>2. Lucro com os prêmios atuais</h3>
+                  <div id="apCurrentMetrics" class="ap-cards"></div>
+                  <div class="ap-hint">O buff anterior já está incluído na premiação atual. Lucro = prêmio sujo após lavagem − custo efetivo do kit. O reaproveitamento é uma hipótese de simulação, não um fato observado.</div>
+                </section>
+                <section class="ap-panel">
+                  <h3>3. Inteligência para buff ou nerf</h3>
+                  <div class="ap-filter-row">
+                    <label class="ap-field">Lucro líquido alvo por jogador (R$)<input id="apProfitGoal" type="number" min="0" step="1000" value="20000"></label>
+                    <label class="ap-field">ROI líquido mínimo (%)<input id="apRoiGoal" type="number" min="0" max="200" step="5" value="25"></label>
+                    <label class="ap-field">Margem para sugerir nerf (%)<input id="apTolerance" type="number" min="0" max="200" step="5" value="25"></label>
+                    <label class="ap-field">Lavagem (%)<input id="apTax" type="number" min="0" max="99" step="1" value="30"></label>
+                  </div>
+                  <div id="apGoals" class="ap-cards"></div>
+                  <div id="apResult" class="ap-result"></div><p id="apProposal" class="ap-row-muted"></p>
+                  <div class="ap-filter-row" style="grid-template-columns:minmax(0,250px) minmax(0,1fr)">
+                    <label class="ap-field">Testar outro prêmio mínimo (sujo)<input id="apManual" type="number" min="0" placeholder="R$ valor alternativo"></label>
+                    <div id="apManualOutcome" class="ap-hint"></div>
+                  </div>
+                  <div class="ap-actions"><button type="button" class="ap-button primary" id="apCopy">Copiar proposta de alteração</button>
+                    <button type="button" class="ap-button" id="apApprove" hidden>Aprovar e sincronizar planilha existente</button>
+                    <button type="button" class="ap-button" id="apExport">Exportar análise CSV</button></div>
+                  <p id="apCopyStatus" class="ap-row-muted">Somente estudo. A planilha Ilegal – High Season 2 não será modificada sem aprovação da proposta.</p>
+                </section>
+                <section class="ap-panel">
+                  <h3>4. Compare todas as equipes permitidas</h3>
+                  <p class="ap-sub">Selecione uma quantidade de invasores para avaliar as diferenças de kit, policiais exigidos, lucro individual e novo prêmio sugerido.</p>
+                  <div id="apScenarios" class="ap-table-scroll"></div>
+                </section>
+              </div>
+            </div>
           </div>
         </section>
         <section class="page" id="page-planejador">
@@ -907,7 +977,7 @@
   <script src="assets/mission-planner.js?v=12.18.1"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=15.5.17"></script>
+  <script type="module" src="assets/app.js?v=15.6.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
