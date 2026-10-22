@@ -1,4 +1,4 @@
-import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=1';
+import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -6,7 +6,7 @@ const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency
 const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(x):'—';
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
 let approveHandler=null,approvedThisSession=new Set();
-const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'por-jogador',reuse:0,roi:.25,
+const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'por-jogador',priceShift:0,ammoUse:.25,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,quantities:{},prices:{},manualPayout:null};
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
@@ -25,17 +25,21 @@ function actionsList(){
   if(!match)return false;
   if(state.status==='ATIVAS'&&a.status==='inativo')return false;
   if(state.status==='REVISAR'){
-   const r=calculateAction(a,catalog,{team:defaultTeam(a),kitMode:'oficial'});
+   const r=calculateAction(a,catalog,{team:defaultTeam(a),kitMode:'oficial',priceMode:state.priceMode,priceShift:state.priceShift});
    return r.kit.missing.length>0||r.kit.baselineMismatch;
   }
   return true;
  });
- el('apActionCount').textContent=results.length+' / '+actions.length;
- el('apActionList').innerHTML=results.map(a=>
-  '<button type="button" class="ap-choice" data-ap-action="'+safe(a.nome)+'" aria-pressed="'+(a.nome===selection?'true':'false')+'">'+
-   '<span><b>'+safe(a.nome)+'</b><small>'+safe(availableTeams(a).join(' / ')||'Equipe pendente')+' invasores</small></span>'+
-   '<em>'+safe(a.status==='inativo'?'INATIVA':money(a.premio_min))+'</em></button>'
- ).join('')||'<p class="ap-row-muted">Nenhuma ação encontrada.</p>';
+ el('apActionCount').textContent=results.length+' de '+actions.length+' ações';
+ el('apActionList').innerHTML=results.map(a=>{
+  const p=calculateAction(a,catalog,{team:defaultTeam(a),kitMode:state.kitMode,priceMode:state.priceMode,
+   priceShift:state.priceShift,ammoUse:state.ammoUse,tax:state.tax});
+  const match=p.kit.missing.length?'Custos pendentes':
+   'Vitória '+money(p.netMin)+' · Derrota '+money(p.loss);
+  return '<button type="button" class="ap-choice" data-ap-action="'+safe(a.nome)+'" aria-pressed="'+(a.nome===selection?'true':'false')+'">'+
+   '<span class="ap-choice-main"><b>'+safe(a.nome)+'</b><small>'+safe(p.team)+' invasores · '+(a.status==='inativo'?'Inativa': 'Prêmio '+money(p.min)+' a '+money(p.max))+'</small>'+
+   '<small class="ap-choice-result">'+safe(match)+'</small></span></button>';
+ }).join('')||'<p class="ap-row-muted">Nenhuma ação encontrada.</p>';
 }
 function photosAndRules(){
  const a=action();if(!a)return;
@@ -66,30 +70,37 @@ function teamOptions(){
  el('apTeam').innerHTML=ts.length?ts.map(n=>'<option value="'+n+'"'+(n===Number(state.team)?' selected':'')+'>'+n+' invasores</option>').join(''):
   '<option value="'+state.team+'">Sem tabela de equipes</option>';
 }
+const categoryLabel={arma:'Arma • fica na vitória',municao:'Munição • repõe o gasto',
+ colete:'Colete • uso único',acesso:'Acesso • consumido',consumivel:'Insumo • consumido'};
 function kitTable(){
  const p=calculateAction(action(),catalog,options());
  el('apKitRows').innerHTML=p.kit.lines.map(l=>
-  '<tr><td><span class="ap-item-name">'+safe(l.name)+'</span><span class="ap-item-source">'+safe(l.source)+' · Qtd. original '+l.officialQty+'</span></td>'+
-  '<td><input class="ap-table-input" type="number" min="0" max="500" step="1" data-ap-qty="'+l.index+'" value="'+safe(l.qty)+'"></td>'+
-  '<td><input class="ap-table-input" type="number" min="0" step="1" data-ap-price="'+l.index+'" placeholder="Sem preço" value="'+safe(l.unit??'')+'"></td>'+
-  '<td>'+safe(money(l.total))+'</td></tr>'
+  '<tr><td><span class="ap-item-name">'+safe(l.name)+'</span><span class="ap-item-source">'+
+  safe(categoryLabel[l.category]||l.category)+' · '+safe(l.source)+'</span></td>'+
+  '<td><input class="ap-table-input" aria-label="Quantidade de '+safe(l.name)+'" type="number" min="0" max="500" step="1" data-ap-qty="'+l.index+'" value="'+safe(l.qty)+'"></td>'+
+  '<td><input class="ap-table-input" aria-label="Preço base de '+safe(l.name)+'" type="number" min="0" step="1" data-ap-price="'+l.index+'" placeholder="Sem preço" value="'+safe(l.baseUnit??'')+'">'+
+  (p.kit.priceShift?'<span class="ap-item-source">Com variação: '+safe(money(l.unit))+'</span>':'')+'</td>'+
+  '<td>'+safe(money(l.total))+'</td><td class="'+(l.winCost===0?'ap-positive':'')+'">'+
+  (l.missing?'A confirmar':l.winCost===0?'Mantém':safe(money(l.winCost)))+'</td></tr>'
  ).join('');
  el('apTotal').textContent=money(p.kit.total);
+ el('apWinCostTotal').textContent=money(p.kit.winCost);
 }
 function scenarios(){
  const rules=getRules(action(),place());
  if(!rules.length){el('apScenarios').innerHTML='<p class="ap-row-muted">Nenhuma faixa de invasores publicada.</p>';return;}
  const body=rules.map(r=>{
-  // A matriz compara equipes em condições iguais, com kit calculado para cada tamanho.
   const p=calculateAction(action(),catalog,{...options(),team:r.invasores,quantities:{},prices:{}});
   return '<tr class="'+(r.invasores===Number(state.team)?'ap-scenario-active':'')+'">'+
    '<td><button type="button" class="ap-button" data-ap-team="'+r.invasores+'">'+r.invasores+'</button></td>'+
    '<td>'+safe(r.policiais??'—')+'</td><td>'+safe(money(p.kit.total))+'</td>'+
-   '<td>'+safe(money(p.netMin))+'</td><td>'+safe(money(p.perPlayer))+'</td>'+
-   '<td>'+safe(money(p.payoutNeeded))+'</td><td>'+safe(p.status)+'</td></tr>';
+   '<td>'+safe(money(p.kit.winCost))+'</td>'+
+   '<td class="ap-positive">'+safe(money(p.netMin))+'</td>'+
+   '<td class="ap-negative">'+safe(money(p.loss))+'</td>'+
+   '<td>'+safe(money(p.perPlayer))+'</td></tr>';
  }).join('');
- el('apScenarios').innerHTML='<table><thead><tr><th>INVASORES</th><th>POLICIAIS</th><th>INVESTIMENTO</th><th>LUCRO TOTAL</th><th>LUCRO / PESSOA</th><th>PAGAR (SUJO)</th><th>SUGESTÃO</th></tr></thead><tbody>'+body+'</tbody></table>'+
- '<p class="ap-row-muted">Nesta comparação são usadas quantidades padrão por equipe, sem ajustes manuais temporários.</p>';
+ el('apScenarios').innerHTML='<table><thead><tr><th>INVASORES</th><th>POLICIAIS</th><th>CAPITAL INICIAL</th><th>REPOSIÇÃO NA VITÓRIA</th><th>LUCRO NA VITÓRIA (MÍN.)</th><th>PREJUÍZO NA DERROTA</th><th>LUCRO / JOGADOR</th></tr></thead><tbody>'+body+'</tbody></table>'+
+ '<p class="ap-row-muted">Comparação com os kits padrão para cada equipe; ajustes manuais de itens não são aplicados à matriz.</p>';
 }
 function summary(){
  const a=action();if(!a)return;
