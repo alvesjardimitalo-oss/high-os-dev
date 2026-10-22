@@ -233,7 +233,9 @@ export async function mountActionPlanner(){
   const [data,prices]=await Promise.all(responses.map(r=>r.json()));
   if(!Array.isArray(data.acoes)||!data.acoes.length||!Array.isArray(prices.itens))throw Error('Formato de dados inválido ou incompleto.');
   actions=data.acoes;catalog=prices;meta=data.meta||{};
-  state.tax=Number(meta.taxa_lavagem)===.3?.3:.3;
+  const publishedWash=Number(meta.taxa_lavagem);
+  state.tax=Number.isFinite(publishedWash)&&publishedWash>=0&&publishedWash<1?publishedWash:.3;
+  el('apTax').value=Math.round(state.tax*100);
   selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0].nome;
   state.team=defaultTeam(action());
   el('apSource').textContent='Mercado Negro — '+actions.length+' ações carregadas • preços publicados em '+(catalog.meta?.atualizado_em||'data não informada')+' • dados oficiais não modificados';
