@@ -125,6 +125,6 @@ export function simulateInvasions(parts,prices,{trials=10000,seed=42,lockpickUni
 }
 export function houseSearchParts(tables,locations=1,safes=0){
  const total=number(locations),cofres=number(safes);
- if(!Number.isInteger(total)||total<1||total>5||!Number.isInteger(cofres)||cofres<0||cofres>total)throw Error('A casa deve ter de 1 a 5 locais, com cofres entre zero e o total de locais.');
+ if(!Number.isInteger(total)||total<1||total>100||!Number.isInteger(cofres)||cofres<0||cofres>total)throw Error('A casa deve ter de 1 a 100 locais, com cofres entre zero e o total de locais.');
  return [{table:tables.cofre,count:cofres},{table:tables.armario,count:total-cofres}];
 }

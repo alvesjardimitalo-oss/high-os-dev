@@ -1,6 +1,6 @@
 import {LOOT_TABLES} from './roubos-loot-data.js?v=1';
 import {STOLEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=2';
-import {makeLootPrices,lootPrice,weightedLoot,invasionExpectation,simulateInvasions,houseSearchParts,actualHouseRun,houseRunMetrics,lootKey} from './roubos-loot-core.js?v=2';
+import {makeLootPrices,lootPrice,weightedLoot,invasionExpectation,simulateInvasions,houseSearchParts,actualHouseRun,houseRunMetrics,lootKey} from './roubos-loot-core.js?v=3';
 import {priceOf} from './acoes-core.js?v=5';
 
 export function createHouseWorkbench({root,getRegistry,getCatalog,canEdit,onSave}){
@@ -8,7 +8,7 @@ export function createHouseWorkbench({root,getRegistry,getCatalog,canEdit,onSave
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=v=>Number.isFinite(v)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(v):'Pendente';
  const pct=v=>new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:2}).format(v);
- const state={mode:'casas',stage:'projecao',locations:1,safes:0,seed:42,unit:'',qty:1,tax:30,direct:0,minutes:'',label:'',outcome:'concluido',extra:0};
+ const state={mode:'casas',stage:'projecao',locations:15,safes:0,seed:42,unit:'',qty:1,tax:30,direct:0,minutes:'',label:'',outcome:'concluido',extra:0};
  const found=new Map(),overrides=new Map();let busy=false;
  const $=id=>host.querySelector('#'+id);
  const merchant=()=>{const saved=getRegistry()?.npcMarkets?.CASAS;return saved?.updatedAt||saved?.items?.length?saved.items:STOLEN_ITEMS_SNAPSHOT;};
@@ -24,7 +24,7 @@ export function createHouseWorkbench({root,getRegistry,getCatalog,canEdit,onSave
    '<nav class="ap-navigation" aria-label="Seções do rendimento">'+[['projecao','Projeção'],...(state.mode==='casas'?[['registro','Registrar tentativa'],['historico','Resultados por casa']]:[]),['config','Configuração de loot']].map(([key,label])=>'<button type="button" data-hl-stage-nav="'+key+'" '+(state.stage===key?'aria-current="page"':'')+'>'+label+'</button>').join('')+'</nav>'+
    '<h3>'+({casas:'Quanto rende um roubo de casa?',npc:'Loot de NPC • assalto a mão armada',portamalas:'Loot de porta-malas'})[state.mode]+'</h3>'+
    '<p class="ap-sub">'+(state.mode==='casas'?'Entrada com gazua ++ → busca em cofres e armários → venda dos itens → lavagem → lucro por casa.':'Atividade cadastrada separadamente das casas; o loot de NPC não é a tabela do comerciante.')+'</p>'+
-   '<div class="ap-filter-row ap-hl-parameters">'+(state.mode==='casas'?field('Locais para vasculhar na casa (1 a 5)','hl-locations',state.locations,'type="number" min="1" max="5" step="1"')+field('Desses locais, quantos são cofres?','hl-safes',state.safes,'type="number" min="0" max="'+state.locations+'" step="1"')+field('Preço da gazua ++ • pista','hl-unit',state.unit,'type="number" min="0" step="0.01" placeholder="'+esc(money(costUnit()))+'"')+field('Usos de gazua ++ por invasão','hl-qty',state.qty,'type="number" min="1" max="100" step="1"'):
+   '<div class="ap-filter-row ap-hl-parameters">'+(state.mode==='casas'?field('Locais para vasculhar na casa (1 a 100)','hl-locations',state.locations,'type="number" min="1" max="100" step="1"')+field('Desses locais, quantos são cofres?','hl-safes',state.safes,'type="number" min="0" max="'+state.locations+'" step="1"')+field('Preço da gazua ++ • pista','hl-unit',state.unit,'type="number" min="0" step="0.01" placeholder="'+esc(money(costUnit()))+'"')+field('Usos de gazua ++ por invasão','hl-qty',state.qty,'type="number" min="1" max="100" step="1"'):
     (state.mode==='npc'?'<p class="ap-hint">1 sorteio de loot por NPC, conforme configuração.</p>':'<p class="ap-hint">Porta-malas: 1 sorteio ponderado próprio. O resultado é por sorteio; eventual falha externa do roubo não aparece nas imagens.</p>')+field('Custo da tentativa','hl-extra',state.extra,'type="number" min="0" step="0.01"'))+
     field('Lavagem (%)','hl-tax',state.tax,'type="number" min="0" max="99" step="0.1"')+'</div>'+
    '<div id="hlProjection" data-hl-stage="projecao" aria-live="polite"></div>'+
@@ -51,8 +51,8 @@ export function createHouseWorkbench({root,getRegistry,getCatalog,canEdit,onSave
    if(!expected.allPriced)html+='<p class="ap-hint warn">Todos os itens entram na quantidade simulada. Ainda faltam preços de venda para '+decimal(expected.unknownUnits)+' unidade(s) esperada(s). Receita e lucro acima incluem apenas os valores conhecidos; o lucro completo depende dos preços ainda não informados.</p>';
    html+='<div class="ap-actions"><button type="button" class="ap-button primary" id="hlResim">Simular novamente 10.000 invasões</button></div><h4>Variação observada em '+simulation.trials.toLocaleString('pt-BR')+' simulações</h4>'+kpis([['Itens físicos • percentil 10',simulation.unitsP10],['Itens físicos • mediana',simulation.unitsP50],['Itens físicos • percentil 90',simulation.unitsP90],['Tentativas sem recompensa',pct(simulation.emptyRate)]])+'<p class="ap-row-muted">Uma entrada por local que render loot. A quantidade é sorteada como inteiro uniforme dentro da faixa cadastrada; buscas independentes. Dinheiro direto fica separado da contagem de itens físicos. Médias e percentis não são garantias de prêmio.</p>';
    if(state.mode==='casas'){
-    html+='<h4>Comparação de casas com 1 a 5 locais</h4><p class="ap-row-muted">Mantém até '+state.safes+' cofre(s); os demais locais são armários. Sem presumir que os cinco tamanhos de casa sejam igualmente frequentes.</p><div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>LOCAIS</th><th>COFRES / ARMÁRIOS</th><th>ITENS FÍSICOS • MÉDIA</th><th>SEM RECOMPENSA</th><th>RECEITA SUJA'+partial.toUpperCase()+'</th><th>LUCRO / USO'+partial.toUpperCase()+'</th></tr></thead><tbody>';
-    for(let total=1;total<=5;total++){
+    html+='<h4>Comparação por número de locais</h4><p class="ap-row-muted">Mantém até '+state.safes+' cofre(s); os demais locais são armários. Sem presumir que os cinco tamanhos de casa sejam igualmente frequentes.</p><div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>LOCAIS</th><th>COFRES / ARMÁRIOS</th><th>ITENS FÍSICOS • MÉDIA</th><th>SEM RECOMPENSA</th><th>RECEITA SUJA'+partial.toUpperCase()+'</th><th>LUCRO / USO'+partial.toUpperCase()+'</th></tr></thead><tbody>';
+    for(const total of [...new Set([1,5,10,15,20,Number(state.locations)])].sort((a,b)=>a-b)){
      const safes=Math.min(Number(state.safes),total),r=invasionExpectation(houseSearchParts(LOOT_TABLES,total,safes),p,{lockpickUnit:unit,uses,tax});
      html+='<tr><td>'+total+'</td><td>'+safes+' / '+(total-safes)+'</td><td>'+decimal(r.units)+'</td><td>'+pct(r.emptyChance)+'</td><td>'+money(r.knownGrossDirty)+'</td><td>'+money(r.perUseKnownProfit)+'</td></tr>';
     }

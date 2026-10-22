@@ -1,4 +1,4 @@
-import {createHouseWorkbench} from './roubos-loot-ui.js?v=2';
+import {createHouseWorkbench} from './roubos-loot-ui.js?v=3';
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
 import {createNpcWorkbench} from './acoes-npc-ui.js?v=6';
 

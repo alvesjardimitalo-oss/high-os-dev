@@ -10,7 +10,7 @@ test('casas usam 1 a 5 locais e composição explícita, sem pedir sorteios manu
   assert.equal(result.locations,n);assert.ok(Math.abs(result.emptyChance-Math.pow(.225,n))<1e-12);
   const one=invasionExpectation(houseSearchParts(LOOT_TABLES,1,0),prices,{lockpickUnit:100});assert.ok(Math.abs(result.units-one.units*n)<1e-10);
  }
- assert.throws(()=>houseSearchParts(LOOT_TABLES,6,0));assert.throws(()=>houseSearchParts(LOOT_TABLES,2,3));
+ assert.throws(()=>houseSearchParts(LOOT_TABLES,101,0));assert.throws(()=>houseSearchParts(LOOT_TABLES,2,3));
 });
 test('cofres e armários têm portas de render independentes aplicadas uma vez',()=>{
  const result=invasionExpectation(houseSearchParts(LOOT_TABLES,3,1),prices,{lockpickUnit:100});
@@ -46,4 +46,11 @@ test('porta-malas sorteia seu próprio pool e faixa, separado de casas',()=>{
  assert.equal(result.expected.locations,1);assert.equal(result.emptyRate,0);
  const cash=LOOT_TABLES.portamalas.items.find(x=>x.codigo==='dirtydollar');assert.equal(cash.min,10000);assert.equal(cash.max,15000);
  const zero=simulateInvasions([{table:LOOT_TABLES.armario,count:5,chance:0}],prices,{lockpickUnit:100});assert.equal(zero.meanUnits,0);assert.equal(zero.emptyRate,1);assert.equal(zero.expected.profit,-100);
+});
+
+test('teste observado permite 15 locais e compara até 100 sem alterar chances',()=>{
+ for(const total of [15,20,100]){
+  const r=invasionExpectation(houseSearchParts(LOOT_TABLES,total,0),prices,{lockpickUnit:100});
+  assert.equal(r.locations,total);assert.ok(Math.abs(r.rewardedPoints-total*.775)<1e-10);
+ }
 });

@@ -25,7 +25,7 @@ test('fluxo da casa calcula, bloqueia preço ausente, registra e mantém resulta
  const host=new Host();let registry=cleanRegistry();
  createHouseWorkbench({root:{querySelector:()=>host},getRegistry:()=>registry,getCatalog:()=>({itens:[{item:'LOCKPICK ++',status:'ativo',pista:100}]}),canEdit:()=>true,onSave:async entry=>{registry=applyRegistryMutation(registry,{kind:'house-run-save',entry});}});
  assert.equal(host.dataset.hlStage,'projecao');assert.match(host.querySelector('#hlProjection').innerHTML,/Itens físicos por invasão/);
- host.input('hl-locations','5');assert.match(host.querySelector('#hlProjection').innerHTML,/Casa simulada: 5/);assert.match(host.querySelector('#hlProjection').innerHTML,/Comparação de casas com 1 a 5 locais/);
+ host.input('hl-locations','5');assert.match(host.querySelector('#hlProjection').innerHTML,/Casa simulada: 5/);assert.match(host.querySelector('#hlProjection').innerHTML,/Comparação por número de locais/);
  await host.click('hlStageNav=registro');assert.equal(host.dataset.hlStage,'registro');
  const qty=host.nodes.find(x=>x.dataset.hlQuantity==='ssddrive');qty.value='2';host.events.input({target:qty});host.input('hl-direct','200');
  assert.match(host.querySelector('#hlActual').innerHTML,/600/);
