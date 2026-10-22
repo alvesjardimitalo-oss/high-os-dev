@@ -112,7 +112,8 @@ export function calculateAction(action,catalog,opts={}){
  const tolerance=Math.max(0,numeric(opts.tolerance)??.25);
  const kit=kitFor(action,catalog,{...opts,team});
  const cost=kit.winCost;
- const min=numeric(action?.premio_min),max=numeric(action?.premio_max);
+ const variableHouse=action?.tipo_acao==='casas'&&numeric(action?.premio_min)===0&&numeric(action?.premio_max)===0;
+ const min=variableHouse?null:numeric(action?.premio_min),max=variableHouse?null:numeric(action?.premio_max);
  const netMin=min===null||cost===null?null:cents(min*(1-tax)-cost);
  const netMax=max===null||cost===null?null:cents(max*(1-tax)-cost);
  // Na derrota: sem prêmio, perde o kit completo. Na vitória: repõe
