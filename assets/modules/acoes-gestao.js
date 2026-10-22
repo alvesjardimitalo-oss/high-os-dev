@@ -3,8 +3,8 @@
  * Indicadores de cenário, não dados observados de vitórias no RP.
  * Nenhuma função efetua gravação, aprova buffs/nerfs ou altera premiações.
  */
-import {calculateAction,defaultTeam,norm,numeric} from './acoes-core.js?v=4';
-import {assessPriceChanges} from './acoes-inteligencia.js?v=5';
+import {calculateAction,defaultTeam,norm,numeric} from './acoes-core.js?v=5';
+import {assessPriceChanges} from './acoes-inteligencia.js?v=6';
 
 const round=v=>Math.round(v*100)/100;
 const finite=v=>typeof v==='number'&&Number.isFinite(v);
