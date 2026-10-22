@@ -87,6 +87,14 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   draft.itens=rows('.ap-editor-item').map(row=>({nome:read(row,'nome'),quantidade:read(row,'quantidade'),
    categoria_item:read(row,'categoria_item'),preco_unitario:read(row,'preco_unitario')}));
  }
+ function updatePrizeInputs(){
+  const variable=$('apEntryType')?.value==='casas';
+  for(const [id,text] of [['apEntryMin','Receita variável calculada pelo NPC'],['apEntryMax','Receita variável calculada pelo NPC']]){
+   const input=$(id);if(!input)continue;
+   input.required=!variable;input.min=variable?'0':'1';
+   input.placeholder=variable?text:'Prêmio (sujo)';
+  }
+ }
  function openEditor(a=null){
   if(!writable())return;
   original=a?.nome||'';
@@ -94,6 +102,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   $('apEditorHeading').textContent=a?'Editar ação • '+a.nome:'Cadastrar nova ação';
   $('apEntryName').value=draft.nome;
   $('apEntryType').value=draft.tipo_acao||'blipada';
+  updatePrizeInputs();
   $('apEntryName').readOnly=!!a&&published().some(p=>normalizeActionName(p.nome)===normalizeActionName(a.nome));
   $('apEntryStatus').value=draft.status==='inativo'?'inativo':'ativo';
   $('apEntryMin').value=draft.premio_min||'';
@@ -173,7 +182,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  });
  root.addEventListener('change',ev=>{
   if(ev.target.id!=='apEntryType'||!draft)return;
-  collectRows();draft.tipo_acao=ev.target.value;
+  collectRows();draft.tipo_acao=ev.target.value;updatePrizeInputs();
   if(draft.tipo_acao==='atm'&&!draft.itens.length){draft.itens=[{nome:'C4',quantidade:1,categoria_item:'consumivel',preco_unitario:null}];editorRows();}
   if(draft.tipo_acao==='casas'&&!draft.itens.length){draft.itens=[{nome:'GAZUA ++',quantidade:1,categoria_item:'consumivel',preco_unitario:null}];editorRows();}
  });
