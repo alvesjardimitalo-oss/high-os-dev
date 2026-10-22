@@ -1580,6 +1580,40 @@ $('#diarioDate')?.addEventListener('change',loadOperationalDiary);
 // confirmação específica do gestor. Não cria abas nem reescreve fórmulas.
 // High OS Dev 15.7 — baseline compartilhado e decisões auditadas.
 const ACTION_PRICES_REFERENCE='acoes_precos_referencia_v1';
+
+const ACTION_REGISTRY_DOC='acoes_cadastro_v1';
+async function actionReadRegistry(){
+ if(!currentUser||!canViewModule('planejador-acoes'))throw Error('Acesso ao Planejador de Ações não autorizado.');
+ const snap=await getDoc(doc(db,'highos','data','config',ACTION_REGISTRY_DOC));
+ const {cleanRegistry}=await import('./modules/acoes-cadastro.js?v=1');
+ return cleanRegistry(snap.exists()?snap.data():null);
+}
+async function actionMutateRegistry({kind,entry=null,name='',oldName='',expectedRevision}={}){
+ // O match /highos/data/config/{outro} das rules atuais permite edição só
+ // para ADMIN; nenhuma nova regra Firebase precisa ser publicada.
+ if(!currentUser||!isAdmin()||!canEditModule('economia'))throw Error('Cadastro de ações disponível apenas para administrador com acesso à Economia.');
+ if(!['save','delete','archive','restore'].includes(kind))throw Error('Operação inválida.');
+ const {applyRegistryMutation}=await import('./modules/acoes-cadastro.js?v=1');
+ const source=await fetch('https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/acoes-blipadas.json',{cache:'no-store'});
+ if(!source.ok)throw Error('Não foi possível conferir ações oficiais. Nenhuma alteração aplicada.');
+ const published=(await source.json()).acoes||[];
+ const ref=doc(db,'highos','data','config',ACTION_REGISTRY_DOC);
+ const result=await runTransaction(db,async transaction=>{
+  const snap=await transaction.get(ref),before=snap.exists()?snap.data():null;
+  if((Number(before?.revision)||0)!==Number(expectedRevision))
+   throw Error('O cadastro foi alterado por outro administrador. Atualize a página antes de salvar.');
+  const updated=applyRegistryMutation(before,{kind,entry,name,oldName},published);
+  transaction.set(ref,{...updated,updatedAt:new Date().toISOString(),updatedBy:currentUser.email});
+  return updated;
+ });
+ try{
+  await addDoc(histCol,{tipo:'CADASTRO_ACOES',operacao:kind,
+   acao:String(entry?.nome||name||oldName).slice(0,100),
+   usuario:currentUser.email,data:serverTimestamp(),revisao:result.revision});
+ }catch(err){console.warn('[AÇÕES] Cadastro salvo, mas auditoria histórica indisponível:',err);}
+ return result;
+}
+
 function actionEconomyAuthorized(){if(!currentUser||!canEditModule('economia'))throw Error('Você não tem permissão de alterar a Economia.');}
 async function actionReadReference(){
  if(!currentUser||!canViewModule('planejador-acoes'))return null;
@@ -1745,7 +1779,8 @@ if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=8').then
  onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
  onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
  onRejectAction:canEditModule('economia')?actionRejectProposal:null,
- onReadDecisions:actionReadDecisions,onReadSheet:canEditModule('economia')?actionReadSheetPrizes:null
+ onReadDecisions:actionReadDecisions,onReadSheet:canEditModule('economia')?actionReadSheetPrizes:null,
+ onReadRegistry:actionReadRegistry,onMutateRegistry:isAdmin()&&canEditModule('economia')?actionMutateRegistry:null
 })).catch(err=>{console.error('[PLANEJADOR DE AÇÕES]',err);const root=document.querySelector('#actionEconomyPlanner');if(root)root.textContent='Não foi possível carregar o Planejador de Ações: '+(err?.message||String(err));});
 
  document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+page));
