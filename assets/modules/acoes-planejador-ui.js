@@ -396,7 +396,8 @@ async function approveProposal(mode='sugestao'){
   if(!result?.updated)throw Error('A planilha não confirmou a alteração.');
   approvedThisSession.add(a.nome);
   if(result.verified&&Number.isFinite(result.actualMin)&&Number.isFinite(result.actualMax)){
-   const record={name:a.nome,min:result.actualMin,max:result.actualMax};
+   const record={name:a.nome,min:result.actualMin,max:result.actualMax,
+    buff:result.actualBuff,nerf:result.actualNerf};
    sheetOverrides=sheetOverrides.filter(x=>norm(x.name)!==norm(a.nome)).concat([record]);
    actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
    render();
