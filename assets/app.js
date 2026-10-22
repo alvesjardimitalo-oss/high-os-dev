@@ -1619,8 +1619,8 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
  }));
  await facSheetFetch(root+':batchUpdate',{method:'POST',body:{requests:updates},token});
  const after=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token});
- const pos=checked.buff;
- const calculatedMinimum=Number(after.values?.[pos.rowIndex-3]?.[pos.columnIndex]);
+ const pos=checked.min;
+ const calculatedMinimum=Number(after.values?.[pos.rowIndex]?.[pos.columnIndex]);
  const verified=Number.isFinite(calculatedMinimum)&&Math.abs(calculatedMinimum-value)<2;
  let audited=false;
  try{
