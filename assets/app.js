@@ -25,7 +25,7 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
-import { syncBlipsCoordinates } from './modules/blips-sheet-sync.js?v=1.1.0';
+import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.0';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
@@ -2722,7 +2722,7 @@ extratoEntrega:buildDeliveryExtract(data),
 usuario:currentUser.email,
 data:serverTimestamp()});
 for(const r of generated)await archiveTechnicalRequest(r,data,'ALTERACAO_DO_GROUP');
-await syncGroupsToOfficialSheet([data],{quiet:true});
+await syncGroupsToOfficialSheet([data],{quiet:true,previousGroups:old?[old]:[]});
 queryFreshAt.set('faccoes',Date.now());
 renderFaccoes();renderAvailableFaccoes();renderOrganizations();
 closeGroupProfilePage()}catch(err){alert('Erro ao salvar: '+err.message)}
@@ -5856,7 +5856,7 @@ createdBy:currentUser.email};
    ...deliveredGroup,
    anuncioEntrega:{title:titulo,description:corpo.join('\n').trim()}
   });
-  const sheetSynced=await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true});
+  const sheetSynced=await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true,previousGroups:[f]});
 
   $('#newDeliveryModal').classList.add('hidden');
   const previousIds=new Set(previous.map(d=>d.id));
@@ -11173,7 +11173,7 @@ $('#movementConfirm')?.addEventListener('click', async () => {
       usuario: currentUser.email,
 
       data: serverTimestamp()
-    })
+    });
     // O histórico de ocupação participa da MESMA gravação atômica dos Groups.
     if(movementMode === 'TRANSFER_PANEL'){
         const stamp=Date.now();
@@ -11227,7 +11227,7 @@ b]){
 
     await batch.commit();
     committed = true;
-    const sheetOk=await syncGroupsToOfficialSheet([a,b],{quiet:true});
+    const sheetOk=await syncGroupsToOfficialSheet([a,b],{quiet:true,previousGroups:[src,dst]});
 
 
 
@@ -11552,12 +11552,28 @@ facSheetRenderStatus('online','Alterações da planilha confirmadas e aplicadas 
 alert('High OS atualizado com os dados confirmados da planilha.')}catch(e){alert('Erro ao aplicar alterações: '+e.message)}finally{if(btn){btn.disabled=false;
 btn.textContent='CONFIRMAR E ATUALIZAR HIGH OS'}}
 }
-async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true}={}){
+function blipsChangedFieldsByGroup(previousGroups=[],currentGroups=[]){
+ const before=new Map(previousGroups.filter(Boolean).map(g=>[facSheetNorm(g.group),blipsValuesFor(g)]));
+ const changes={};
+ for(const g of currentGroups.filter(Boolean)){
+  const old=before.get(facSheetNorm(g.group));
+  if(!old)continue;
+  const now=blipsValuesFor(g);
+  changes[g.group]=Object.keys(now).filter(field=>String(now[field]??'')!==String(old[field]??''));
+ }
+ return changes;
+}
+async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true,overwriteFieldsByGroup={}}={}){
  if(!facSheetAccessToken)return false;
  try{
-  const result=await syncBlipsCoordinates({token:facSheetAccessToken,groups:rows,onlyMissing});
+  const result=await syncBlipsCoordinates({token:facSheetAccessToken,groups:rows,onlyMissing,overwriteFieldsByGroup});
   if(result.created)console.info('[BLIPS COORDENADAS] '+result.created+' quadro(s) cadastrado(s) na categoria correta.');
-  return true;
+  const inconsistencies=[...(result.categoryMismatches||[]),...(result.duplicates||[])];
+  if(inconsistencies.length){
+   console.warn('[BLIPS COORDENADAS] Groups que precisam de revisão de categoria/duplicidade:',inconsistencies);
+   if(!quiet)alert('Sincronização parcial: '+inconsistencies.length+' Group(s) precisam de revisão na categoria ou estão duplicados. Consulte o console para detalhes.');
+  }
+  return inconsistencies.length===0;
  }catch(error){
   console.warn('[BLIPS COORDENADAS] Falha de sincronização:',error);
   if(/HTTP (401|403)|unauthorized|invalid authentication credentials/i.test(String(error?.message||error)))facSheetAccessToken='';
@@ -11566,14 +11582,14 @@ async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true}={}){
  }
 }
 async function syncGroupsToOfficialSheet(groups=[],{quiet=false,
-forceAuthorize=false}={}){
+forceAuthorize=false,previousGroups=[]}={}){
  const clean=groups.filter(Boolean);
 if(!clean.length)return true;
 let token=facSheetAccessToken;
 if(!token&&forceAuthorize)token=await facSheetAuthorize();
 if(!token){facSheetRenderStatus('warn','High OS salvo. Conecte o Google Sheets para enviar as alterações pendentes à planilha.');
 return false}
- const blipsOk=await syncBlipsGroups(clean,{quiet:true});
+ const blipsOk=await syncBlipsGroups(clean,{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup(previousGroups,clean)});
  try{facSheetRenderStatus('busy',`Enviando ${clean.length} Group(s) para a planilha...`);
 if(!facSheetRowMap.size)await facSheetReadAll();
 const title=await facSheetResolveTitle(token);
@@ -11960,6 +11976,7 @@ async function persistCurrentTechProfile(group, {reload=true}={}){
 
  const perfilTecnico=getTechProfileFromForm();
  const local=faccoes.find(x=>x.group===group);
+ const previousGroup=clonePlain(local||{group});
  const before=clonePlain(mergedTechProfile(local||{}));
  if(JSON.stringify(before)===JSON.stringify(clonePlain(perfilTecnico))){
    return clonePlain(perfilTecnico);
@@ -11978,7 +11995,9 @@ updatedBy:currentUser?.email||''},{merge:true});
  }else{
    techDraft=clonePlain(perfilTecnico);
  }
- await syncBlipsGroups([{...(local||{group}),perfilTecnico}],{quiet:true});
+ const currentGroup={...(local||{group}),perfilTecnico};
+ const techSheetOk=await syncBlipsGroups([currentGroup],{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup([previousGroup],[currentGroup])});
+ if(!techSheetOk)facSheetRenderStatus('warn','Perfil técnico salvo no High OS; planilha de coordenadas pendente.');
  return clonePlain(perfilTecnico);
 
 }
