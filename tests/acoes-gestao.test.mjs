@@ -4,10 +4,10 @@ import {readFileSync} from 'node:fs';
 const read=name=>readFileSync(new URL('../assets/modules/'+name,import.meta.url),'utf8');
 const coreUrl='data:text/javascript,'+encodeURIComponent(read('acoes-core.js'));
 const intelligenceUrl='data:text/javascript,'+encodeURIComponent(
- read('acoes-inteligencia.js').replace("from './acoes-core.js?v=3'",'from '+JSON.stringify(coreUrl)));
+ read('acoes-inteligencia.js').replace("from './acoes-core.js?v=5'",'from '+JSON.stringify(coreUrl)));
 const managementSource=read('acoes-gestao.js')
- .replace("from './acoes-core.js?v=3'",'from '+JSON.stringify(coreUrl))
- .replace("from './acoes-inteligencia.js?v=4'",'from '+JSON.stringify(intelligenceUrl));
+ .replace("from './acoes-core.js?v=5'",'from '+JSON.stringify(coreUrl))
+ .replace("from './acoes-inteligencia.js?v=6'",'from '+JSON.stringify(intelligenceUrl));
 const {buildManagementBoard,filterManagementEntries}=
  await import('data:text/javascript,'+encodeURIComponent(managementSource));
 const {makePriceReference}=await import(intelligenceUrl);
