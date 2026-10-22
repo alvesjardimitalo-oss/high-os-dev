@@ -311,7 +311,7 @@
             <section class="ap-panel ap-management" data-ap-subpage="overview" aria-labelledby="apManagementTitle">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">CONTROLE EXECUTIVO • CARTEIRA DE AÇÕES</span><h3 id="apManagementTitle">Central de gestão e prioridades</h3></div>
-                <div class="ap-actions"><span class="ap-status" id="apManagementDate">Indicadores calculados com dados oficiais publicados</span><button type="button" class="ap-button" id="apManagementExport">Exportar carteira CSV</button></div>
+                <div class="ap-actions"><span class="ap-status" id="apManagementDate">Indicadores calculados com dados oficiais publicados</span><button type="button" class="ap-button" id="apManageShowAll">Mostrar todas</button><button type="button" class="ap-button" id="apManagementExport">Exportar carteira CSV</button></div>
               </div>
               <div class="ap-management-kpis" id="apManagementKpis" aria-live="polite"></div>
               <div class="ap-management-toolbar">
@@ -393,6 +393,7 @@
                 </select>
                 <p class="ap-row-muted" id="apActionCount">—</p>
                 <div id="apActionList" class="ap-action-list"></div>
+                <button type="button" id="apCatalogMore" class="ap-button ap-load-more" hidden>Carregar mais ações</button>
                 <details class="ap-disclosure ap-archive" id="apArchiveBox" hidden>
                   <summary>Ações arquivadas no planejador</summary>
                   <div id="apArchivedActions"></div>
@@ -1163,7 +1164,7 @@
   <script src="assets/mission-planner.js?v=12.18.1"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=15.7.4"></script>
+  <script type="module" src="assets/app.js?v=15.8.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
