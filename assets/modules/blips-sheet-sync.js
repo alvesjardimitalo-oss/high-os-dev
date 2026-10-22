@@ -19,7 +19,15 @@ function sector(f){
  // O identificador canônico do Group prevalece sobre o segmento editável.
  // Um cadastro com segmento desatualizado não deve colocar a ficha na aba errada.
  if(g==="MANICOMIO")return ["DROGAS","Drogas"];
- if(g.startsWith("ILEGALMECHANIC")||g.startsWith("ILEGALMEDIC"))return ["APOIO","Apoio"];
+ if(g.startsWith("ILEGALMECHANIC")||g.startsWith("ILEGALMECANIC")){
+  // A categoria administrativa explícita prevalece sobre o legado APOIO.
+  if(s==="MECANICAILEGAL")return ["MECANICAILEGAL",plain(f.segmento)||"Mecânica Ilegal"];
+  return ["APOIO","Apoio"];
+ }
+ if(g.startsWith("ILEGALMEDIC")){
+  if(s==="HOSPITALILEGAL")return ["HOSPITALILEGAL",plain(f.segmento)||"Hospital Ilegal"];
+  return ["APOIO","Apoio"];
+ }
  const byGroup=[
   ["ARMAS","ARMAS","Armas"],["MUNICAO","MUNICAO","Munição"],
   ["DROGAS","DROGAS","Drogas"],["LAVAGEM","LAVAGEM","Lavagem"],
@@ -38,6 +46,8 @@ function sector(f){
  if(s.includes("ESTELION"))return ["ESTELIONATARIOS","Estelionatários"];
  if(s.includes("GALPAO"))return ["GALPOES","Galpões"];
  if(s.includes("CONTRABANDO"))return ["CONTRABANDO","Contrabando"];
+ if(s==="MECANICAILEGAL")return ["MECANICAILEGAL",plain(f.segmento)||"Mecânica Ilegal"];
+ if(s==="HOSPITALILEGAL")return ["HOSPITALILEGAL",plain(f.segmento)||"Hospital Ilegal"];
  if(s.includes("APOIO")||s.includes("MECAN")||s.includes("HOSPITAL"))return ["APOIO","Apoio"];
  return [s||"OUTROS",plain(f.segmento)||"Outros"];
 }
@@ -107,7 +117,9 @@ function sectionsIn(rows){
  const sections=[];
  for(let i=0;i<rows.length;i++){
   const name=cell(rows,i,4),key=fold(name);
-  if(!["ARMAS","MUNICAO","DROGAS","LAVAGEM","DESMANCHE","EXTRA1","APOIO","ESTELIONATARIOS","GALPOES","CONTRABANDO","OUTROS"].includes(key))continue;
+  // Reconhece seções personalizadas pelo cabeçalho GROUP + rodapé TRUE,
+  // não por uma whitelist imutável de setores do lançamento.
+  if(!key||key==="TRUE"||key==="GROUP")continue;
   const header=Array.from({length:Math.min(20,rows.length-i)},(_,d)=>i+d).find(r=>GROUP_COLS.some(c=>fold(cell(rows,r,c-1))==="GROUP"));
   if(header===undefined)continue;
   const footer=Array.from({length:Math.min(MAX_FIELDS_SCAN,rows.length-header)},(_,d)=>header+d)
