@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
-  <link rel="stylesheet" href="assets/acoes-planejador.css?v=8">
+  <link rel="stylesheet" href="assets/acoes-planejador.css?v=9">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -293,8 +293,22 @@
             </div><span class="dev-badge">GESTÃO ECONÔMICA</span>
           </div>
           <div id="actionEconomyPlanner" class="ap-root">
-            <div class="ap-topline" id="apSource">Carregando ações e catálogo de preços...</div>
-            <section class="ap-panel ap-management" aria-labelledby="apManagementTitle">
+            <div class="ap-toolbar">
+              <div><span class="ap-section-kicker">GESTÃO OPERACIONAL</span>
+                <p class="ap-topline" id="apSource">Carregando ações e catálogo de preços...</p></div>
+              <div class="ap-actions ap-toolbar-actions">
+                <button type="button" class="ap-button" id="apReloadRegistry">Sincronizar</button>
+                <button type="button" class="ap-button primary" id="apNewAction" hidden>+ Cadastrar ação</button>
+              </div>
+            </div>
+            <nav class="ap-navigation" aria-label="Seções do Planejador de Ações">
+              <button type="button" data-ap-nav="overview" aria-current="page">Visão geral</button>
+              <button type="button" data-ap-nav="catalog">Catálogo de ações</button>
+              <button type="button" data-ap-nav="ranking">Rankings</button>
+              <button type="button" data-ap-nav="prices">Preços e alertas</button>
+            </nav>
+            <div id="apRegistryNotice" class="ap-hint" hidden></div>
+            <section class="ap-panel ap-management" data-ap-subpage="overview" aria-labelledby="apManagementTitle">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">CONTROLE EXECUTIVO • CARTEIRA DE AÇÕES</span><h3 id="apManagementTitle">Central de gestão e prioridades</h3></div>
                 <div class="ap-actions"><span class="ap-status" id="apManagementDate">Indicadores calculados com dados oficiais publicados</span><button type="button" class="ap-button" id="apManagementExport">Exportar carteira CSV</button></div>
@@ -340,7 +354,7 @@
               </div>
               <p class="ap-row-muted" id="apManagementMethod"></p>
             </section>
-            <section class="ap-panel ap-intel-alerts" aria-labelledby="apPriceAlertsTitle">
+            <section class="ap-panel ap-intel-alerts" data-ap-subpage="prices" aria-labelledby="apPriceAlertsTitle">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">REVISÃO DA ECONOMIA</span><h3 id="apPriceAlertsTitle">Mudanças no custo das ações</h3></div>
                 <div class="ap-actions">
@@ -353,7 +367,7 @@
               <div id="apPriceAlerts" class="ap-intel-alert-list" aria-live="polite"></div>
               <p id="apPublicationStatus" class="ap-row-muted">O catálogo do Mercado Negro é público; alterações na planilha podem aguardar republicação no GitHub.</p>
             </section>
-            <section class="ap-panel ap-rank-hub" aria-labelledby="apRankingHeading">
+            <section class="ap-panel ap-rank-hub" data-ap-subpage="ranking" aria-labelledby="apRankingHeading">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">INTELIGÊNCIA ECONÔMICA</span><h3 id="apRankingHeading">Ranking das ações</h3></div>
                 <span class="ap-status" id="apRankingDate">Preços atuais do Mercado Negro</span>
@@ -368,18 +382,41 @@
               <div id="apRankingResults" class="ap-ranking-results" aria-live="polite"></div>
               <p class="ap-row-muted" id="apRankingMethod">Comparação pelo prêmio mínimo da vitória, após 30% de lavagem, custos de reposição, kit oficial e maior número permitido de invasores. Não considera chance de derrota nem espera policial.</p>
             </section>
-            <div class="ap-shell">
+            <div class="ap-shell" data-ap-subpage="workspace">
               <aside class="ap-panel ap-aside">
-                <h3>Ações disponíveis</h3>
+                <div class="ap-heading"><div><span class="ap-section-kicker">BIBLIOTECA</span><h3>Ações cadastradas</h3></div>
+                  <button type="button" class="ap-button" id="apCatalogNew" hidden>+ Nova</button></div>
+                <p class="ap-sub">Selecione uma ação para abrir o perfil completo. Os cadastros internos não alteram a cidade.</p>
                 <input class="ap-search" id="apSearch" type="search" placeholder="Pesquise pelo nome da ação" aria-label="Buscar ação">
                 <select id="apStatusFilter" class="ap-search" aria-label="Filtrar ações">
                   <option value="ATIVAS">Somente ativas</option><option value="TODAS">Todas</option><option value="REVISAR">Com preços pendentes</option>
                 </select>
                 <p class="ap-row-muted" id="apActionCount">—</p>
                 <div id="apActionList" class="ap-action-list"></div>
+                <details class="ap-disclosure ap-archive" id="apArchiveBox" hidden>
+                  <summary>Ações arquivadas no planejador</summary>
+                  <div id="apArchivedActions"></div>
+                </details>
               </aside>
               <div class="ap-columns">
-                <section class="ap-panel ap-hero">
+                <header class="ap-profile-bar">
+                  <div><button type="button" class="ap-back" id="apBackCatalog">← Voltar ao catálogo</button>
+                    <span class="ap-section-kicker">PERFIL DA AÇÃO</span>
+                    <h3 id="apProfileName">Ação selecionada</h3>
+                    <span id="apProfileOrigin" class="ap-status">Origem: Mercado Negro</span>
+                  </div>
+                  <div class="ap-actions">
+                    <button type="button" class="ap-button" id="apEditAction" hidden>Editar cadastro</button>
+                    <button type="button" class="ap-button ap-danger" id="apDeleteAction" hidden>Excluir / arquivar</button>
+                  </div>
+                </header>
+                <nav class="ap-profile-nav" aria-label="Abas do perfil da ação">
+                  <button type="button" data-ap-profile="resumo" aria-current="page">Resumo</button>
+                  <button type="button" data-ap-profile="custos">Investimento e custos</button>
+                  <button type="button" data-ap-profile="cenario">Cenários e equipes</button>
+                  <button type="button" data-ap-profile="sugestao">Sugestão e decisão</button>
+                </nav>
+                <section class="ap-panel ap-hero" data-ap-profile-panel="resumo">
                   <div class="ap-heading"><div><span class="ap-section-kicker">AÇÃO SELECIONADA</span><h3 id="apActionTitle">Carregando...</h3></div><div id="apActionStatus"></div></div>
                   <div class="ap-quickcards" id="apQuickMetrics"></div>
                   <div id="apSuggestedMain" class="ap-recommend-main" aria-live="polite">
@@ -390,7 +427,7 @@
                   <div id="apReq"></div>
                   <details class="ap-disclosure"><summary>Ver fotos e locais desta ação</summary><div id="apPhotos"></div></details>
                 </section>
-                <section class="ap-panel">
+                <section class="ap-panel" data-ap-profile-panel="cenario">
                   <div class="ap-heading"><h3>1. Configure o cenário</h3><span class="ap-status">Os cálculos atualizam automaticamente</span></div>
                   <div class="ap-filter-row">
                     <label class="ap-field">Jogadores na ação<select id="apTeam"></select></label>
@@ -412,25 +449,25 @@
                     <p class="ap-row-muted">É possível editar a quantidade e o preço unitário de cada item abaixo. Preços manuais também recebem a alta/queda simulada.</p>
                   </details>
                 </section>
-                <section class="ap-panel">
+                <section class="ap-panel" data-ap-profile-panel="custos">
                   <div class="ap-heading"><h3>2. Onde está o dinheiro da facção?</h3><span class="ap-status">Capital inicial ≠ despesa após vitória</span></div>
                   <div class="ap-table-scroll"><table class="ap-cost-table">
                     <thead><tr><th>ITEM E CLASSIFICAÇÃO</th><th>QTD.</th><th>PREÇO UNIT.</th><th>INVESTIMENTO</th><th>REPOR AO VENCER</th></tr></thead>
                     <tbody id="apKitRows"></tbody><tfoot><tr><td colspan="3">TOTAL</td><td id="apTotal">—</td><td id="apWinCostTotal">—</td></tr></tfoot></table></div>
                   <p id="apKitComputed" class="ap-row-muted"></p><p id="apWarnings" class="ap-hint"></p>
                 </section>
-                <section class="ap-panel">
+                <section class="ap-panel" data-ap-profile-panel="resumo">
                   <h3>3. Resultados financeiros com o prêmio atual</h3>
                   <div id="apCurrentMetrics" class="ap-cards"></div>
                   <div class="ap-hint">Vitória: prêmio após lavagem menos munição reposta, coletes e insumos consumidos. As armas continuam no patrimônio. Derrota: prêmio zero e perda integral do kit. O caixa da primeira tentativa pode ser menor porque a facção precisou comprar as armas.</div>
                 </section>
-                <section class="ap-panel">
+                <section class="ap-panel" data-ap-profile-panel="cenario">
                   <h3>4. Compare as equipes permitidas</h3>
                   <p class="ap-sub">A mesma ação pode exigir outro capital e gerar outro lucro conforme a quantidade de invasores.</p>
                   <div id="apScenarios" class="ap-table-scroll"></div><p class="ap-row-muted">Caso a ação pague valores diferentes por tamanho da equipe, somente os prêmios informados oficialmente podem ser aprovados. A divisão proporcional é ilustrativa e não altera a planilha.</p>
                 </section>
-                <section class="ap-panel ap-strategy">
-                  <details id="apStrategyDetails" class="ap-disclosure">
+                <section class="ap-panel ap-strategy" data-ap-profile-panel="sugestao">
+                  <details id="apStrategyDetails" class="ap-disclosure" open>
                     <summary>5. Central de decisões — buff, nerf ou manter</summary>
                     <div class="ap-intel-fields">
                       <label class="ap-field">Espera estimada pela polícia (min)<input id="apPoliceWait" type="number" min="0" max="600" placeholder="Não informada"></label>
@@ -465,6 +502,41 @@
                   </details>
                 </section>
               </div>
+
+            <dialog id="apEditorDialog" class="ap-editor" aria-labelledby="apEditorHeading">
+              <form id="apActionForm" novalidate>
+                <div class="ap-editor-header">
+                  <div><span class="ap-section-kicker">GESTÃO DE CADASTRO • HIGH OS</span>
+                    <h3 id="apEditorHeading">Cadastrar ação</h3>
+                    <p class="ap-sub">Os ajustes são internos ao High OS; o prêmio da planilha oficial não será alterado.</p>
+                  </div>
+                  <button type="button" class="ap-back" id="apCloseEditor" aria-label="Fechar editor">✕</button>
+                </div>
+                <div class="ap-editor-content">
+                  <div class="ap-editor-grid">
+                    <label class="ap-field">Nome da ação<input required id="apEntryName" maxlength="100" placeholder="Ex.: Agência Central"></label>
+                    <label class="ap-field">Situação<select id="apEntryStatus"><option value="ativo">Ativa</option><option value="inativo">Inativa</option></select></label>
+                    <label class="ap-field">Prêmio mínimo (sujo)<input required type="number" min="1" id="apEntryMin"></label>
+                    <label class="ap-field">Prêmio máximo (sujo)<input required type="number" min="1" id="apEntryMax"></label>
+                    <label class="ap-field">Cooldown (segundos)<input type="number" min="0" max="86400" id="apEntryCooldown"></label>
+                  </div>
+                  <div class="ap-editor-section"><div class="ap-heading"><h4>Equipes permitidas</h4>
+                    <button type="button" class="ap-button" id="apAddRule">+ Equipe</button></div>
+                    <div id="apEditorRules" class="ap-editor-rows"></div></div>
+                  <div class="ap-editor-section"><div class="ap-heading"><h4>Itens necessários</h4>
+                    <button type="button" class="ap-button" id="apAddItem">+ Item</button></div>
+                    <p class="ap-row-muted">Informe exatamente o nome do item cadastrado no Mercado Negro, para que o preço seja encontrado.</p>
+                    <div id="apEditorItems" class="ap-editor-rows"></div>
+                    <datalist id="apItemNames"></datalist>
+                  </div>
+                  <div id="apEditorError" role="alert" class="ap-error" hidden></div>
+                </div>
+                <div class="ap-editor-footer">
+                  <button type="button" class="ap-button" id="apCancelEditor">Cancelar</button>
+                  <button type="submit" class="ap-button primary" id="apSaveEntry">Salvar cadastro</button>
+                </div>
+              </form>
+            </dialog>
             </div>
           </div>
         </section>
