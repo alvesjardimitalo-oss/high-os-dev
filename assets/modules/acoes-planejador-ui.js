@@ -13,7 +13,12 @@ let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecision
 let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:null,targetHourly:0};
-const management={filter:'TODAS',sort:'PRIORIDADE',search:''};
+const management={filter:'TODAS',sort:'PRIORIDADE',search:'',
+ winChance:null,policeWaitMinutes:null,estimatedActionMinutes:null};
+const managementOptions=()=>({tax:state.tax,ammoUse:state.ammoUse,
+ accessConsumed:state.accessConsumed,roi:state.roi,targetPerPlayer:state.targetPerPlayer,
+ reference,winChance:management.winChance,policeWaitMinutes:management.policeWaitMinutes,
+ estimatedActionMinutes:management.estimatedActionMinutes});
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
@@ -28,8 +33,7 @@ function choose(name){
 
 function renderManagement(){
  if(!catalog||!el('apManagementList'))return;
- const report=buildManagementBoard(actions,catalog,{tax:state.tax,ammoUse:state.ammoUse,
-  accessConsumed:state.accessConsumed,roi:state.roi,targetPerPlayer:state.targetPerPlayer,reference});
+ const report=buildManagementBoard(actions,catalog,managementOptions());
  const k=report.stats;
  el('apManagementKpis').innerHTML=[
   kpi('Ações ativas',String(k.active),'gold',k.inactive+' inativas'),
@@ -52,12 +56,18 @@ function renderManagement(){
    '<td>'+safe(money(item.winCost))+'</td>'+
    '<td class="'+(item.netMin!==null&&item.netMin<0?'ap-negative':'ap-positive')+'">'+safe(money(item.netMin))+'</td>'+
    '<td class="'+(item.perPlayer!==null&&item.perPlayer<0?'ap-negative':'ap-positive')+'">'+safe(money(item.perPlayer))+'</td>'+
+   '<td class="'+(item.expected!==null&&item.expected<0?'ap-negative':'')+'">'+
+   (item.expected===null?'—':safe(money(item.expected)))+'</td>'+
+   '<td class="'+(item.expectedMemberHour!==null&&item.expectedMemberHour<0?'ap-negative':'')+'">'+
+   (item.expectedMemberHour===null?'—':safe(money(item.expectedMemberHour)))+'</td>'+
    '<td><button type="button" class="ap-management-open" data-ap-manage="'+safe(item.nome)+'">Analisar →</button></td></tr>';
- }).join(''):'<tr><td colspan="7" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
+ }).join(''):'<tr><td colspan="9" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
  el('apManagementMethod').textContent=
   results.length+' ações exibidas • '+k.valid+' ativas com cenário calculável • '+k.emPrejuizo+
   ' com prejuízo na vitória • capital mediano '+money(k.capitalMediano)+
-  '. '+report.conditions+' Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
+  '. '+report.conditions+' Cenários de risco são opcionais, hipotéticos e não incluem cooldown. '+
+  (report.scenario.chance===null?'Sem chance informada, resultado esperado permanece indisponível. ':'')+
+  'Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
  el('apManagementDate').textContent='Fonte: Mercado Negro'+
   (lastPriceRead?' • leitura '+new Date(lastPriceRead).toLocaleTimeString('pt-BR'):'')+
   (sheetOverrides.length?' • prêmios conferidos na planilha':' • prêmio do catálogo');
@@ -469,6 +479,27 @@ async function rejectProposal(){
  finally{btn.disabled=false;}
 }
 function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"';}
+function exportManagement(){
+ if(!catalog||!actions.length)return;
+ const board=buildManagementBoard(actions,catalog,managementOptions());
+ const headers=['Ação','Situação','Equipe','Prioridade','Pendências e critérios','Capital inicial',
+  'Custo reposição vitória','Prêmio mínimo sujo','Lucro mínimo vitória','Lucro mínimo por jogador',
+  'Prejuízo derrota','Resultado esperado hipotético','Resultado esperado por jogador/hora',
+  'Variação do capital desde referência','Variação do lucro por jogador desde referência'];
+ const rows=board.entries.map(x=>[x.nome,x.status,x.team,x.priority,x.reason.join(' / '),
+  x.capital,x.winCost,x.calc.min,x.netMin,x.perPlayer,x.loss,
+  x.expected,x.expectedMemberHour,x.change?.difference??'',x.change?.deltaPerMember??'']);
+ const lines=['# HIGH OS • Cenário da carteira — sem aprovação automática',
+  '# Chance hipotética: '+(management.winChance===null?'não informada':Math.round(management.winChance*100)+'%')+
+  ' • Espera: '+(management.policeWaitMinutes??'não informada')+
+  ' • Duração: '+(management.estimatedActionMinutes??'não informada')+
+  ' • Não inclui cooldown',
+  [headers,...rows].map(row=>row.map(csvCell).join(';')).join('\r\n')];
+ const url=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+ const link=document.createElement('a');link.href=url;link.download='high-os-carteira-acoes.csv';link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 function exportAnalysis(){
  const headers=['Ação','Situação','Invasores','Policiais','Preço de compra','Variação dos preços','Consumo de munição',
   'Capital inicial','Repor após vitória','Armas mantidas','Kit conservado','Prêmio mínimo sujo','Prêmio máximo sujo',
@@ -510,11 +541,21 @@ function listeners(){
   if(ev.target.closest('#apReadSheet')){refreshSheetPrizes();return;}
   if(ev.target.closest('#apHistory')){showDecisionHistory();return;}
   if(ev.target.closest('#apExport'))exportAnalysis();
+  if(ev.target.closest('#apManagementExport'))exportManagement();
  });
  root.addEventListener('input',ev=>{
   const target=ev.target;
   if(target.id==='apSearch'){state.search=target.value;actionsList();return;}
   if(target.id==='apManagementSearch'){management.search=target.value;renderManagement();return;}
+  const riskMap={apPortfolioWinChance:['winChance',.01],apPortfolioPoliceWait:['policeWaitMinutes',1],
+   apPortfolioDuration:['estimatedActionMinutes',1]};
+  const risk=riskMap[target.id];
+  if(risk){
+   const max=risk[0]==='winChance'?100:600;
+   const val=target.value===''?null:Number(target.value);
+   management[risk[0]]=val===null||!Number.isFinite(val)?null:Math.max(0,Math.min(max,val))*risk[1];
+   renderManagement();return;
+  }
   const indexQty=target.dataset.apQty,indexPrice=target.dataset.apPrice;
   if(indexQty!==undefined||indexPrice!==undefined){
    const id=Number(indexQty??indexPrice);
