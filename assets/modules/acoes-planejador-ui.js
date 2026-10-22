@@ -90,7 +90,7 @@ function renderManagement(){
   ' com prejuízo na vitória • capital mediano '+money(k.capitalMediano)+
   '. '+report.conditions+' Cenários de risco são opcionais, hipotéticos e não incluem cooldown. '+
   (report.scenario.chance===null?'Sem chance informada, resultado esperado permanece indisponível. ':'')+
-  'Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
+  'Chance padrão de vitória de 40% é uma premissa gerencial alterável, não taxa observada. Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
  el('apManagementDate').textContent='Fonte: Mercado Negro'+
   (lastPriceRead?' • leitura '+new Date(lastPriceRead).toLocaleTimeString('pt-BR'):'')+
   (sheetOverrides.length?' • prêmios conferidos na planilha':' • prêmio do catálogo');
@@ -493,7 +493,7 @@ async function copyProposal(){
  'PRÊMIO MÁXIMO INDICATIVO: '+money(d.recommendedMax),
  'PRÊMIO MÁXIMO PUBLICADO: '+money(p.max),
  'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
- 'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
+ 'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único, armas preservadas na vitória e chance de vitória '+(d.winChance===null?'não informada':percent(d.winChance))+' (premissa, não dado observado).',
  'DECISÃO: '+d.direction,'RISCO: chance '+(d.winChance===null?'não informada':percent(d.winChance))+' | espera '+(d.wait===null?'não informada':d.wait+' min'),
  'AVISO: se prêmio proporcional for selecionado, o valor é hipotético, não oficial.',
  'Premiações atuais já incluem buffs/nerfs existentes. Nenhuma mudança automática no jogo.'].join('\n');
@@ -505,8 +505,9 @@ async function approveProposal(mode='sugestao'){
  if(!approveHandler)return;
  const a=action(),d=decision(),p=d.calc;
  const manual=mode==='manual',value=manual?state.manualPayout:d.recommendedMin;
+ const proposedMax=manual?recommendedMaximum(p.min,p.max,value):d.recommendedMax;
  if(!d.eligibleForSheet||approvedThisSession.has(a.nome)||!Number.isFinite(value)||
-    value<=0||Math.abs(value-p.min)<=1){
+    !Number.isFinite(proposedMax)||proposedMax<value||value<=0||Math.abs(value-p.min)<=1){
   el('apCopyStatus').textContent='Prêmio inválido ou cenário hipotético. Restaure os preços e o prêmio publicados antes de aprovar.';
   return;
  }
@@ -515,8 +516,8 @@ async function approveProposal(mode='sugestao'){
  const message=el('apCopyStatus'),reason=el('apDecisionReason')?.value?.trim()||'';
  message.textContent='Conferindo células, fórmulas e premiação oficial da planilha...';
  try{
-  const result=await approveHandler({name:a.nome,officialMin:p.min,proposedMin:value,
-   team:p.team,cost:p.kit.total,tax:p.tax,reason,
+  const result=await approveHandler({name:a.nome,officialMin:p.min,officialMax:p.max,
+   proposedMin:value,proposedMax,team:p.team,cost:p.kit.total,tax:p.tax,winChance:d.winChance,reason,
    source:manual?'manual':'sugestao'});
   if(result?.cancelled){message.textContent='Aprovação cancelada. Nada foi alterado.';return;}
   if(!result?.updated)throw Error('A planilha não confirmou a alteração.');
@@ -529,9 +530,13 @@ async function approveProposal(mode='sugestao'){
    render();
   }
   message.textContent=result.verified?
-   'Ajuste confirmado na planilha. '+(result.audited?'Histórico registrado. ':'Auditoria pendente. ')+
-   'A publicação no GitHub/Mercado Negro NÃO é automática; confira o status da fonte.':
-   'A planilha recebeu o ajuste, mas a fórmula do prêmio não confirmou o valor. Não tente aprovar novamente sem conferir a aba.';
+   'Planilha atualizada. Mínimo confirmado '+money(result.actualMin)+
+   ' • máximo calculado '+money(result.actualMax)+'. '+
+   (result.verifiedMaximum?'Máximo conforme estimativa. ':
+    'ATENÇÃO: máximo calculado difere da estimativa '+money(result.estimatedMax)+'. ')+
+   (result.audited?'Histórico registrado. ':'Auditoria pendente. ')+
+   'O GitHub/Mercado Negro não foi republicado automaticamente.':
+   'BUFF/NERF gravado, mas o mínimo calculado não corresponde à proposta. Confira a planilha antes de qualquer nova aprovação.';
   refreshPriceAlerts();
  }catch(error){message.textContent='SEM CONFIRMAÇÃO DE AJUSTE: '+(error?.message||String(error));}
  finally{summary();}
