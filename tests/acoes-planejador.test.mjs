@@ -170,7 +170,7 @@ test('Nova página mantém permissões, listagem, controles e dois resultados ex
  assert.doesNotMatch(html,/id="apReuse"/);
  assert.match(ui,/kitMode:'oficial'/);
  assert.match(ui,/Kit mantido/);
- assert.match(ui,/state\.priceShift!==0\|\|Object\.keys\(state\.prices\)/);
+ assert.match(ui,/d\.eligibleForSheet/);
  assert.match(ui,/prejuízo|Prejuízo/i);
 });
 test('A aprovação revalida a planilha e protege fórmulas/aba original',()=>{
