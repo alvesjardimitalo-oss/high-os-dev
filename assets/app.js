@@ -3850,7 +3850,7 @@ function manualRequestMutation(tipo,d,f={}){
   o.garagens=Array.isArray(o.garagens)?o.garagens:[];
   const i=o.garagens.findIndex(x=>x.tipo===kind&&(x.blip===obj.blip||x.spawn===obj.spawn));
   const old=i>=0?o.garagens[i]:{};
-  const next={...old,...obj,tipo:kind};
+  const next={...old,...obj,veiculos:obj.veiculos||old.veiculos||'',tipo:kind};
   if(samePlain(old,next))return false;
   if(i>=0)o.garagens[i]=next;
   else o.garagens.push(next);
