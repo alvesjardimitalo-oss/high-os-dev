@@ -95,7 +95,7 @@ export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogad
   winCost,lossCost:total,retained,weapons,ammoReplacement,armors,access,
   priceShift:shift,ammoUse:ammunitionUsed,
   effectiveCost:winCost,
-  baselineMismatch:kitMode==='oficial'&&total!==null&&official!==null&&Math.abs(total-official)>1};
+  baselineMismatch:kitMode==='oficial'&&priceMode==='pista'&&shift===0&&Object.keys(prices).length===0&&Object.keys(quantities).length===0&&total!==null&&official!==null&&Math.abs(total-official)>1};
 }
 export function calculateAction(action,catalog,opts={}){
  const location=opts.location||null;
