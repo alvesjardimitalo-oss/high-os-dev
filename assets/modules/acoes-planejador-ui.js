@@ -13,8 +13,8 @@ let approveHandler=null,approvedThisSession=new Set();
 let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecisions=null,onReadSheet=null;
 let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null,workspace=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
- targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:DEFAULT_MANAGER_WIN_CHANCE,targetHourly:0};
-const management={filter:'TODAS',sort:'PRIORIDADE',search:'',
+ targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,listLimit:24,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:DEFAULT_MANAGER_WIN_CHANCE,targetHourly:0};
+const management={filter:'TODAS',sort:'PRIORIDADE',search:'',showAll:false,
  winChance:DEFAULT_MANAGER_WIN_CHANCE,policeWaitMinutes:null,estimatedActionMinutes:null};
 const managementOptions=()=>({tax:state.tax,ammoUse:state.ammoUse,
  accessConsumed:state.accessConsumed,roi:state.roi,targetPerPlayer:state.targetPerPlayer,
@@ -79,7 +79,10 @@ function renderManagement(){
   kpi('Lucro mediano por jogador',money(k.lucroMedianoMembro),k.lucroMedianoMembro<0?'bad':'good','Vitória com prêmio mínimo')
  ].join('');
  const results=filterManagementEntries(report.entries,{filter:management.filter,sort:management.sort,query:management.search});
- el('apManagementList').innerHTML=results.length?results.map(item=>{
+ const pageRows=management.showAll?results:results.slice(0,8);
+ const expand=el('apManageShowAll');
+ if(expand){expand.hidden=results.length<=8;expand.textContent=management.showAll?'Mostrar apenas prioridades':'Ver todas ('+results.length+')';}
+ el('apManagementList').innerHTML=pageRows.length?pageRows.map(item=>{
   const image=actionPhoto(item.action),tone=!item.valid||item.netMin<0?'urgent':item.priority>=3?'warn':'';
   const reason=item.reason.slice(0,2).join(' • ');
   return '<tr><td><span class="ap-management-action">'+
@@ -305,8 +308,11 @@ function actionsList(){
   }
   return true;
  });
- el('apActionCount').textContent=results.length+' de '+actions.length+' ações';
- el('apActionList').innerHTML=results.map(a=>{
+ const visible=results.slice(0,state.listLimit);
+ el('apActionCount').textContent=visible.length+' exibidas de '+results.length+' resultados ('+actions.length+' cadastradas)';
+ const more=el('apCatalogMore');
+ if(more){more.hidden=visible.length>=results.length;more.textContent='Carregar mais ('+(results.length-visible.length)+' restantes)';}
+ el('apActionList').innerHTML=visible.map(a=>{
   const d=analyzeDecision(a,catalog,{team:defaultTeam(a),referenceTeam:defaultTeam(a),
    kitMode:'oficial',priceMode:'pista',tax:state.tax,
    ammoUse:state.ammoUse,accessConsumed:state.accessConsumed,
@@ -648,13 +654,15 @@ function listeners(){
   if(ev.target.closest('#apRefreshPrices')){refreshPriceCatalog();return;}
   if(ev.target.closest('#apReadSheet')){refreshSheetPrizes();return;}
   if(ev.target.closest('#apHistory')){showDecisionHistory();return;}
+  if(ev.target.closest('#apManageShowAll')){management.showAll=!management.showAll;renderManagement();return;}
+  if(ev.target.closest('#apCatalogMore')){state.listLimit+=24;actionsList();return;}
   if(ev.target.closest('#apExport'))exportAnalysis();
   if(ev.target.closest('#apManagementExport'))exportManagement();
  });
  root.addEventListener('input',ev=>{
   const target=ev.target;
-  if(target.id==='apSearch'){state.search=target.value;actionsList();return;}
-  if(target.id==='apManagementSearch'){management.search=target.value;renderManagement();return;}
+  if(target.id==='apSearch'){state.search=target.value;state.listLimit=24;actionsList();return;}
+  if(target.id==='apManagementSearch'){management.search=target.value;management.showAll=false;renderManagement();return;}
   const riskMap={apPortfolioWinChance:['winChance',.01],apPortfolioPoliceWait:['policeWaitMinutes',1],
    apPortfolioDuration:['estimatedActionMinutes',1]};
   const risk=riskMap[target.id];
@@ -706,9 +714,9 @@ function listeners(){
  });
  root.addEventListener('change',ev=>{
   const e=ev.target;
-  if(e.id==='apManagementFilter'){management.filter=e.value;renderManagement();}
-  else if(e.id==='apManagementSort'){management.sort=e.value;renderManagement();}
-  else if(e.id==='apStatusFilter'){state.status=e.value;actionsList();}
+  if(e.id==='apManagementFilter'){management.filter=e.value;management.showAll=false;renderManagement();}
+  else if(e.id==='apManagementSort'){management.sort=e.value;management.showAll=false;renderManagement();}
+  else if(e.id==='apStatusFilter'){state.status=e.value;state.listLimit=24;actionsList();}
   else if(e.id==='apRankingLimit'){state.rankLimit=Number(e.value)||10;rankBoard();}
   else if(e.id==='apPriceMode'){state.priceMode=e.value;state.prices={};render();}
   else if(e.id==='apKitMode'){state.kitMode=e.value;state.quantities={};render();}
