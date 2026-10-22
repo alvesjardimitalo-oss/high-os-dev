@@ -52,3 +52,37 @@ export function planApprovedActionSheetUpdate(rows,name,officialMin,proposedMin)
   nerf:{rowIndex:nerfRow,columnIndex:col+1}
  };
 }
+
+/** Extrai os prêmios correntes da aba existente sem editar nenhuma fórmula.
+ * Os valores refletidos pelo Google Sheets têm prioridade sobre o JSON
+ * público após um ajuste de BUFF/NERF confirmado.
+ */
+export function extractPublishedActionPrizes(rows){
+ if(!Array.isArray(rows))throw Error('Resposta da planilha inválida.');
+ const output=[],seen=new Set();
+ for(let r=0;r<rows.length;r++){
+  const line=rows[r]||[];
+  for(let c=0;c<line.length-1;c++){
+   if(norm(line[c])!=='ACOES')continue;
+   const name=str(line[c+1]).trim(),id=norm(name);
+   if(!id||seen.has(id))continue;
+   const fields={};
+   for(let y=r+1;y<Math.min(rows.length,r+18);y++){
+    const label=norm(rows[y]?.[c]);
+    if(label==='ACOES')break;
+    const val=num(rows[y]?.[c+1]);
+    if(label==='PREMIO MINIMO (SUJO)')fields.min=val;
+    if(label==='PREMIO MAXIMO (SUJO)')fields.max=val;
+    if(label==='BUFF')fields.buff=val;
+    if(label==='NERF')fields.nerf=val;
+   }
+   // Somente linhas completas são utilizáveis; nunca substituir
+   // um prêmio real por zero ou inferir o máximo de uma fórmula.
+   if(fields.min!==null&&Number.isFinite(fields.min)&&fields.max!==null&&
+     Number.isFinite(fields.max)&&fields.max>=fields.min){
+    output.push({name,...fields});seen.add(id);
+   }
+  }
+ }
+ return output;
+}
