@@ -58,8 +58,8 @@ test('Cálculo de risco pondera vitória e perda integral, sem prever chance soz
  assert.equal(informed.expected,40200);
  assert.equal(informed.totalMinutes,50);
  assert.equal(informed.hourly,96000);
- assert.equal(informed.suggested,347143);
- assert.equal(informed.direction,'CONSIDERAR BUFF');
+ assert.equal(informed.suggested,300000);
+ assert.equal(informed.direction,'MANTER');
  assert.ok(Math.abs(informed.breakEven-139500/299500)<.0001);
 });
 test('Prêmios proporcionais por equipe são apenas simulação e impedem publicação',()=>{
@@ -108,18 +108,18 @@ test('Novos controles de decisão, histórico, refência e valores manuais fazem
  assert.match(app,/actionSaveReference/);
  assert.match(app,/actionRejectProposal/);
  assert.match(app,/actionReadSheetPrizes/);
- assert.match(app,/acoes-planejador-ui\.js\?v=7/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=8/);
  assert.match(app,/root\+':batchUpdate'/);
 });
 
 test('Valor sugerido fica visível e combina mínimo, máximo e lucro por participante',()=>{
  const d=analyzeDecision(action,catalog,{team:2,targetPerPlayer:140000,roi:.25,winChance:null});
  assert.equal(d.direction,'CONSIDERAR BUFF');
- assert.equal(d.recommendedMin,471429);
- assert.equal(d.recommendedMax,565715);
- assert.equal(d.recommendedDelta,171429);
- assert.ok(d.recommendedPercent>.57);
- assert.ok(Math.abs(d.recommendedPerMember-140000)<1);
+ assert.equal(d.recommendedMin,330000);
+ assert.equal(d.recommendedMax,396000);
+ assert.equal(d.recommendedDelta,30000);
+ assert.equal(d.recommendedPercent,.1);
+ assert.ok(Math.abs(d.recommendedPerMember-90500)<1);
  assert.ok(d.eligibleForSheet);
 });
 test('Ação saudável recomenda MANTER prêmio atual e não simula nerf',()=>{
@@ -162,6 +162,29 @@ test('Padrão de 40% exige prêmio mais alto para compensar derrotas, sem ser da
  assert.ok(assumed.suggested>without.suggested);
  assert.ok(assumed.recommendedMax>assumed.recommendedMin);
  assert.ok(assumed.remarks.some(x=>x.includes('premissa de gestão')));
+});
+test('40% de chance não força buff gigante nem promete eliminar o prejuízo esperado',()=>{
+ const d=analyzeDecision(action,catalog,{team:2});
+ assert.equal(d.calc.netMin,160000);
+ assert.equal(d.calc.loss,-139500);
+ assert.equal(d.expected,-19700);
+ assert.equal(d.riskBreakEvenMin,370358);
+ assert.equal(d.recommendedMin,330000);
+ assert.equal(d.recommendedMax,396000);
+ assert.equal(d.recommendedProfit,181000);
+ assert.equal(d.recommendedExpected,-11300);
+ assert.equal(d.maxBuffStep,30000);
+ assert.equal(d.riskNeedsReview,true);
+ assert.ok(d.remarks.some(x=>x.includes('pode NÃO atingir o equilíbrio')));
+});
+test('Nerf conservador só surge quando lucro e risco são amplamente favoráveis',()=>{
+ const d=analyzeDecision({...action,premio_min:900000,premio_max:1080000},catalog,{team:2});
+ assert.equal(d.direction,'REVISAR NERF');
+ assert.equal(d.recommendedMin,883260);
+ assert.equal(d.maxNerfStep,16740);
+ assert.ok(d.recommendedExpected>0);
+ const risky=analyzeDecision(action,catalog,{team:2});
+ assert.notEqual(risky.direction,'REVISAR NERF');
 });
 test('Faixas mínimo e máximo atuais e recomendadas visíveis, inclusive na aprovação',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
