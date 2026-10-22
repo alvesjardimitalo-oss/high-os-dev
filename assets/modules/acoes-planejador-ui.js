@@ -1,4 +1,5 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
+import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -7,7 +8,7 @@ const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percen
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
 let approveHandler=null,approvedThisSession=new Set();
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
- targetPerPlayer:20000,tolerance:.25,tax:.3,quantities:{},prices:{},manualPayout:null};
+ targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null};
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
@@ -17,6 +18,63 @@ function choose(name){
  selection=name;localIndex=0;state.prices={};state.quantities={};state.manualPayout=null;
  state.team=defaultTeam(action());el('apManual').value='';render();
 }
+
+function rankFormat(mode,value){
+ return mode.unit==='percent'?percent(value):money(value);
+}
+function actionPhoto(a){
+ return photoUrl(a?.locais?.find(l=>l.imagem)?.imagem||a?.imagem);
+}
+function rankBoard(){
+ if(!catalog||!actions.length||!el('apRankingResults'))return;
+ // Ranking oficial comparável: os ajustes temporários feitos no formulário
+ // de uma ação não modificam a posição dos demais participantes.
+ const report=buildActionRankings(actions,catalog,{tax:state.tax,ammoUse:state.ammoUse,
+  accessConsumed:state.accessConsumed});
+ const mode=RANKING_MODES.find(m=>m.id===state.rankMode)||RANKING_MODES[0];
+ const rows=report.rankings[mode.id]||[];
+ el('apRankingTabs').innerHTML=RANKING_MODES.map(m=>
+  '<button type="button" class="ap-rank-tab" data-ap-rank="'+safe(m.id)+'" aria-pressed="'+(state.rankMode===m.id)+'">'+safe(m.title)+'</button>'
+ ).join('');
+ const featured=[
+  ['lucro-total','Maior lucro total'],
+  ['lucro-membro','Maior lucro por pessoa'],
+  ['rentabilidade','Maior retorno percentual'],
+  ['investimento','Maior capital necessário']
+ ];
+ el('apRankingHighlights').innerHTML=featured.map(([key,title])=>{
+  const m=RANKING_MODES.find(x=>x.id===key),top=report.rankings[key]?.[0];
+  if(!top)return '<div class="ap-rank-feature"><small>'+safe(title)+'</small><strong>Sem dados</strong></div>';
+  return '<button type="button" class="ap-rank-feature" data-ap-ranked="'+safe(top.action.nome)+'" title="Abrir os detalhes de '+safe(top.action.nome)+'">'+
+   '<small>'+safe(title)+'</small><strong>'+safe(rankFormat(m,top.value))+'</strong>'+
+   '<span>'+safe(top.action.nome)+'</span><span class="ap-rank-mini">'+top.calc.team+' invasores</span></button>';
+ }).join('');
+ const limited=rows.slice(0,state.rankLimit);
+ el('apRankingResults').innerHTML=limited.length?
+  '<div class="ap-ranking-result-head"><strong>'+safe(mode.label)+'</strong><span>'+rows.length+
+  ' ações comparáveis · '+(report.excluded.length?' '+report.excluded.length+' excluídas':'Nenhuma pendência')+'</span></div>'+
+  '<div class="ap-ranking-list">'+limited.map(item=>{
+    const a=item.action,p=item.calc,image=actionPhoto(a);
+    return '<button type="button" class="ap-ranking-row" data-ap-ranked="'+safe(a.nome)+'" aria-label="Posição '+item.position+'. Abrir '+safe(a.nome)+'">'+
+     '<span class="ap-rank-number">#'+item.position+'</span>'+
+     (image?'<img class="ap-rank-thumb" src="'+safe(image)+'" alt="" loading="lazy">':'<span class="ap-rank-thumb ap-rank-no-photo">▣</span>')+
+     '<span class="ap-rank-name"><b>'+safe(a.nome)+'</b><small>'+p.team+' invasores · Prêmio mínimo '+safe(money(p.min))+
+     (p.kit.baselineMismatch?' · Custo divergente':'')+'</small></span>'+
+     '<span class="ap-rank-value"><strong>'+safe(rankFormat(mode,item.value))+'</strong><small>'+
+       (mode.id==='investimento'?'Risco na derrota: '+money(p.kit.lossCost):
+         'Lucro por jogador: '+money(p.perPlayer))+'</small></span></button>';
+  }).join('')+'</div>':
+  '<div class="ap-hint warn">Ainda não há ações com prêmio, equipe válida e preço de todos os itens. Ações inativas ou com preços pendentes ficam fora do ranking.</div>';
+ el('apRankingMethod').textContent=
+  'Critério: preço publicado de pista (sem variação simulada), quantidades oficiais, maior equipe permitida, prêmio mínimo e lavagem de '+
+  Math.round(state.tax*100)+'%; munição gasta '+Math.round(state.ammoUse*100)+'%; pendrive '+
+  (state.accessConsumed?'consumido':'reutilizável')+
+  '. Rentabilidade = lucro mínimo na vitória ÷ capital integral. Excluídas '+report.excluded.length+
+  ' ações inativas, sem preço, prêmio ou equipe válida. Não é previsão de lucro esperado: espera policial, dificuldade, derrotas e cooldown não são ponderados.';
+ const source=el('apRankingDate');
+ if(source)source.textContent=report.included.length+' ações classificadas · preços consultados ao abrir a página';
+}
+
 function actionsList(){
  if(!root)return;
  const q=norm(state.search);
@@ -179,7 +237,7 @@ function summary(){
 }
 function render(){
  if(!action())return;
- actionsList();teamOptions();photosAndRules();kitTable();summary();
+ actionsList();rankBoard();teamOptions();photosAndRules();kitTable();summary();
 }
 async function copyProposal(){
  const a=action(),p=calculateAction(a,catalog,options());
@@ -246,6 +304,10 @@ function exportAnalysis(){
 }
 function listeners(){
  root.addEventListener('click',ev=>{
+  const ranked=ev.target.closest('[data-ap-ranked]');
+  if(ranked){choose(ranked.dataset.apRanked);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
+  const rank=ev.target.closest('[data-ap-rank]');
+  if(rank){state.rankMode=rank.dataset.apRank;rankBoard();return;}
   const a=ev.target.closest('[data-ap-action]');
   if(a){choose(a.dataset.apAction);return;}
   const l=ev.target.closest('[data-ap-local]');
@@ -291,11 +353,13 @@ function listeners(){
   if(target.value===''){if(target.id==='apManual')state.manualPayout=null;}
   else state[f[0]]=Math.max(0,Number(target.value)||0)*f[1];
   if(target.id==='apTax')actionsList();
+  if(target.id==='apTax')rankBoard();
   summary();
  });
  root.addEventListener('change',ev=>{
   const e=ev.target;
   if(e.id==='apStatusFilter'){state.status=e.value;actionsList();}
+  else if(e.id==='apRankingLimit'){state.rankLimit=Number(e.value)||10;rankBoard();}
   else if(e.id==='apPriceMode'){state.priceMode=e.value;state.prices={};render();}
   else if(e.id==='apKitMode'){state.kitMode=e.value;state.quantities={};render();}
   else if(e.id==='apAccessMode'){state.accessConsumed=e.value==='consumido';render();}
