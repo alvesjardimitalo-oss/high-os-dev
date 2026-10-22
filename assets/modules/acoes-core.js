@@ -58,7 +58,7 @@ function qtyFor(item,team,mode){
  if(mode!=='por-jogador'||/^PENDRIVE/i.test(norm(item?.nome)))return official;
  return team;
 }
-export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogador',quantities={},prices={},priceShift=0,ammoUse=DEFAULT_AMMO_USE}={}){
+export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogador',quantities={},prices={},priceShift=0,ammoUse=DEFAULT_AMMO_USE,accessConsumed=true}={}){
  const nPlayers=Number(team)||defaultTeam(action);
  const shift=clamp(priceShift,-.9,3,0);
  const ammunitionUsed=clamp(ammoUse,0,1,DEFAULT_AMMO_USE);
@@ -73,7 +73,7 @@ export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogad
   const amount=unit===null?null:cents(qty*unit);
   // A munição é reposta em pacotes completos (x100, x200, x250).
   // É uma hipótese de compra; a taxa consumida pode ser ajustada.
-  const replacementQty=category==='arma'?0:category==='municao'?Math.min(qty,Math.ceil(qty*ammunitionUsed)):qty;
+  const replacementQty=category==='arma'||(category==='acesso'&&!accessConsumed)?0:category==='municao'?Math.min(qty,Math.ceil(qty*ammunitionUsed)):qty;
   const winCost=unit===null?null:cents(replacementQty*unit);
   return {index:i,name:item.nome,qty,officialQty:Number(item.quantidade)||0,
    category,unit,baseUnit,total:amount,missing:unit===null,
@@ -93,7 +93,7 @@ export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogad
  return {lines,missing,total,official,comparison:total===null||official===null?null:cents(total-official),
   // Capital para entrar na ação é diferente do gasto real após uma vitória.
   winCost,lossCost:total,retained,weapons,ammoReplacement,armors,access,
-  priceShift:shift,ammoUse:ammunitionUsed,
+  priceShift:shift,ammoUse:ammunitionUsed,accessConsumed:!!accessConsumed,
   effectiveCost:winCost,
   baselineMismatch:kitMode==='oficial'&&priceMode==='pista'&&shift===0&&Object.keys(prices).length===0&&Object.keys(quantities).length===0&&total!==null&&official!==null&&Math.abs(total-official)>1};
 }
