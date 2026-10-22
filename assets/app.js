@@ -1707,6 +1707,7 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
  }catch(error){console.warn('[AÇÕES] Atualização feita, mas falha ao registrar auditoria:',error)}
  return {updated:true,verified,audited,previous:checked.previousMin,next:value,
   actualMin:verified&&actual?actual.min:null,actualMax:verified&&actual?actual.max:null,
+  actualBuff:verified&&actual?actual.buff:null,actualNerf:verified&&actual?actual.nerf:null,
   publicationPending:true};
 }
 
