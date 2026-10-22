@@ -1,8 +1,8 @@
-import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm,priceOf} from './acoes-core.js?v=2';
+import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm,priceOf} from './acoes-core.js?v=3';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
-import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=3';
-import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=1';
-import {createActionWorkspace} from './acoes-workspace.js?v=1';
+import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=4';
+import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=2';
+import {createActionWorkspace} from './acoes-workspace.js?v=2';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -45,9 +45,11 @@ const payoutPair=(title,min,max,style='')=>
 function renderApprovalPayoutRange(d){
  const node=el('apDecisionPayoutCompare');if(!node)return;
  const p=d.calc;
- const custom=Number.isFinite(state.manualPayout)&&state.manualPayout>0;
- const min=custom?state.manualPayout:d.recommendedMin;
- const max=custom?(Number.isFinite(state.manualMaxPayout)?state.manualMaxPayout:recommendedMaximum(p.min,p.max,min)):d.recommendedMax;
+ const customMin=Number.isFinite(state.manualPayout)&&state.manualPayout>0;
+ const customMax=Number.isFinite(state.manualMaxPayout)&&state.manualMaxPayout>0;
+ const custom=customMin||customMax;
+ const min=customMin?state.manualPayout:d.recommendedMin;
+ const max=customMax?state.manualMaxPayout:customMin?recommendedMaximum(p.min,p.max,min):d.recommendedMax;
  node.innerHTML='<div class="ap-recommend-top"><b>CONFERÊNCIA DOS DOIS PRÊMIOS</b>'+
   '<span>'+safe(d.direction)+'</span></div>'+
   '<div class="ap-recommend-two-columns">'+
@@ -86,25 +88,19 @@ function renderManagement(){
    (image?'<img src="'+safe(image)+'" loading="lazy" alt="">':'')+
    '<span><b>'+safe(item.nome)+'</b><small>'+safe(item.team)+' invasores'+
    (item.active?'':' • INATIVA')+'</small></span></span></td>'+
+   '<td>'+(item.cooldownMinutes===null?'A confirmar':safe(item.cooldownMinutes)+' min')+'</td>'+ 
    '<td><span class="ap-management-diagnosis '+tone+'">'+safe(item.status)+'</span>'+
    '<small class="ap-management-reason" title="'+safe(item.reason.join(' • '))+'">'+safe(reason)+'</small></td>'+
-   '<td>'+(item.cooldownMinutes===null?'A confirmar':safe(item.cooldownMinutes)+' min')+'</td>'+ 
    '<td>'+safe(money(item.capital))+'</td>'+
    '<td>'+safe(money(item.winCost))+'</td>'+
    '<td class="'+(item.netMin!==null&&item.netMin<0?'ap-negative':'ap-positive')+'">'+safe(money(item.netMin))+'</td>'+
    '<td class="'+(item.perPlayer!==null&&item.perPlayer<0?'ap-negative':'ap-positive')+'">'+safe(money(item.perPlayer))+'</td>'+
-   '<td class="'+(item.expected!==null&&item.expected<0?'ap-negative':'')+'">'+
-   (item.expected===null?'—':safe(money(item.expected)))+'</td>'+
-   '<td class="'+(item.expectedMemberHour!==null&&item.expectedMemberHour<0?'ap-negative':'')+'">'+
-   (item.expectedMemberHour===null?'—':safe(money(item.expectedMemberHour)))+'</td>'+
    '<td><button type="button" class="ap-management-open" data-ap-manage="'+safe(item.nome)+'">Analisar →</button></td></tr>';
- }).join(''):'<tr><td colspan="10" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
- el('apManagementMethod').textContent=
-  results.length+' ações exibidas • '+k.valid+' ativas com cenário calculável • '+k.emPrejuizo+
-  ' com prejuízo na vitória • capital mediano '+money(k.capitalMediano)+
-  '. '+report.conditions+' Cenários de risco são opcionais, hipotéticos e não incluem cooldown. '+
-  (report.scenario.chance===null?'Sem chance informada, resultado esperado permanece indisponível. ':'')+
-  'Chance padrão de vitória de 40% é uma premissa gerencial alterável, não taxa observada. Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
+ }).join(''):'<tr><td colspan="8" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
+ el('apManagementMethod').textContent=results.length+' ações exibidas • '+k.valid+
+  ' ações ativas com custos válidos • '+k.emPrejuizo+' com prejuízo se vencerem • capital mediano '+
+  money(k.capitalMediano)+'. '+report.conditions+
+  ' Variações exigem uma referência de preço salva; nenhum ajuste é aplicado automaticamente.';
  el('apManagementDate').textContent='Fonte: Mercado Negro'+
   (lastPriceRead?' • leitura '+new Date(lastPriceRead).toLocaleTimeString('pt-BR'):'')+
   (sheetOverrides.length?' • prêmios conferidos na planilha':' • prêmio do catálogo');
