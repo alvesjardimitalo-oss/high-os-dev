@@ -1,4 +1,4 @@
-import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=1';
+import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=2';
 
 /** Navigation, profiles and Firestore-backed internal action registration.
  * The official market catalog is always read-only and remains the reference.
