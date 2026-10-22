@@ -6,9 +6,9 @@
 export const normalizeActionName=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().replace(/\s+/g,' ').toUpperCase();
 const finite=value=>value!==''&&value!==null&&Number.isFinite(Number(value))?Number(value):null;
 export function blankAction(){
- return {nome:'',status:'ativo',premio_min:0,premio_max:0,
-  cooldown_segundos:0,regras_confronto:[{invasores:2,policiais:4,refens:0}],
-  itens:[{nome:'',quantidade:1}],locais:[]};
+ return {nome:'',tipo_acao:'blipada',status:'ativo',premio_min:0,premio_max:0,
+  cooldown_segundos:0,regras_confronto:[{invasores:1,policiais:0,refens:0}],
+  itens:[],locais:[]};
 }
 export function cleanActionEntry(input,{oldName='',published=[],managed=[]}={}){
  const nome=String(input?.nome??'').trim().replace(/\s+/g,' ');
@@ -30,15 +30,19 @@ export function cleanActionEntry(input,{oldName='',published=[],managed=[]}={}){
  if(new Set(rules.map(r=>r.invasores)).size!==rules.length)
   throw Error('As equipes não podem repetir a quantidade de invasores.');
  const itens=(Array.isArray(input.itens)?input.itens:[]).map(row=>({
-  nome:String(row.nome??'').trim(),quantidade:finite(row.quantidade)
+  nome:String(row.nome??'').trim(),quantidade:finite(row.quantidade),
+  categoria_item:['arma','municao','colete','acesso','consumivel'].includes(row.categoria_item)?row.categoria_item:null,
+  preco_unitario:finite(row.preco_unitario)
  }));
- if(!itens.length||itens.length>60||itens.some(it=>!it.nome||it.nome.length>100||
-  !Number.isInteger(it.quantidade)||it.quantidade<1||it.quantidade>10000))
-  throw Error('Cadastre de 1 a 60 itens com nome e quantidade positiva.');
+ if(itens.length>60||itens.some(it=>!it.nome||it.nome.length>100||
+  !Number.isInteger(it.quantidade)||it.quantidade<1||it.quantidade>10000||
+  it.preco_unitario!==null&&(it.preco_unitario<0||it.preco_unitario>1e12)))
+  throw Error('Cadastre até 60 itens com quantidades e preços válidos. O kit vazio é permitido para ações sem insumos.');
  const cooldown=finite(input.cooldown_segundos)??0;
  if(cooldown<0||cooldown>86400||!Number.isInteger(cooldown))
   throw Error('Tempo de espera inválido.');
- return {...input,nome,status,premio_min:min,premio_max:max,cooldown_segundos:cooldown,
+ const tipo_acao=['blipada','atm','registradora','outros'].includes(input.tipo_acao)?input.tipo_acao:'blipada';
+ return {...input,nome,tipo_acao,status,premio_min:min,premio_max:max,cooldown_segundos:cooldown,
   itens,regras_confronto:rules,
   locais:Array.isArray(input.locais)?input.locais.slice(0,50):[]};
 }
