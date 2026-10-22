@@ -288,12 +288,50 @@
         </section>
         <section class="page" id="page-planejador-acoes">
           <div class="page-head">
-            <div><div class="eyebrow">ECONOMIA ILEGAL • MERCADO NEGRO • SEASON 2</div><h2>PLANEJADOR DE AÇÕES</h2>
-              <p class="page-subtitle">Escolha uma ação e compare o prêmio, o investimento e quanto a facção ganha ou perde. Preços de referência do Mercado Negro; simulações não alteram os valores oficiais.</p>
+            <div><div class="eyebrow">HIGH OS • CENTRO DE GESTÃO ECONÔMICA</div><h2>GESTÃO DE AÇÕES</h2>
+              <p class="page-subtitle">Monitore a carteira de ações, identifique custos e premiações fora do equilíbrio, priorize revisões e simule decisões com risco, equipe e investimento. Nenhuma hipótese altera automaticamente o Mercado Negro.</p>
             </div><span class="dev-badge">GESTÃO ECONÔMICA</span>
           </div>
           <div id="actionEconomyPlanner" class="ap-root">
             <div class="ap-topline" id="apSource">Carregando ações e catálogo de preços...</div>
+            <section class="ap-panel ap-management" aria-labelledby="apManagementTitle">
+              <div class="ap-heading">
+                <div><span class="ap-section-kicker">CONTROLE EXECUTIVO • CARTEIRA DE AÇÕES</span><h3 id="apManagementTitle">Central de gestão e prioridades</h3></div>
+                <span class="ap-status" id="apManagementDate">Indicadores calculados com dados oficiais publicados</span>
+              </div>
+              <div class="ap-management-kpis" id="apManagementKpis" aria-live="polite"></div>
+              <div class="ap-management-toolbar">
+                <label class="ap-field">Filtrar o diagnóstico
+                  <select id="apManagementFilter">
+                    <option value="TODAS">Todas as ações</option>
+                    <option value="REVISAR">Exigem revisão</option>
+                    <option value="PENDENTES">Com dados pendentes</option>
+                    <option value="IMPACTADAS">Afetadas por preço</option>
+                    <option value="PREJUIZO">Prejuízo mesmo na vitória</option>
+                    <option value="ESTAVEIS">Sem revisão prioritária</option>
+                  </select>
+                </label>
+                <label class="ap-field">Ordenar por
+                  <select id="apManagementSort">
+                    <option value="PRIORIDADE">Prioridade de gestão</option>
+                    <option value="LUCRO_MEMBRO">Maior lucro por membro</option>
+                    <option value="LUCRO_TOTAL">Maior lucro total</option>
+                    <option value="CAPITAL">Maior investimento</option>
+                    <option value="ROI">Maior retorno sobre capital</option>
+                  </select>
+                </label>
+                <label class="ap-field ap-management-search">Buscar ação
+                  <input id="apManagementSearch" type="search" placeholder="Nome da ação" aria-label="Buscar na carteira de ações">
+                </label>
+              </div>
+              <div class="ap-table-scroll ap-management-scroll">
+                <table class="ap-management-table">
+                  <thead><tr><th>AÇÃO / EQUIPE</th><th>DIAGNÓSTICO</th><th>CAPITAL</th><th>REPÕE NA VITÓRIA</th><th>LUCRO MÍNIMO</th><th>POR MEMBRO</th><th>GESTÃO</th></tr></thead>
+                  <tbody id="apManagementList"></tbody>
+                </table>
+              </div>
+              <p class="ap-row-muted" id="apManagementMethod"></p>
+            </section>
             <section class="ap-panel ap-intel-alerts" aria-labelledby="apPriceAlertsTitle">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">REVISÃO DA ECONOMIA</span><h3 id="apPriceAlertsTitle">Mudanças no custo das ações</h3></div>
