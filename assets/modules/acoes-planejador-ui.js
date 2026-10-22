@@ -485,6 +485,8 @@ function exportAnalysis(){
 }
 function listeners(){
  root.addEventListener('click',ev=>{
+  const manage=ev.target.closest('[data-ap-manage]');
+  if(manage){choose(manage.dataset.apManage);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
   const ranked=ev.target.closest('[data-ap-ranked]');
   if(ranked){choose(ranked.dataset.apRanked);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
   const rank=ev.target.closest('[data-ap-rank]');
@@ -510,6 +512,7 @@ function listeners(){
  root.addEventListener('input',ev=>{
   const target=ev.target;
   if(target.id==='apSearch'){state.search=target.value;actionsList();return;}
+  if(target.id==='apManagementSearch'){management.search=target.value;renderManagement();return;}
   const indexQty=target.dataset.apQty,indexPrice=target.dataset.apPrice;
   if(indexQty!==undefined||indexPrice!==undefined){
    const id=Number(indexQty??indexPrice);
@@ -547,11 +550,14 @@ function listeners(){
   }
   if(target.id==='apTax')actionsList();
   if(target.id==='apTax')rankBoard();
+  if(['apTax','apProfitGoal','apRoiGoal'].includes(target.id))renderManagement();
   summary();
  });
  root.addEventListener('change',ev=>{
   const e=ev.target;
-  if(e.id==='apStatusFilter'){state.status=e.value;actionsList();}
+  if(e.id==='apManagementFilter'){management.filter=e.value;renderManagement();}
+  else if(e.id==='apManagementSort'){management.sort=e.value;renderManagement();}
+  else if(e.id==='apStatusFilter'){state.status=e.value;actionsList();}
   else if(e.id==='apRankingLimit'){state.rankLimit=Number(e.value)||10;rankBoard();}
   else if(e.id==='apPriceMode'){state.priceMode=e.value;state.prices={};render();}
   else if(e.id==='apKitMode'){state.kitMode=e.value;state.quantities={};render();}
@@ -566,7 +572,11 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
  approveHandler=onApproveAction;
  onReadReference=readReference;onSaveReference=savePriceReference;
  onRejectAction=rejectAction;onReadDecisions=readDecisions;onReadSheet=readSheet;
- root=el('actionEconomyPlanner');if(!root||ready)return;
+ root=el('actionEconomyPlanner');if(!root)return;
+ if(ready){
+  if(onReadReference){try{reference=await onReadReference();}catch(e){console.warn('[AÇÕES] Referência indisponível',e);}}
+  await refreshPriceCatalog();return;
+ }
  ready=true;
  try{
   const responses=await Promise.all([fetch(ACOES_SOURCE,{cache:'no-store'}),fetch(CATALOGO_SOURCE,{cache:'no-store'})]);
