@@ -61,7 +61,7 @@ export function analyzeDecision(action,catalog,{
  const totalMinutes=wait===null||duration===null?null:wait+duration;
  const hourly=totalMinutes>0&&p.netMin!==null?round(p.netMin*60/totalMinutes/teamN):null;
  const expected=win===null||p.netMin===null||p.loss===null?null:round(win*p.netMin+(1-win)*p.loss);
- const breakEven=p.netMin===null||p.loss===null||p.netMin-p.loss<=0?null:(-p.loss)/(p.netMin-p.loss);
+ const breakEven=p.netMin===null||p.loss===null||p.netMin<=0?null:(-p.loss)/(p.netMin-p.loss);
  // A margem de retorno depende da probabilidade estimada, quando fornecida.
  // A chance NÃO é inventada a partir da quantidade de policiais.
  const roiTarget=Math.max(0,Number(roi)||0);
