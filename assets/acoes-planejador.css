@@ -184,3 +184,31 @@
 .ap-root #apPublicationStatus{margin-top:10px;font-size:11px;color:#e4b98f}
 @media(max-width:1150px){.ap-root .ap-intel-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.ap-root .ap-intel-decision{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.ap-root .ap-intel-alerts{padding:14px}.ap-root .ap-intel-fields{grid-template-columns:1fr 1fr}.ap-root .ap-price-alert{flex-direction:column;align-items:stretch}.ap-root .ap-price-alert>span:last-child{text-align:left}.ap-root .ap-intel-decision{grid-template-columns:1fr 1fr}}
+
+/* HIGH OS • Centro de gestão de ações (painel da carteira) */
+.ap-root .ap-management{padding:20px;margin-bottom:18px;background:linear-gradient(155deg,#20192d,#12101c 85%);border-color:#67517e}
+.ap-root .ap-management h3{font-size:22px;letter-spacing:-.03em}
+.ap-root .ap-management-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0}
+.ap-root .ap-management-kpis .ap-kpi{min-height:99px;background:#2b203c}
+.ap-root .ap-management-kpis .ap-kpi strong{font-size:clamp(16px,2vw,25px)}
+.ap-root .ap-management-toolbar{display:grid;grid-template-columns:minmax(145px,1fr) minmax(180px,1fr) minmax(200px,1.5fr);gap:10px;margin:14px 0}
+.ap-root .ap-management-scroll{border:1px solid #4b385d;border-radius:11px;background:#130f1e}
+.ap-root .ap-management-table{min-width:920px}
+.ap-root .ap-management-table td,.ap-root .ap-management-table th{text-align:left}
+.ap-root .ap-management-table td:not(:first-child),.ap-root .ap-management-table th:not(:first-child){text-align:right}
+.ap-root .ap-management-table td{padding:12px 10px}
+.ap-root .ap-management-table tr:hover td{background:#2c2040}
+.ap-root .ap-management-action{display:flex;align-items:center;gap:9px;text-align:left;min-width:150px}
+.ap-root .ap-management-action img{width:45px;height:39px;object-fit:cover;border-radius:6px;border:1px solid #594670;background:#2f2041}
+.ap-root .ap-management-action b{display:block;font-size:11px;color:#f4eaff}
+.ap-root .ap-management-action small{display:block;font-size:10px;color:var(--ap-muted);margin-top:3px}
+.ap-root .ap-management-diagnosis{display:block;font-size:10px;font-weight:800;color:#dbc0f4}
+.ap-root .ap-management-diagnosis.urgent{color:#ffb0ae}
+.ap-root .ap-management-diagnosis.warn{color:#f5ce84}
+.ap-root .ap-management-reason{display:block;color:#aa99bf;font-size:10px;margin-top:4px;font-weight:400;line-height:1.4;max-width:210px;margin-left:auto}
+.ap-root .ap-management-open{white-space:nowrap;border:1px solid #8162aa;color:#f0dcff;border-radius:7px;background:#342448;padding:8px 11px;font-size:10px;font-weight:800}
+.ap-root .ap-management-open:hover{border-color:#ceabff;background:#553674}
+.ap-root .ap-management-table .ap-positive{font-weight:750}
+.ap-root .ap-management-table .ap-negative{font-weight:750}
+@media(max-width:1100px){.ap-root .ap-management-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:680px){.ap-root .ap-management-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ap-root .ap-management-toolbar{grid-template-columns:1fr}.ap-root .ap-management h3{font-size:18px}.ap-root .ap-management{padding:14px}}
