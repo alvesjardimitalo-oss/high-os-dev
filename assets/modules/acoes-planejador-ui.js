@@ -2,6 +2,7 @@ import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=3';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=1';
+import {createActionWorkspace} from './acoes-workspace.js?v=1';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -10,7 +11,7 @@ const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percen
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
 let approveHandler=null,approvedThisSession=new Set();
 let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecisions=null,onReadSheet=null;
-let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null;
+let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null,workspace=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:DEFAULT_MANAGER_WIN_CHANCE,targetHourly:0};
 const management={filter:'TODAS',sort:'PRIORIDADE',search:'',
@@ -22,7 +23,19 @@ const managementOptions=()=>({tax:state.tax,ammoUse:state.ammoUse,
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
-const decision=()=>analyzeDecision(action(),catalog,{...options(),team:state.team,referenceTeam:defaultTeam(action())});
+const decision=()=>{
+ const d=analyzeDecision(action(),catalog,{...options(),team:state.team,referenceTeam:defaultTeam(action())});
+ if(action()?.origemCadastro!=='OFICIAL')d.eligibleForSheet=false;
+ return d;
+};
+const combinePublished=()=>workspace?workspace.merged(applySheetPrizeOverrides(publishedActions,sheetOverrides)):
+ applySheetPrizeOverrides(publishedActions,sheetOverrides);
+function repaintRegistry(){
+ actions=combinePublished();
+ if(!action())selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
+ if(action())state.team=defaultTeam(action());
+ render();
+}
 const payoutPair=(title,min,max,style='')=>
  '<div class="ap-recommend-pair '+style+'"><span class="ap-recommend-pair-title">'+safe(title)+'</span>'+
  '<div class="ap-recommend-pair-values">'+
@@ -50,7 +63,7 @@ const kpi=(label,value,style='',info='')=>'<div class="ap-kpi '+style+'"><small>
 const chip=s=>'<span class="ap-tag '+(['BUFF','NERF','REVISAR CUSTO','INSUMO SEM PREÇO','EQUIPE INVÁLIDA'].includes(s)?'warning':s==='MANTER'?'good':'')+'">'+safe(s)+'</span>';
 function choose(name){
  selection=name;localIndex=0;state.prices={};state.quantities={};state.manualPayout=null;
- state.team=defaultTeam(action());el('apManual').value='';render();
+ state.team=defaultTeam(action());el('apManual').value='';render();workspace?.openProfile();
 }
 
 
@@ -145,10 +158,10 @@ async function refreshPriceCatalog(){
   if(responses.some(x=>!x.ok))throw Error('Fonte indisponível.');
   const data=await responses[0].json(),next=await responses[1].json();
   if(!Array.isArray(data.acoes)||!Array.isArray(next.itens))throw Error('Formato inválido.');
-  publishedActions=data.acoes;actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+  publishedActions=data.acoes;actions=combinePublished();
   catalog=next;meta=data.meta||{};lastPriceRead=new Date().toISOString();
   if(!action())selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
-  if(action())render();
+  render();
   lastPriceRead=new Date().toISOString();
   el('apSource').textContent='Mercado Negro • catálogo consultado agora • '+catalog.itens.length+
    ' produtos • '+actions.length+' ações'+(sheetOverrides.length?' • prêmios da planilha sobrepostos':'');
@@ -161,8 +174,8 @@ async function refreshSheetPrizes(){
  try{
   const result=await onReadSheet();
   sheetOverrides=result.prizes||[];
-  actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
-  if(action())render();
+  actions=combinePublished();
+  render();
   el('apCopyStatus').textContent='Prêmios lidos diretamente da planilha às '+new Date(result.readAt).toLocaleTimeString('pt-BR')+
    '. Se divergirem do Mercado Negro público, a publicação do catálogo permanece pendente.';
  }catch(e){el('apCopyStatus').textContent='Erro ao conferir planilha: '+(e.message||String(e));}
@@ -476,8 +489,9 @@ function summary(){
  scenarios();
 }
 function render(){
- if(!action())return;
- actionsList();renderManagement();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
+ actionsList();renderManagement();rankBoard();refreshPriceAlerts();
+ if(action()){teamOptions();photosAndRules();kitTable();summary();}
+ workspace?.paint();
 }
 async function copyProposal(){
  const a=action(),d=decision(),p=d.calc;
@@ -538,7 +552,7 @@ async function approveProposal(mode='sugestao'){
    const record={name:a.nome,min:result.actualMin,max:result.actualMax,
     buff:result.actualBuff,nerf:result.actualNerf};
    sheetOverrides=sheetOverrides.filter(x=>norm(x.name)!==norm(a.nome)).concat([record]);
-   actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+   actions=combinePublished();
    render();
   }
   message.textContent=result.verified?
@@ -611,11 +625,7 @@ function exportAnalysis(){
 }
 function listeners(){
  root.addEventListener('click',ev=>{
-  if(ev.target.closest('#apOpenStrategy')){
-   const details=el('apStrategyDetails');
-   if(details){details.open=true;details.scrollIntoView({behavior:'smooth',block:'start'});}
-   return;
-  }
+  if(ev.target.closest('#apOpenStrategy')){workspace?.openSuggestion();return;}
   const manage=ev.target.closest('[data-ap-manage]');
   if(manage){choose(manage.dataset.apManage);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
   const ranked=ev.target.closest('[data-ap-ranked]');
@@ -709,11 +719,16 @@ function listeners(){
 }
 export async function mountActionPlanner({onApproveAction=null,onReadReference:readReference=null,
  onSaveReference:savePriceReference=null,onRejectAction:rejectAction=null,
- onReadDecisions:readDecisions=null,onReadSheet:readSheet=null}={}){
+ onReadDecisions:readDecisions=null,onReadSheet:readSheet=null,
+ onReadRegistry:readRegistry=null,onMutateRegistry:mutateRegistry=null}={}){
  approveHandler=onApproveAction;
  onReadReference=readReference;onSaveReference=savePriceReference;
  onRejectAction=rejectAction;onReadDecisions=readDecisions;onReadSheet=readSheet;
  root=el('actionEconomyPlanner');if(!root)return;
+ if(!workspace)workspace=createActionWorkspace({root,
+  getActions:()=>actions,getPublished:()=>publishedActions,getCatalog:()=>catalog,
+  getSelected:()=>selection,select:name=>choose(name),refresh:repaintRegistry,
+  onReadRegistry:readRegistry,onMutateRegistry:mutateRegistry});
  if(ready){
   if(onReadReference){try{reference=await onReadReference();}catch(e){console.warn('[AÇÕES] Referência indisponível',e);}}
   await refreshPriceCatalog();return;
@@ -724,7 +739,8 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
   if(responses.some(r=>!r.ok))throw Error('Falha ao consultar o Mercado Negro. HTTP: '+responses.map(r=>r.status).join(' / '));
   const [data,prices]=await Promise.all(responses.map(r=>r.json()));
   if(!Array.isArray(data.acoes)||!data.acoes.length||!Array.isArray(prices.itens))throw Error('Formato de dados inválido ou incompleto.');
-  actions=data.acoes;publishedActions=data.acoes;catalog=prices;meta=data.meta||{};
+  publishedActions=data.acoes;catalog=prices;meta=data.meta||{};
+  await workspace.load();actions=combinePublished();
   lastPriceRead=new Date().toISOString();
   if(onReadReference){
    try{reference=await onReadReference();}
@@ -733,8 +749,8 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
   const publishedWash=Number(meta.taxa_lavagem);
   state.tax=Number.isFinite(publishedWash)&&publishedWash>=0&&publishedWash<1?publishedWash:.3;
   el('apTax').value=Math.round(state.tax*100);
-  selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0].nome;
-  state.team=defaultTeam(action());
+  selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
+  state.team=action()?defaultTeam(action()):0;
   el('apSource').textContent='Mercado Negro — '+actions.length+' ações carregadas • preços publicados em '+(catalog.meta?.atualizado_em||'data não informada')+' • dados oficiais não modificados';
   listeners();render();
  }catch(err){
