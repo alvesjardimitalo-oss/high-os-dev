@@ -6,7 +6,7 @@ async function browserModule(name){
  let src=readFileSync(new URL('../assets/modules/'+name,import.meta.url),'utf8');
  if(name==='metricas-motor.js'){
   const dep=readFileSync(new URL('../assets/modules/ocupacao.js',import.meta.url),'utf8');
-  src=src.replace("from './ocupacao.js'","from 'data:text/javascript,"+encodeURIComponent(dep)+"'");
+  src=src.replace("from './ocupacao.js'","from 'data:text/javascript,"+encodeURIComponent(dep).replaceAll("'","%27")+"'");
  }
  return import('data:text/javascript,'+encodeURIComponent(src));
 }
