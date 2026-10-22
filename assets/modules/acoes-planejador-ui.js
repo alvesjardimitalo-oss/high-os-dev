@@ -251,6 +251,16 @@ function rankBoard(){
 function showMainRecommendation(d){
  const panel=el('apSuggestedMain');if(!panel)return;
  const p=d.calc;
+ if(action()?.tipo_acao==='casas'&&p.min===null){
+  panel.className='ap-recommend-main ap-recommend-maintain';
+  panel.innerHTML='<div class="ap-recommend-top"><span>ROUBO DE CASAS • RECEITA VARIÁVEL</span>'+
+   '<strong>ITENS VENDIDOS AO NPC</strong></div>'+
+   '<p>Não existe premiação fixa para esta atividade. O retorno depende dos itens encontrados, da tabela de compra do NPC, da gazua ++ e da lavagem do dinheiro sujo.</p>'+
+   '<div class="ap-recommend-band"><span><b>Capital para entrar:</b> '+safe(money(p.kit.total))+'</span>'+
+   '<span><b>Itens gastos:</b> '+safe(money(p.kit.winCost))+'</span></div>'+
+   '<button type="button" id="apOpenNpc" class="ap-button primary">Calcular itens e vendas no NPC</button>';
+  return;
+ }
  if(!d.valid||!Number.isFinite(d.recommendedMin)){
   panel.className='ap-recommend-main ap-recommend-pending';
   panel.innerHTML='<div class="ap-recommend-top"><span>GESTÃO ECONÔMICA</span><strong>DADOS PENDENTES</strong></div><p>Conferir preço dos insumos, kit, regras de invasores e prêmios cadastrados.</p>';
@@ -299,7 +309,7 @@ function actionsList(){
    targetPerPlayer:state.targetPerPlayer,roi:state.roi,tolerance:state.tolerance,
    reference});
   const p=d.calc;
-  const match=d.valid&&Number.isFinite(d.recommendedMin)?
+  const match=a.tipo_acao==='casas'&&p.min===null?'RECEITA VARIÁVEL • COMPRADORES NPC':d.valid&&Number.isFinite(d.recommendedMin)?
    'MÍNIMO '+money(d.recommendedMin)+' · '+(d.recommendedDelta===0?'MANTER':
      (d.recommendedDelta>0?'+':'−')+money(Math.abs(d.recommendedDelta)))+
    ' · '+d.direction:
@@ -640,6 +650,7 @@ function exportAnalysis(){
 }
 function listeners(){
  root.addEventListener('click',ev=>{
+  if(ev.target.closest('#apOpenNpc')){workspace?.navigate('npc');return;}
   if(ev.target.closest('#apOpenStrategy')){workspace?.openSuggestion();return;}
   const manage=ev.target.closest('[data-ap-manage]');
   if(manage){choose(manage.dataset.apManage);return;}
