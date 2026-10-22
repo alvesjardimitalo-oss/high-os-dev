@@ -6,7 +6,7 @@
  * São cenários condicionais à VITÓRIA. Não representam retorno esperado
  * nem incluem tempo, risco de derrota ou chance de vitória não observada.
  */
-import {calculateAction,defaultTeam} from './acoes-core.js?v=3';
+import {calculateAction,defaultTeam} from './acoes-core.js?v=4';
 
 export const RANKING_MODES=Object.freeze([
  {id:'lucro-total',title:'Maiores lucros',label:'Lucro mínimo total ao vencer',field:'netMin',desc:true,unit:'money'},
