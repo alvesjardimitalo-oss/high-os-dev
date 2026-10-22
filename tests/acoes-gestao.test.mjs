@@ -71,6 +71,6 @@ test('HTML mantém subpáginas e identidade do High OS',()=>{
  for(const tab of ['overview','catalog','ranking','prices'])
   assert.match(html,new RegExp('data-ap-nav="'+tab+'"'));
  assert.match(css,/#page-planejador-acoes \.ap-root\{/);
- assert.match(html,/assets\/app\.js\?v=15\.9\.3/);
+ assert.match(html,/assets\/app\.js\?v=15\.10\.0/);
 });
 

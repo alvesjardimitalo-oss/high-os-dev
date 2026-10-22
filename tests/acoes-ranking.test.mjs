@@ -107,6 +107,6 @@ test('Painel, navegação para os detalhes e imagens integradas estão presentes
  assert.match(ui,/rankBoard\(\);refreshPriceAlerts\(\);[\s\S]*?teamOptions\(\)/);
  assert.match(ui,/actionPhoto\(a\)/);
  assert.match(ui,/data-ap-rank/);
- assert.match(app,/acoes-planejador-ui\.js\?v=18/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=19/);
 });
 

@@ -1,3 +1,4 @@
+import {actualHouseRun} from './roubos-loot-core.js?v=1';
 /**
  * HIGH OS • cadastro interno de ações.
  * Mantém a fonte pública do Mercado Negro intacta. Ações cadastradas e
@@ -60,7 +61,12 @@ export function cleanRegistry(raw){
    history:Array.isArray(v.history)?v.history.slice(-60):[],
    updatedAt:typeof v.updatedAt==='string'?v.updatedAt:null}];
  }));
- return {revision:Math.max(0,Number(data.revision)||0),entries:{...entries},hidden:{...hidden},npcMarkets};
+ const houseRuns=(Array.isArray(data.houseRuns)?data.houseRuns:[]).slice(-50).flatMap(row=>{
+  try{if(!row?.id||!Number.isFinite(Date.parse(row.at)))return [];
+   return [{...actualHouseRun(row.items,row),id:String(row.id).slice(0,100),at:row.at}];
+  }catch{return [];}
+ });
+ return {revision:Math.max(0,Number(data.revision)||0),entries:{...entries},hidden:{...hidden},npcMarkets,houseRuns};
 }
 export function cleanNpcProducts(products){
  if(!Array.isArray(products)||products.length>150)throw Error('Cadastre até 150 itens por NPC.');
@@ -96,6 +102,7 @@ export function mergeActionRegistry(official,raw){
 export function applyRegistryMutation(raw,{kind,entry,name,oldName},official=[]){
  const current=cleanRegistry(raw),entries={...current.entries},hidden={...current.hidden};
  const npcMarkets={...current.npcMarkets};
+ let houseRuns=[...current.houseRuns];
  const officialNames=new Set((official||[]).map(a=>normalizeActionName(a.nome)));
  const key=normalizeActionName(name||oldName||entry?.nome);
  if(kind==='save'){
@@ -108,6 +115,10 @@ export function applyRegistryMutation(raw,{kind,entry,name,oldName},official=[])
   }
   entries[nextKey]=prepared;
   delete hidden[nextKey];
+ }else if(kind==='house-run-save'){
+  const result=actualHouseRun(entry?.items,entry||{});
+  const now=new Date().toISOString();
+  houseRuns=[...houseRuns,{...result,id:now+'-'+(current.revision+1),at:now}].slice(-50);
  }else if(kind==='npc-save'){
   const market=String(entry?.market||'').toUpperCase();
   if(!NPC_MARKET_KEYS.includes(market))throw Error('Comprador NPC não reconhecido.');
@@ -128,5 +139,6 @@ export function applyRegistryMutation(raw,{kind,entry,name,oldName},official=[])
   if(!entries[key])throw Error('O cadastro interno não foi encontrado.');
   delete entries[key];delete hidden[key];
  }else throw Error('Operação de cadastro inválida.');
- return {...current,revision:current.revision+1,entries,hidden,npcMarkets};
+ return {...current,revision:current.revision+1,entries,hidden,npcMarkets,houseRuns};
 }
+

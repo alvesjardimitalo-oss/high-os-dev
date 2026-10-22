@@ -1,5 +1,6 @@
-import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=4';
-import {createNpcWorkbench} from './acoes-npc-ui.js?v=5';
+import {createHouseWorkbench} from './roubos-loot-ui.js?v=1';
+import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
+import {createNpcWorkbench} from './acoes-npc-ui.js?v=6';
 
 /** Navigation, profiles and Firestore-backed internal action registration.
  * The official market catalog is always read-only and remains the reference.
@@ -8,7 +9,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  const $=id=>root.querySelector('#'+id);
  const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
  let registry=cleanRegistry(),ready=false,view='overview',tab='resumo',draft=null,original='',busy=false;
- let lastLoadError='',npc=null;
+ let lastLoadError='',npc=null,houses=null;
  const published=()=>getPublished()||[];
  const current=()=>getActions().find(x=>x.nome===getSelected())||null;
  const writable=()=>Boolean(onMutateRegistry&&ready);
@@ -20,12 +21,12 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  async function load(){
   if(!onReadRegistry){ready=false;return;}
   try{
-   registry=cleanRegistry(await onReadRegistry());ready=true;lastLoadError='';message('');npc?.refresh();
+   registry=cleanRegistry(await onReadRegistry());ready=true;lastLoadError='';message('');npc?.refresh();houses?.refresh();
   }catch(e){ready=false;lastLoadError=String(e?.message||e);message('Cadastro interno indisponível: '+lastLoadError);}
  }
  function paint(){
   root.dataset.apSection=view;root.dataset.apProfileTab=tab;
-  const area=view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'roubados'):'acoes';
+  const area=view==='loot'?'roubados':view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'roubados'):'acoes';
   root.dataset.economyArea=area;
   root.querySelectorAll('[data-economy-area]').forEach(btn=>{
    if(btn.dataset.economyArea===area)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');
@@ -59,7 +60,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  }
  function navigate(next,subtab=tab){
   if(next==='npc'&&subtab==='casas')npc?.selectMarket('CASAS');
-  view=['overview','catalog','ranking','prices','npc','profile'].includes(next)?next:'overview';
+  view=['overview','catalog','ranking','prices','npc','profile','loot'].includes(next)?next:'overview';
   tab=['resumo','custos','cenario','sugestao'].includes(subtab)?subtab:'resumo';
   paint();
   root.scrollIntoView({behavior:'smooth',block:'start'});
@@ -160,9 +161,12 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   const area=ev.target.closest('[data-economy-area]');
   if(area){
    if(area.dataset.economyArea==='acoes')navigate('overview');
-   else{npc?.selectMarket(area.dataset.economyArea==='quebrados'?'ARMAS_QUEBRADAS':'CASAS');navigate('npc');}
+   else if(area.dataset.economyArea==='roubados')navigate('loot');
+   else{npc?.selectMarket('ARMAS_QUEBRADAS');navigate('npc');}
    return;
   }
+  if(ev.target.closest('#apHouseMerchant')){npc?.selectMarket('CASAS');navigate('npc');return;}
+  if(ev.target.closest('#apBackHouse')){navigate('loot');return;}
   const nav=ev.target.closest('[data-ap-nav]');
   if(nav){navigate(nav.dataset.apNav);return;}
   const profile=ev.target.closest('[data-ap-profile]');
@@ -213,9 +217,14 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
    registry=cleanRegistry(await onMutateRegistry({
     kind:'npc-save',entry,expectedRevision:registry.revision
    }));
-   return registry;
+   houses?.refresh();return registry;
   }
  });
+ houses=createHouseWorkbench({root,getRegistry:()=>registry,getCatalog,canEdit:writable,onSave:async entry=>{
+  if(!writable())throw Error('Sem permissão para registrar roubos.');
+  registry=cleanRegistry(await onMutateRegistry({kind:'house-run-save',entry,expectedRevision:registry.revision}));
+  return registry;
+ }});
  paint();
  return {load,merged,paint,openProfile,openSuggestion,navigate,reload};
 

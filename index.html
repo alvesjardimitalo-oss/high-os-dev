@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
-  <link rel="stylesheet" href="assets/acoes-planejador.css?v=12">
+  <link rel="stylesheet" href="assets/acoes-planejador.css?v=13">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -289,7 +289,7 @@
         <section class="page" id="page-planejador-acoes">
           <div class="page-head">
             <div><div class="eyebrow">HIGH OS • CENTRO DE GESTÃO ECONÔMICA</div><h2>ECONOMIA ILEGAL</h2>
-              <p class="page-subtitle">Gerencie ações blipadas, custos dos kits e pagamentos dos comerciantes. Acompanhe o dinheiro sujo gerado, compare a rentabilidade e avalie ajustes de preços e premiações.</p>
+              <p class="page-subtitle">Gerencie ações blipadas e o rendimento por tentativa dos roubos. Cruze o loot com o preço de venda, desconte os custos e acompanhe lucro, prejuízo e dinheiro sujo gerado.</p>
             </div><span class="dev-badge">GESTÃO ECONÔMICA</span>
           </div>
           <div id="actionEconomyPlanner" class="ap-root">
@@ -304,7 +304,7 @@
             <nav class="ap-navigation ap-economy-navigation" aria-label="Economia Ilegal">
               <button type="button" data-economy-area="acoes" aria-current="page">Planejador de Ações Blipadas</button>
               <button type="button" data-economy-area="quebrados">Comerciante de Itens Quebrados</button>
-              <button type="button" data-economy-area="roubados">Comerciante de Itens Roubados</button>
+              <button type="button" data-economy-area="roubados">Roubo de Casas e Loot</button>
             </nav>
             <nav class="ap-navigation ap-action-navigation" aria-label="Seções das ações blipadas">
               <button type="button" data-ap-nav="overview" aria-current="page">Visão geral</button>
@@ -365,10 +365,14 @@
               <div id="apPriceAlerts" class="ap-intel-alert-list" aria-live="polite"></div>
               <p id="apPublicationStatus" class="ap-row-muted">Preços e premiações oficiais podem depender de publicação no GitHub. Alterações no planejador não atualizam o Suricato Roubos.</p>
             </section>
+            <section class="ap-panel ap-house" data-ap-subpage="loot" aria-label="Rendimento dos roubos">
+              <div class="ap-heading"><div><span class="ap-section-kicker">RENDIMENTO POR TENTATIVA</span><h3>Gestão dos roubos</h3></div><button type="button" id="apHouseMerchant" class="ap-button">Etapa final • Comerciante de Itens Roubados</button></div>
+              <div id="apHouseWorkbench"></div>
+            </section>
             <section class="ap-panel ap-npc" data-ap-subpage="npc" aria-labelledby="apNpcHeading">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">MONITORAMENTO DA ECONOMIA ILEGAL</span>
-                  <h3 id="apNpcHeading">Comerciante de Itens Roubados</h3>
+                  <h3 id="apNpcHeading">Comerciante de Itens Roubados</h3><button type="button" class="ap-button" id="apBackHouse">Voltar ao rendimento dos roubos</button>
                   <p class="ap-sub">Controle o preço pago em dinheiro sujo e a quantidade já comprada pelo comerciante. O total por item é preço × quantidade; alterações de preço exigem histórico para apurar o pagamento real acumulado.</p></div>
               </div>
               <div class="ap-filter-row">
@@ -383,7 +387,7 @@
                   <tbody id="apNpcRows"></tbody>
                 </table>
               </div>
-              <p class="ap-row-muted">* Dinheiro sujo gerado: estimativa da quantidade comprada aos preços atuais. O contador cobre o período acumulado pelo NPC. Na simulação de casas, informe os itens encontrados por tentativa.</p>
+              <p class="ap-row-muted">* Dinheiro sujo gerado: estimativa da quantidade comprada aos preços atuais. O contador cobre o período acumulado pelo NPC. A análise por casa está em Roubo de Casas e Loot.</p>
               <div id="apNpcStats" class="ap-npc-stats"></div>
               <p id="apNpcHistory" class="ap-row-muted"></p>
               <div id="apNpcScenario" class="ap-npc-scenario">
@@ -1187,7 +1191,7 @@
   <script src="assets/mission-planner.js?v=12.18.1"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=15.9.3"></script>
+  <script type="module" src="assets/app.js?v=15.10.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>

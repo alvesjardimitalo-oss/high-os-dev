@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const moduleFrom=async name=>import('data:text/javascript,'+encodeURIComponent(readFileSync(new URL('../assets/modules/'+name,import.meta.url),'utf8')));
 const {BROKEN_ITEMS_SNAPSHOT:items,STOLEN_ITEMS_SNAPSHOT:stolen}=await moduleFrom('economia-npc-seed.js');
 const {npcStats,houseLootScenario}=await moduleFrom('acoes-npc-core.js');
-const {cleanNpcProducts}=await moduleFrom('acoes-cadastro.js');
+import {cleanNpcProducts} from '../assets/modules/acoes-cadastro.js';
 test('imagens dos quebrados preservam 28 preços, 2778 compras e 1125628 DS',()=>{
  assert.equal(items.length,28);assert.deepEqual(cleanNpcProducts(items),items);
  const result=npcStats(items);assert.equal(result.observed,28);assert.equal(result.units,2778);assert.equal(result.grossDirty,1125628);

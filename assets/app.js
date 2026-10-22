@@ -1585,15 +1585,15 @@ const ACTION_REGISTRY_DOC='acoes_cadastro_v1';
 async function actionReadRegistry(){
  if(!currentUser||!canViewModule('planejador-acoes'))throw Error('Acesso ao Planejador de Ações não autorizado.');
  const snap=await getDoc(doc(db,'highos','data','config',ACTION_REGISTRY_DOC));
- const {cleanRegistry}=await import('./modules/acoes-cadastro.js?v=4');
+ const {cleanRegistry}=await import('./modules/acoes-cadastro.js?v=5');
  return cleanRegistry(snap.exists()?snap.data():null);
 }
 async function actionMutateRegistry({kind,entry=null,name='',oldName='',expectedRevision}={}){
  // O match /highos/data/config/{outro} das rules atuais permite edição só
  // para ADMIN; nenhuma nova regra Firebase precisa ser publicada.
  if(!currentUser||!isAdmin()||!canEditModule('economia'))throw Error('Cadastro de ações disponível apenas para administrador com acesso à Economia.');
- if(!['save','delete','archive','restore','npc-save'].includes(kind))throw Error('Operação inválida.');
- const {applyRegistryMutation}=await import('./modules/acoes-cadastro.js?v=4');
+ if(!['save','delete','archive','restore','npc-save','house-run-save'].includes(kind))throw Error('Operação inválida.');
+ const {applyRegistryMutation}=await import('./modules/acoes-cadastro.js?v=5');
  const source=await fetch('https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/acoes-blipadas.json',{cache:'no-store'});
  if(!source.ok)throw Error('Não foi possível conferir ações oficiais. Nenhuma alteração aplicada.');
  const published=(await source.json()).acoes||[];
@@ -1608,7 +1608,7 @@ async function actionMutateRegistry({kind,entry=null,name='',oldName='',expected
  });
  try{
   await addDoc(histCol,{tipo:'CADASTRO_ACOES',operacao:kind,
-   acao:String(entry?.nome||entry?.market||name||oldName).slice(0,100),
+   acao:String(entry?.nome||entry?.market||entry?.label||name||oldName).slice(0,100),
    usuario:currentUser.email,data:serverTimestamp(),revisao:result.revision});
  }catch(err){console.warn('[AÇÕES] Cadastro salvo, mas auditoria histórica indisponível:',err);}
  return result;
@@ -1774,7 +1774,7 @@ if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','gr
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='chat')setTimeout(()=>startChat(),0);
 if(page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60);
-if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=18').then(mod=>mod.mountActionPlanner({
+if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=19').then(mod=>mod.mountActionPlanner({
  onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
  onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
  onRejectAction:canEditModule('economia')?actionRejectProposal:null,

@@ -742,3 +742,25 @@
 #page-planejador-acoes .ap-root[data-ap-section="npc"] .ap-toolbar{display:none!important}
 #page-planejador-acoes .ap-npc-total{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
 @media(max-width:720px){#page-planejador-acoes .ap-root .ap-economy-navigation{grid-template-columns:1fr!important}}
+
+#page-planejador-acoes .ap-root[data-ap-section="loot"] [data-ap-subpage="loot"]{display:block!important}
+#page-planejador-acoes .ap-root[data-ap-section="loot"] .ap-action-navigation,
+#page-planejador-acoes .ap-root[data-ap-section="loot"] .ap-toolbar{display:none!important}
+#page-planejador-acoes #apHouseWorkbench .ap-filter-row{margin:16px 0}
+#page-planejador-acoes #apHouseWorkbench h3{margin-top:24px}
+#page-planejador-acoes .ap-loot-catalog{margin-top:24px;border:1px solid var(--ap-border);border-radius:12px;padding:16px}
+#page-planejador-acoes .ap-loot-catalog summary{cursor:pointer;font-weight:600}
+#page-planejador-acoes .ap-house input{max-width:100%}
+
+#page-planejador-acoes #apHouseWorkbench [data-hl-stage]{display:none!important}
+#page-planejador-acoes #apHouseWorkbench[data-hl-stage="projecao"] [data-hl-stage="projecao"],
+#page-planejador-acoes #apHouseWorkbench[data-hl-stage="registro"] [data-hl-stage="registro"],
+#page-planejador-acoes #apHouseWorkbench[data-hl-stage="historico"] [data-hl-stage="historico"],
+#page-planejador-acoes #apHouseWorkbench[data-hl-stage="config"] [data-hl-stage="config"]{display:block!important}
+#page-planejador-acoes #apHouseWorkbench[data-hl-stage="historico"] .ap-hl-parameters,
+#page-planejador-acoes #apHouseWorkbench[data-hl-stage="config"] .ap-hl-parameters{display:none!important}
+
+/* A venda é a etapa final; a análise de rendimento fica no painel de roubos. */
+#page-planejador-acoes #apNpcScenario,
+#page-planejador-acoes .ap-npc thead th:nth-child(6),
+#page-planejador-acoes #apNpcRows td:nth-child(6){display:none!important}
