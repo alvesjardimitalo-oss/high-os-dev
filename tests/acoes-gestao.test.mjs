@@ -120,7 +120,7 @@ test('elementos de navegação e painel gerencial integrados à página original
 test('Planejador de Ações herda a identidade global do High OS sem afetar outras páginas',()=>{
  const css=readFileSync(new URL('../assets/acoes-planejador.css',import.meta.url),'utf8');
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
- assert.match(html,/assets\/acoes-planejador\.css\?v=8/);
+ assert.match(html,/assets\/acoes-planejador\.css\?v=10/);
  assert.doesNotMatch(html,/id="apStatusFilter"[^>]*style=/);
  assert.match(css,/#page-planejador-acoes \.ap-root\{/);
  for(const token of ['--surface-0','--h-panel-2','--line-soft','--text-1','--brand-soft','--ok','--err','--warn']){
