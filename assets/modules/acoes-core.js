@@ -16,6 +16,17 @@ const alias = Object.freeze({
  'MUNICAO FUZIL (X250)':'FUZIL 250X'
 });
 export const DEFAULT_WASH = .3;
+export const DEFAULT_AMMO_USE = .25;
+export const categoryOf=name=>{
+ const n=norm(name);
+ if(n.startsWith('MUNICAO '))return 'municao';
+ if(n.startsWith('COLETE'))return 'colete';
+ if(n.startsWith('ARMA '))return 'arma';
+ if(n.startsWith('PENDRIVE'))return 'acesso';
+ return 'consumivel';
+};
+const clamp=(value,min,max,defaultValue)=>Math.max(min,Math.min(max,numeric(value)??defaultValue));
+const cents=x=>Math.round(x*100)/100;
 export function numeric(v){
  if(v==null||typeof v==='boolean'||String(v).trim()==='')return null;
  const n=Number(v);
@@ -47,25 +58,43 @@ function qtyFor(item,team,mode){
  if(mode!=='por-jogador'||/^PENDRIVE/i.test(norm(item?.nome)))return official;
  return team;
 }
-export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogador',quantities={},prices={},reuse=.0}={}){
+export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogador',quantities={},prices={},priceShift=0,ammoUse=DEFAULT_AMMO_USE}={}){
  const nPlayers=Number(team)||defaultTeam(action);
- const recovery=Math.min(1,Math.max(0,numeric(reuse)??0));
+ const shift=clamp(priceShift,-.9,3,0);
+ const ammunitionUsed=clamp(ammoUse,0,1,DEFAULT_AMMO_USE);
  const lines=(action?.itens||[]).map((item,i)=>{
   const q=numeric(quantities[i]);
   const qty=q===null?qtyFor(item,nPlayers,kitMode):Math.max(0,Math.floor(q));
   const p=priceOf(item.nome,catalog,priceMode);
   const override=numeric(prices[i]);
-  const unit=override===null?p.unit:Math.max(0,override);
+  const baseUnit=override===null?p.unit:Math.max(0,override);
+  const unit=baseUnit===null?null:cents(baseUnit*(1+shift));
+  const category=categoryOf(item.nome);
+  const amount=unit===null?null:cents(qty*unit);
+  // A munição é reposta em pacotes completos (x100, x200, x250).
+  // É uma hipótese de compra; a taxa consumida pode ser ajustada.
+  const replacementQty=category==='arma'?0:category==='municao'?Math.min(qty,Math.ceil(qty*ammunitionUsed)):qty;
+  const winCost=unit===null?null:cents(replacementQty*unit);
   return {index:i,name:item.nome,qty,officialQty:Number(item.quantidade)||0,
-   unit,total:unit===null?null:qty*unit,missing:unit===null,source:override!==null?'Ajustado na simulação':p.source,
-   reference:p.name};
+   category,unit,baseUnit,total:amount,missing:unit===null,
+   source:override!==null?'Preço manual':p.source,
+   reference:p.name,replacementQty,winCost,
+   retainedValue:amount===null||winCost===null?null:cents(amount-winCost)};
  });
  const missing=lines.filter(i=>i.missing).map(i=>i.name);
- const total=missing.length?null:lines.reduce((sum,l)=>sum+l.total,0);
+ const total=missing.length?null:cents(lines.reduce((sum,l)=>sum+l.total,0));
+ const winCost=missing.length?null:cents(lines.reduce((sum,l)=>sum+l.winCost,0));
  const official=numeric(action?.custo);
- return {lines,missing,total,official,comparison:total===null||official===null?null:total-official,
-  // Contabilizar o kit integral é a hipótese conservadora; recuperação editável pelo gestor.
-  effectiveCost:total===null?null:total*(1-recovery),recovery,
+ const weapons=missing.length?null:cents(lines.filter(i=>i.category==='arma').reduce((s,l)=>s+l.total,0));
+ const ammoReplacement=missing.length?null:cents(lines.filter(i=>i.category==='municao').reduce((s,l)=>s+l.winCost,0));
+ const armors=missing.length?null:cents(lines.filter(i=>i.category==='colete').reduce((s,l)=>s+l.winCost,0));
+ const access=missing.length?null:cents(lines.filter(i=>i.category==='acesso').reduce((s,l)=>s+l.winCost,0));
+ const retained=total===null||winCost===null?null:cents(total-winCost);
+ return {lines,missing,total,official,comparison:total===null||official===null?null:cents(total-official),
+  // Capital para entrar na ação é diferente do gasto real após uma vitória.
+  winCost,lossCost:total,retained,weapons,ammoReplacement,armors,access,
+  priceShift:shift,ammoUse:ammunitionUsed,
+  effectiveCost:winCost,
   baselineMismatch:kitMode==='oficial'&&total!==null&&official!==null&&Math.abs(total-official)>1};
 }
 export function calculateAction(action,catalog,opts={}){
@@ -74,18 +103,24 @@ export function calculateAction(action,catalog,opts={}){
  const team=Number(opts.team)||defaultTeam(action,location);
  const rule=getRules(action,location).find(r=>r.invasores===team)||null;
  const teamValid=allowed.includes(team);
- const tax=Math.min(.99,Math.max(0,numeric(opts.tax)??DEFAULT_WASH));
+ const tax=clamp(opts.tax,0,.99,DEFAULT_WASH);
  const targetPerPlayer=Math.max(0,numeric(opts.targetPerPlayer)??20000);
  const targetROI=Math.max(0,numeric(opts.roi)??.25);
  const tolerance=Math.max(0,numeric(opts.tolerance)??.25);
  const kit=kitFor(action,catalog,{...opts,team});
- const cost=kit.effectiveCost;
- const min=numeric(action?.premio_min), max=numeric(action?.premio_max);
- const netMin=min===null||cost===null?null:min*(1-tax)-cost;
- const netMax=max===null||cost===null?null:max*(1-tax)-cost;
- const perPlayer=netMin===null?null:netMin/team;
- const targetProfit=cost===null?null:Math.max(targetPerPlayer*team,cost*targetROI);
- const payoutNeeded=targetProfit===null?null:Math.ceil((cost+targetProfit)/(1-tax));
+ const cost=kit.winCost;
+ const min=numeric(action?.premio_min),max=numeric(action?.premio_max);
+ const netMin=min===null||cost===null?null:cents(min*(1-tax)-cost);
+ const netMax=max===null||cost===null?null:cents(max*(1-tax)-cost);
+ // Na derrota: sem prêmio, perde o kit completo. Na vitória: repõe
+ // consumíveis e guarda armas e munições não gastas.
+ const loss=kit.total===null?null:-kit.total;
+ const firstRunNetMin=min===null||kit.total===null?null:cents(min*(1-tax)-kit.total);
+ const firstRunNetMax=max===null||kit.total===null?null:cents(max*(1-tax)-kit.total);
+ const perPlayer=netMin===null?null:cents(netMin/team);
+ // ROI alvo usa o capital que precisa estar em risco, não apenas as reposições.
+ const targetProfit=kit.total===null?null:Math.max(targetPerPlayer*team,kit.total*targetROI);
+ const payoutNeeded=targetProfit===null||cost===null?null:Math.ceil((cost+targetProfit)/(1-tax));
  const currentSpread=min>0&&max!==null?Math.max(0,max/min-1):.15;
  const payoutMax=payoutNeeded===null?null:Math.ceil(payoutNeeded*(1+currentSpread));
  const delta=payoutNeeded===null||min===null?null:payoutNeeded-min;
@@ -94,10 +129,11 @@ export function calculateAction(action,catalog,opts={}){
    netMin===null?'SEM PREMIAÇÃO':
    netMin<targetProfit*.95?'BUFF':
    netMin>targetProfit*(1+tolerance)?'NERF':'MANTER';
- const proposedNet=payoutNeeded===null||cost===null?null:payoutNeeded*(1-tax)-cost;
+ const proposedNet=payoutNeeded===null||cost===null?null:cents(payoutNeeded*(1-tax)-cost);
  return {name:action?.nome,status,team,teamValid,allowed,rule,kit,tax,targetROI,targetPerPlayer,
-  targetProfit,min,max,netMin,netMax,perPlayer,roi:netMin===null||!cost?null:netMin/cost,
-  payoutNeeded,payoutMax,delta,proposedNet,proposedPerPlayer:proposedNet===null?null:proposedNet/team,
+  targetProfit,min,max,netMin,netMax,loss,firstRunNetMin,firstRunNetMax,perPlayer,
+  roi:netMin===null||!kit.total?null:netMin/kit.total,
+  payoutNeeded,payoutMax,delta,proposedNet,proposedPerPlayer:proposedNet===null?null:cents(proposedNet/team),
   buffIncluded:Number(action?.buff)||0,nerfIncluded:Number(action?.nerf)||0,
   payoutAdjustable:status==='BUFF'||status==='NERF'||status==='MANTER'};
 }
