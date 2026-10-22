@@ -22,8 +22,9 @@ export function houseLootScenario(items=[],quantities=[],{lockpickUnit=null,lock
  for(let i=0;i<items.length;i++){
   const n=amount(quantities[i])??0;
   if(!Number.isInteger(n)||n<0||n>100000)throw Error('Informe quantidades inteiras e positivas.');
+  if(n===0)continue;
   const price=amount(items[i]?.precoSujo);
-  if(price===null||price<0)throw Error('Há um item sem preço definido.');
+  if(price===null||price<0)throw Error('Há um item selecionado sem preço definido.');
   units+=n;grossDirty+=n*price;
  }
  const costUnit=amount(lockpickUnit),qty=amount(lockpickQuantity);
