@@ -11,9 +11,9 @@ const alias = Object.freeze({
  'ARMA PISTOLA':'PISTOLA T54',
  'ARMA SUB':'UZI',
  'ARMA FUZIL':'FAL',
- 'MUNIÇÃO PISTOLA (X100)':'PISTOLA 100X',
- 'MUNIÇÃO SUB (X200)':'SMG 200X',
- 'MUNIÇÃO FUZIL (X250)':'FUZIL 250X'
+ 'MUNICAO PISTOLA (X100)':'PISTOLA 100X',
+ 'MUNICAO SUB (X200)':'SMG 200X',
+ 'MUNICAO FUZIL (X250)':'FUZIL 250X'
 });
 export const DEFAULT_WASH = .3;
 export function numeric(v){
