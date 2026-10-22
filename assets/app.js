@@ -1585,7 +1585,7 @@ const ACTION_REGISTRY_DOC='acoes_cadastro_v1';
 async function actionReadRegistry(){
  if(!currentUser||!canViewModule('planejador-acoes'))throw Error('Acesso ao Planejador de Ações não autorizado.');
  const snap=await getDoc(doc(db,'highos','data','config',ACTION_REGISTRY_DOC));
- const {cleanRegistry}=await import('./modules/acoes-cadastro.js?v=3');
+ const {cleanRegistry}=await import('./modules/acoes-cadastro.js?v=4');
  return cleanRegistry(snap.exists()?snap.data():null);
 }
 async function actionMutateRegistry({kind,entry=null,name='',oldName='',expectedRevision}={}){
@@ -1593,7 +1593,7 @@ async function actionMutateRegistry({kind,entry=null,name='',oldName='',expected
  // para ADMIN; nenhuma nova regra Firebase precisa ser publicada.
  if(!currentUser||!isAdmin()||!canEditModule('economia'))throw Error('Cadastro de ações disponível apenas para administrador com acesso à Economia.');
  if(!['save','delete','archive','restore','npc-save'].includes(kind))throw Error('Operação inválida.');
- const {applyRegistryMutation}=await import('./modules/acoes-cadastro.js?v=3');
+ const {applyRegistryMutation}=await import('./modules/acoes-cadastro.js?v=4');
  const source=await fetch('https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/acoes-blipadas.json',{cache:'no-store'});
  if(!source.ok)throw Error('Não foi possível conferir ações oficiais. Nenhuma alteração aplicada.');
  const published=(await source.json()).acoes||[];
@@ -1774,7 +1774,7 @@ if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','gr
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='chat')setTimeout(()=>startChat(),0);
 if(page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60);
-if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=12').then(mod=>mod.mountActionPlanner({
+if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=13').then(mod=>mod.mountActionPlanner({
  onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
  onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
  onRejectAction:canEditModule('economia')?actionRejectProposal:null,
