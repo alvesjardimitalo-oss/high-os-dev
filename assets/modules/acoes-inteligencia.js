@@ -2,7 +2,7 @@
  * O catálogo só publica UM prêmio por ação: escala por equipe é HIPÓTESE,
  * jamais um dado oficial. O risco requer estimativa explícita do gestor.
  */
-import {calculateAction,defaultTeam,availableTeams,norm,numeric} from './acoes-core.js?v=3';
+import {calculateAction,defaultTeam,availableTeams,norm,numeric} from './acoes-core.js?v=4';
 const round=v=>Math.round(v*100)/100;
 export const DEFAULT_MANAGER_WIN_CHANCE=.4;
 export function recommendedMaximum(currentMin,currentMax,recommendedMin){
