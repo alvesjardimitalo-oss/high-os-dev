@@ -95,3 +95,40 @@ test('Group existente no setor errado é sinalizado, sem criar cópia',async()=>
   assert.equal(result.categoryMismatches[0].group,'Armas01');
  });
 });
+
+test('Prefixo canônico do Group prevalece sobre segmento inconsistente (Mecânica)',async()=>{
+ const rows=fakeSheet();
+ rows[0][4]='DROGAS';
+ rows[1][6]='IlegalMechanic02';
+ await withSheet(rows,async batches=>{
+  const g={group:'IlegalMechanic02',segmento:'Drogas',perfilTecnico:{operacional:{}}};
+  const result=await syncBlipsCoordinates({token:'mock',groups:[g]});
+  assert.equal(result.created,0);
+  assert.deepEqual(result.categoryMismatches,[{group:'IlegalMechanic02',actual:'DROGAS',expected:'APOIO'}]);
+  assert.equal(batches.length,0);
+ });
+});
+
+test('Group de Munição não assume categoria Armas por segmento antigo',async()=>{
+ const rows=fakeSheet();
+ rows[1][6]='Municao10';
+ await withSheet(rows,async batches=>{
+  const g={group:'Municao10',segmento:'Armas',perfilTecnico:{operacional:{}}};
+  const result=await syncBlipsCoordinates({token:'mock',groups:[g]});
+  assert.equal(result.created,0);
+  assert.deepEqual(result.categoryMismatches,[{group:'Municao10',actual:'ARMAS',expected:'MUNICAO'}]);
+  assert.equal(batches.length,0);
+ });
+});
+
+test('Alteração explícita bloqueia campo histórico dividido em várias células',async()=>{
+ const rows=fakeSheet();
+ rows[2][7]='Outra coordenada técnica';
+ await withSheet(rows,async batches=>{
+  await assert.rejects(
+   syncBlipsCoordinates({token:'mock',groups:[group()],overwriteFieldsByGroup:{Armas01:['GARAGEMPUBLICA']}}),
+   /possui 2 células preenchidas/
+  );
+  assert.equal(batches.length,0,'falha deve ocorrer antes de qualquer batchUpdate');
+ });
+});
