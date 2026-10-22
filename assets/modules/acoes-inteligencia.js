@@ -78,6 +78,17 @@ export function analyzeDecision(action,catalog,{
  const direction=!valid?'PENDENTE':delta===null?'PENDENTE':
   delta>Math.max(500,Math.abs(p.min)*.02)?'CONSIDERAR BUFF':
   delta< -Math.max(500,Math.abs(p.min)*.02)?'REVISAR NERF':'MANTER';
+ // Exibe uma faixa recomendada legível, preservando o intervalo percentual
+ // original como referência. O máximo continua indicativo: a planilha
+ // calcula seus próprios prêmios e somente ela confirma o valor final.
+ const spread=p.min>0&&Number.isFinite(p.max)?Math.max(1,p.max/p.min):1;
+ const recommendedMin=!valid?null:direction==='MANTER'?p.min:suggested;
+ const recommendedMax=recommendedMin===null?null:Math.ceil(recommendedMin*spread);
+ const recommendedDelta=recommendedMin===null?null:round(recommendedMin-p.min);
+ const recommendedPercent=recommendedDelta===null||p.min<=0?null:recommendedDelta/p.min;
+ const recommendedProfit=recommendedMin===null||p.kit.winCost===null?null:
+   round(recommendedMin*(1-p.tax)-p.kit.winCost);
+ const recommendedPerMember=recommendedProfit===null?null:round(recommendedProfit/teamN);
  const remarks=[];
  if(modeled)remarks.push('Premiação por equipe calculada proporcionalmente; o catálogo NÃO confirma este valor.');
  if(!modeled&&allowed.length>1)remarks.push('O catálogo publica um prêmio único. Faixas diferentes de prêmio por equipe não foram informadas.');
@@ -90,7 +101,8 @@ export function analyzeDecision(action,catalog,{
  if(direction==='REVISAR NERF')remarks.push('A meta está abaixo do retorno projetado; risco e dificuldade exigem avaliação antes de reduzir.');
  return {calc:p,team:teamN,modeled,multiplier,officialMin:rawMin,officialMax:rawMax,
   winChance:win,wait,duration,totalMinutes,hourly,expected,breakEven,target,
-  suggested,delta,direction,remarks,valid,
+  suggested,delta,direction,remarks,valid,recommendedMin,recommendedMax,recommendedDelta,recommendedPercent,
+  recommendedProfit,recommendedPerMember,
   // Não aprovar prêmio proporcional hipotético ou critérios com insumos alterados.
   eligibleForSheet:valid&&!modeled&&!kitOptions.priceShift&&!Object.keys(kitOptions.quantities||{}).length&&
     !Object.keys(kitOptions.prices||{}).length};
