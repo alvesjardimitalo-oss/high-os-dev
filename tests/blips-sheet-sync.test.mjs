@@ -159,7 +159,7 @@ test('Hospital personalizado recebe quadro na categoria Hospital Ilegal',async()
  });
 });
 test('Uma seção personalizada já existente é reconhecida e reutilizada',async()=>{
- const rows=fakeSheet();rows[0][4]='MECÂNICA ILEGAL';rows[1][6]='N/A';
+ const rows=fakeSheet();rows[0][4]='MECÂNICA ILEGAL';rows[1][6]='N/A';rows[2][6]='';
  await withSheet(rows,async batches=>{
   const result=await syncBlipsCoordinates({token:'mock',groups:[{
    group:'IlegalMechanic02',segmento:'MECÂNICA ILEGAL',qg:'Nova Era',perfilTecnico:{operacional:{}}
