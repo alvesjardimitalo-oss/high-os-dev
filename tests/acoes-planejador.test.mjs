@@ -88,3 +88,16 @@ test('Página protegida pela permissão Economia e inicialização isolada',()=>
  assert.match(html,/id="page-planejador-acoes"/);
  assert.match(html,/id="apScenarios"/);
 });
+
+test('Item inativo do Mercado Negro não permite validar custo para buff/nerf',()=>{
+ const inactive={itens:products.itens.map(x=>x.item==='COLETE'?{...x,status:'inativo'}:x)};
+ const p=priceOf('COLETE',inactive,'pista');
+ assert.equal(p.unit,null);
+ assert.equal(p.listedInactive,true);
+ assert.equal(p.missing,true);
+ const result=calculateAction(store,inactive,{team:4});
+ assert.ok(result.kit.missing.includes('COLETE'));
+ assert.equal(result.kit.total,null);
+ assert.equal(result.status,'INSUMO SEM PREÇO');
+ assert.equal(result.payoutAdjustable,false);
+});
