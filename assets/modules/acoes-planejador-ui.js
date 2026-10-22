@@ -502,44 +502,54 @@ function render(){
  workspace?.paint();
 }
 async function copyProposal(){
- const a=action(),d=decision(),p=d.calc;
- if(!d.valid)return;
- const text=['HIGH ROLEPLAY — ANÁLISE ECONÔMICA DE AÇÃO',
- 'AÇÃO: '+a.nome,'AVALIAÇÃO: '+p.status,
- 'JOGADORES: '+p.team+' / POLICIAIS: '+(p.rule?.policiais??'Não informado'),
- 'PREÇOS: '+state.priceMode+' / ALTERAÇÃO HIPOTÉTICA: '+Math.round(state.priceShift*100)+'%',
- 'CONSUMO DE MUNIÇÃO: '+Math.round(state.ammoUse*100)+'% (reposição em pacotes inteiros)',
- 'CAPITAL PARA MONTAR O KIT: '+money(p.kit.total),
- 'ARMA(S) PRESERVADA(S) EM VITÓRIA: '+money(p.kit.weapons),
- 'REPOSIÇÃO APÓS VITÓRIA: '+money(p.kit.winCost),
- 'PERDA DO KIT NA DERROTA: '+money(p.kit.lossCost),
- 'PRÊMIO ATUAL (SUJO): '+money(p.min)+' a '+money(p.max),
+ const a=action(),d=decision(),p=d.calc;if(!a||!d.valid)return;
+ const lines=['HIGH RP • PLANEJAMENTO ECONÔMICO DE ROUBOS','AÇÃO: '+a.nome,
+ 'TIPO: '+(a.tipo_acao||'blipada'),
+ 'INVASORES: '+p.team+' | POLICIAIS: '+(p.rule?.policiais??'a definir'),
+ 'REGRAS: '+getRules(a,place()).map(r=>r.invasores+' invasor(es) / '+r.policiais+' policiais / '+(r.refens||0)+' reféns').join('; '),
+ 'COOLDOWN: '+(a.cooldown_segundos||0)+' segundos',
+ 'KIT: '+p.kit.lines.map(x=>x.name+' x'+x.qty+' / '+money(x.unit)+' un.').join('; '),
+ 'PREÇO UTILIZADO: '+state.priceMode,
+ 'CAPITAL PARA INICIAR: '+money(p.kit.total),
+ 'INSUMOS GASTOS/REPOSIÇÃO: '+money(p.kit.winCost),
+ 'PRÊMIO MÍNIMO ATUAL (SUJO): '+money(p.min),
+ 'PRÊMIO MÁXIMO ATUAL (SUJO): '+money(p.max),
  'LAVAGEM: '+percent(p.tax),
- 'LUCRO SE VENCER: '+money(p.netMin)+' a '+money(p.netMax),
- 'LUCRO POR JOGADOR SE VENCER: '+money(p.perPlayer),
- 'SALDO NO CAIXA AO VENCER NA PRIMEIRA AÇÃO COM KIT NOVO: '+money(p.firstRunNetMin),
- 'PREJUÍZO SE PERDER: '+money(p.loss)+' (sem prêmio; equipamento perdido)',
- 'META POR JOGADOR: '+money(p.targetPerPlayer)+' / META ROI DO KIT: '+percent(p.targetROI),
- 'RESULTADO ESPERADO ATUAL (CHANCE GERENCIAL): '+money(d.expected),
- 'RESULTADO ESPERADO APÓS PROPOSTA: '+money(d.recommendedExpected),
- 'PONTO DE EQUILÍBRIO TEÓRICO, NÃO SUGESTÃO: '+money(d.riskBreakEvenMin),
- 'PRÊMIO MÍNIMO RECOMENDADO (AJUSTE MODERADO): '+money(d.recommendedMin),
- 'PRÊMIO MÁXIMO INDICATIVO: '+money(d.recommendedMax),
- 'PRÊMIO MÁXIMO PUBLICADO: '+money(p.max),
- 'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
- 'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único, armas preservadas na vitória e chance de vitória '+(d.winChance===null?'não informada':percent(d.winChance))+' (premissa, não dado observado).',
- 'DECISÃO: '+d.direction,'RISCO: chance '+(d.winChance===null?'não informada':percent(d.winChance))+' | espera '+(d.wait===null?'não informada':d.wait+' min'),
- 'AVISO: se prêmio proporcional for selecionado, o valor é hipotético, não oficial.',
- 'Premiações atuais já incluem buffs/nerfs existentes. Nenhuma mudança automática no jogo.'].join('\n');
+ 'LUCRO COM MÍNIMO APÓS LAVAGEM E INSUMOS: '+money(p.netMin),
+ 'LUCRO COM MÁXIMO APÓS LAVAGEM E INSUMOS: '+money(p.netMax),
+ 'VARIAÇÃO NO CAPITAL DESDE REFERÊNCIA: '+money(d.deltaCapital),
+ 'VARIAÇÃO NA REPOSIÇÃO DESDE REFERÊNCIA: '+money(d.deltaReplacement),
+ 'DECISÃO ECONÔMICA: '+d.direction,
+ 'MÍNIMO APÓS IMPACTO DE PREÇOS: '+money(d.recommendedMin),
+ 'MÁXIMO INDICATIVO APÓS IMPACTO DE PREÇOS: '+money(d.recommendedMax),
+ 'Sem referência de custo não existe proposta automática de buff ou redução.',
+ 'Nenhuma chance de vitória foi usada para determinar as recompensas.'];
  const status=el('apCopyStatus');
- try{await navigator.clipboard.writeText(text);status.textContent='Análise copiada. Verifique os cenários antes de qualquer alteração oficial.';}
+ try{await navigator.clipboard.writeText(lines.join('\n'));status.textContent='Análise de custo copiada.';}
  catch{status.textContent='Área de transferência indisponível no navegador.';}
+}
+async function copySuricato(){
+ const a=action(),d=decision();if(!a||!d.valid)return;
+ const minimum=Number.isFinite(state.manualPayout)&&state.manualPayout>0?state.manualPayout:d.recommendedMin;
+ const maximum=Number.isFinite(state.manualMaxPayout)&&state.manualMaxPayout>0?
+  state.manualMaxPayout:Number.isFinite(state.manualPayout)&&state.manualPayout>0?
+  recommendedMaximum(d.calc.min,d.calc.max,minimum):d.recommendedMax;
+ const status=el('apCopyStatus');
+ if(!Number.isFinite(minimum)||!Number.isFinite(maximum)||maximum<minimum){
+  status.textContent='Corrija os valores mínimo e máximo antes de copiar para o Suricato.';return;
+ }
+ const lines=['AÇÃO: '+a.nome,
+  'PRÊMIO MÍNIMO (SUJO): '+Math.round(minimum),
+  'PRÊMIO MÁXIMO (SUJO): '+Math.round(maximum)];
+ try{await navigator.clipboard.writeText(lines.join('\n'));
+  status.textContent='Valores mínimo e máximo copiados para cadastro manual no Suricato Roubos.';
+ }catch{status.textContent='Não foi possível copiar os valores.';}
 }
 async function approveProposal(mode='sugestao'){
  if(!approveHandler)return;
  const a=action(),d=decision(),p=d.calc;
  const manual=mode==='manual',value=manual?state.manualPayout:d.recommendedMin;
- const proposedMax=manual?recommendedMaximum(p.min,p.max,value):d.recommendedMax;
+ const proposedMax=manual?recommendedMaximum(p.min,p.max,value):d.recommendedMax; // Planilha oficial usa fórmula; máximo livre destina-se ao Suricato.
  if(!d.eligibleForSheet||approvedThisSession.has(a.nome)||!Number.isFinite(value)||
     !Number.isFinite(proposedMax)||proposedMax<value||value<=0||Math.abs(value-p.min)<=1){
   el('apCopyStatus').textContent='Prêmio inválido ou cenário hipotético. Restaure os preços e o prêmio publicados antes de aprovar.';
@@ -649,6 +659,7 @@ function listeners(){
   const preset=ev.target.closest('[data-ap-shift]');
   if(preset){state.priceShift=Number(preset.dataset.apShift)/100;el('apPriceShift').value=Math.round(state.priceShift*100);render();return;}
   if(ev.target.closest('#apCopy'))copyProposal();
+  if(ev.target.closest('#apCopySuricato'))copySuricato();
   if(ev.target.closest('#apApproveManual')){approveProposal('manual');return;}
   if(ev.target.closest('#apApprove')){approveProposal('sugestao');return;}
   if(ev.target.closest('#apReject')){rejectProposal();return;}
@@ -698,13 +709,13 @@ function listeners(){
    }
    return;
   }
-  const fields={apProfitGoal:['targetPerPlayer',1],apRoiGoal:['roi',.01],
+  const fields={apManualMax:['manualMaxPayout',1],apProfitGoal:['targetPerPlayer',1],apRoiGoal:['roi',.01],
    apTolerance:['tolerance',.01],apTax:['tax',.01],apManual:['manualPayout',1],
    apPoliceWait:['policeWaitMinutes',1],apActionDuration:['estimatedActionMinutes',1],
    apWinChance:['winChance',.01],apHourlyTarget:['targetHourly',1]};
   const f=fields[target.id];if(!f)return;
   if(target.value===''){
-   if(['apManual','apPoliceWait','apActionDuration','apWinChance'].includes(target.id))state[f[0]]=null;
+   if(['apManual','apManualMax','apPoliceWait','apActionDuration','apWinChance'].includes(target.id))state[f[0]]=null;
   }else{
    const v=Number(target.value);
    if(Number.isFinite(v))state[f[0]]=Math.max(0,v)*f[1];
