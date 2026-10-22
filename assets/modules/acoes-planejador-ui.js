@@ -1,6 +1,6 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
-import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides} from './acoes-inteligencia.js?v=1';
+import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=2';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=1';
 
 const el=id=>document.getElementById(id);
@@ -12,9 +12,9 @@ let approveHandler=null,approvedThisSession=new Set();
 let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecisions=null,onReadSheet=null;
 let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
- targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:null,targetHourly:0};
+ targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:DEFAULT_MANAGER_WIN_CHANCE,targetHourly:0};
 const management={filter:'TODAS',sort:'PRIORIDADE',search:'',
- winChance:null,policeWaitMinutes:null,estimatedActionMinutes:null};
+ winChance:DEFAULT_MANAGER_WIN_CHANCE,policeWaitMinutes:null,estimatedActionMinutes:null};
 const managementOptions=()=>({tax:state.tax,ammoUse:state.ammoUse,
  accessConsumed:state.accessConsumed,roi:state.roi,targetPerPlayer:state.targetPerPlayer,
  reference,winChance:management.winChance,policeWaitMinutes:management.policeWaitMinutes,
@@ -23,6 +23,29 @@ const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
 const decision=()=>analyzeDecision(action(),catalog,{...options(),team:state.team,referenceTeam:defaultTeam(action())});
+const payoutPair=(title,min,max,style='')=>
+ '<div class="ap-recommend-pair '+style+'"><span class="ap-recommend-pair-title">'+safe(title)+'</span>'+
+ '<div class="ap-recommend-pair-values">'+
+ '<span><small>VALOR MÍNIMO</small><strong>'+safe(money(min))+'</strong></span>'+
+ '<span><small>VALOR MÁXIMO</small><strong>'+safe(money(max))+'</strong></span>'+
+ '</div></div>';
+function renderApprovalPayoutRange(d){
+ const node=el('apDecisionPayoutCompare');if(!node)return;
+ const p=d.calc;
+ const custom=Number.isFinite(state.manualPayout)&&state.manualPayout>0;
+ const min=custom?state.manualPayout:d.recommendedMin;
+ const max=custom?recommendedMaximum(p.min,p.max,min):d.recommendedMax;
+ node.innerHTML='<div class="ap-recommend-top"><b>CONFERÊNCIA DOS DOIS PRÊMIOS</b>'+
+  '<span>'+safe(d.direction)+'</span></div>'+
+  '<div class="ap-recommend-two-columns">'+
+  payoutPair('ATUAIS • SUJO',p.min,p.max)+
+  payoutPair(custom?'MANUAL • PROPOSTO':'RECOMENDADOS • SUJO',min,max,'ap-recommend-final')+
+  '</div><p class="ap-row-muted">Chance estimada de vitória: '+
+  safe(d.winChance===null?'não informada':percent(d.winChance))+
+  ' • '+safe(p.team)+' invasores / '+safe(p.rule?.policiais??'?')+
+  ' policiais. O valor máximo proposto é calculado pela proporção atual e é INDICATIVO; só a fórmula da planilha confirma o resultado final.</p>';
+}
+
 const kpi=(label,value,style='',info='')=>'<div class="ap-kpi '+style+'"><small>'+safe(label)+'</small><strong>'+safe(value)+'</strong>'+(info?'<div class="ap-extra">'+safe(info)+'</div>':'')+'</div>';
 const chip=s=>'<span class="ap-tag '+(['BUFF','NERF','REVISAR CUSTO','INSUMO SEM PREÇO','EQUIPE INVÁLIDA'].includes(s)?'warning':s==='MANTER'?'good':'')+'">'+safe(s)+'</span>';
 function choose(name){
@@ -67,7 +90,7 @@ function renderManagement(){
   ' com prejuízo na vitória • capital mediano '+money(k.capitalMediano)+
   '. '+report.conditions+' Cenários de risco são opcionais, hipotéticos e não incluem cooldown. '+
   (report.scenario.chance===null?'Sem chance informada, resultado esperado permanece indisponível. ':'')+
-  'Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
+  'Chance padrão de vitória de 40% é uma premissa gerencial alterável, não taxa observada. Alertas de preço exigem referência salva; esta tela não publica buffs ou nerfs.';
  el('apManagementDate').textContent='Fonte: Mercado Negro'+
   (lastPriceRead?' • leitura '+new Date(lastPriceRead).toLocaleTimeString('pt-BR'):'')+
   (sheetOverrides.length?' • prêmios conferidos na planilha':' • prêmio do catálogo');
@@ -238,17 +261,17 @@ function showMainRecommendation(d){
  panel.innerHTML='<div class="ap-recommend-top"><span>PRÊMIO RECOMENDADO • SUJO</span>'+
   chip(d.direction)+'</div>'+
   '<div class="ap-recommend-compare">'+
-   '<div><small>PRÊMIO ATUAL (MÍNIMO)</small><strong>'+safe(money(p.min))+'</strong></div>'+
+   payoutPair('ATUAL • SUJO',p.min,p.max)+
    '<span class="ap-recommend-arrow" aria-hidden="true">→</span>'+
-   '<div class="ap-recommend-final"><small>PRÊMIO RECOMENDADO (MÍNIMO)</small>'+
-   '<strong>'+safe(money(d.recommendedMin))+'</strong></div></div>'+
+   payoutPair('RECOMENDADO • SUJO',d.recommendedMin,d.recommendedMax,'ap-recommend-final')+
+   '</div>'+
   '<div class="ap-recommend-band"><span><b>Diferença:</b> '+safe(changeLabel)+'</span>'+
-   '<span><b>Máximo indicativo:</b> '+safe(money(d.recommendedMax))+'</span>'+
+   '<span><b>Chance de vitória (premissa):</b> '+safe(d.winChance===null?'Não informada':percent(d.winChance))+'</span>'+
    '<span><b>Lucro por membro com o prêmio recomendado:</b> '+safe(money(d.recommendedPerMember))+'</span></div>'+
   '<div class="ap-recommend-foot"><small>'+safe(p.team)+' invasores • custo de reposição '+
    safe(money(p.kit.winCost))+' • capital em risco '+safe(money(p.kit.total))+
    (d.modeled?' • PREMIAÇÃO PROPORCIONAL HIPOTÉTICA':' • referência: prêmio publicado')+
-   '. O máximo é uma estimativa com a mesma faixa percentual; só a planilha confirma o valor final.</small>'+
+   '. A faixa recomendada é estimada; somente a fórmula da planilha confirma o máximo final.</small>'+
    '<button type="button" class="ap-button ap-recommend-details" id="apOpenStrategy">Analisar / aprovar / recusar</button></div>';
 }
 
@@ -349,6 +372,7 @@ function summary(){
  const a=action();if(!a)return;
  const d=decision(),p=d.calc;
  showMainRecommendation(d);
+ renderApprovalPayoutRange(d);
  el('apActionStatus').innerHTML=chip(a.status==='inativo'?'INATIVA':d.direction);
  el('apKitComputed').textContent='Kit cadastrado na fonte: '+money(p.kit.official)+' • Capital simulado: '+money(p.kit.total);
  const warns=[];
@@ -392,7 +416,7 @@ function summary(){
  el('apGoals').innerHTML=[
   kpi('Meta de lucro total na vitória',money(p.targetProfit),'gold','Meta individual ou ROI sobre kit completo'),
   kpi('Prêmio mínimo recomendado (sujo)',money(d.recommendedMin),'gold'),
-  kpi('Prêmio máximo indicativo após ajuste',money(d.recommendedMax)),
+  kpi('Prêmio máximo recomendado (estimado)',money(d.recommendedMax)),
   kpi('Diferença recomendada',d.recommendedDelta===null?'A confirmar':
    (d.recommendedDelta>=0?'+':'−')+money(Math.abs(d.recommendedDelta)),
    d.recommendedDelta===null?'':d.recommendedDelta>0?'good':d.recommendedDelta<0?'bad':''),
@@ -406,7 +430,7 @@ function summary(){
   kpi('Decisão sugerida',d.direction,'gold'),
   kpi('Prêmio recomendado',money(d.recommendedMin),'gold'),
   kpi('Taxa mínima para empatar',percent(d.breakEven)),
-  kpi('Resultado esperado com chance informada',money(d.expected),d.expected===null?'':d.expected>=0?'good':'bad'),
+  kpi('Resultado esperado com chance configurada',money(d.expected),d.expected===null?'':d.expected>=0?'good':'bad'),
   kpi('Lucro mínimo/jogador/hora',money(d.hourly),d.hourly===null?'':d.hourly>=0?'good':'bad'),
   kpi('Tempo total estimado',d.totalMinutes===null?'Não informado':d.totalMinutes+' min')
  ].join('')+'<p class="ap-row-muted">'+d.remarks.map(safe).join(' ')+'</p>';
@@ -417,11 +441,13 @@ function summary(){
  el('apProposal').textContent='Cenário: '+p.team+' jogadores • prêmio '+(d.modeled?'HIPOTÉTICO proporcional':'publicado')+
   ' • lavado '+percent(p.tax)+' • capital '+money(p.kit.total)+
   ' • reposição '+money(p.kit.winCost)+' • perda total ao ser derrotado '+money(p.kit.lossCost)+
-  '. A espera e a taxa de vitória não são presumidas; sem esses dados, buff/nerf requer julgamento humano.';
+  '. Chance de vitória configurada: '+(d.winChance===null?'não informada':percent(d.winChance))+'; é premissa de gestão, não estatística real.';
  const alternative=el('apManualOutcome');
+ if(state.manualPayout!=null&&Number.isFinite(state.manualPayout))renderApprovalPayoutRange(d);
  alternative.textContent=state.manualPayout===null?'Insira outro prêmio para estimar a vitória.':
   p.kit.winCost===null?'Algum preço está pendente.':
-  'Com '+money(state.manualPayout)+' sujo, lucro na vitória de '+
+  'Com mínimo '+money(state.manualPayout)+' e máximo estimado '+money(recommendedMaximum(p.min,p.max,state.manualPayout))+
+  ' sujo, lucro na vitória de '+
   money(state.manualPayout*(1-p.tax)-p.kit.winCost)+' ('+
   money((state.manualPayout*(1-p.tax)-p.kit.winCost)/p.team)+' por jogador). Prejuízo na derrota: '+money(p.loss)+'.';
  el('apCopy').disabled=!d.valid;
@@ -467,7 +493,7 @@ async function copyProposal(){
  'PRÊMIO MÁXIMO INDICATIVO: '+money(d.recommendedMax),
  'PRÊMIO MÁXIMO PUBLICADO: '+money(p.max),
  'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
- 'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
+ 'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único, armas preservadas na vitória e chance de vitória '+(d.winChance===null?'não informada':percent(d.winChance))+' (premissa, não dado observado).',
  'DECISÃO: '+d.direction,'RISCO: chance '+(d.winChance===null?'não informada':percent(d.winChance))+' | espera '+(d.wait===null?'não informada':d.wait+' min'),
  'AVISO: se prêmio proporcional for selecionado, o valor é hipotético, não oficial.',
  'Premiações atuais já incluem buffs/nerfs existentes. Nenhuma mudança automática no jogo.'].join('\n');
@@ -479,8 +505,9 @@ async function approveProposal(mode='sugestao'){
  if(!approveHandler)return;
  const a=action(),d=decision(),p=d.calc;
  const manual=mode==='manual',value=manual?state.manualPayout:d.recommendedMin;
+ const proposedMax=manual?recommendedMaximum(p.min,p.max,value):d.recommendedMax;
  if(!d.eligibleForSheet||approvedThisSession.has(a.nome)||!Number.isFinite(value)||
-    value<=0||Math.abs(value-p.min)<=1){
+    !Number.isFinite(proposedMax)||proposedMax<value||value<=0||Math.abs(value-p.min)<=1){
   el('apCopyStatus').textContent='Prêmio inválido ou cenário hipotético. Restaure os preços e o prêmio publicados antes de aprovar.';
   return;
  }
@@ -489,8 +516,8 @@ async function approveProposal(mode='sugestao'){
  const message=el('apCopyStatus'),reason=el('apDecisionReason')?.value?.trim()||'';
  message.textContent='Conferindo células, fórmulas e premiação oficial da planilha...';
  try{
-  const result=await approveHandler({name:a.nome,officialMin:p.min,proposedMin:value,
-   team:p.team,cost:p.kit.total,tax:p.tax,reason,
+  const result=await approveHandler({name:a.nome,officialMin:p.min,officialMax:p.max,
+   proposedMin:value,proposedMax,team:p.team,cost:p.kit.total,tax:p.tax,winChance:d.winChance,reason,
    source:manual?'manual':'sugestao'});
   if(result?.cancelled){message.textContent='Aprovação cancelada. Nada foi alterado.';return;}
   if(!result?.updated)throw Error('A planilha não confirmou a alteração.');
@@ -503,9 +530,13 @@ async function approveProposal(mode='sugestao'){
    render();
   }
   message.textContent=result.verified?
-   'Ajuste confirmado na planilha. '+(result.audited?'Histórico registrado. ':'Auditoria pendente. ')+
-   'A publicação no GitHub/Mercado Negro NÃO é automática; confira o status da fonte.':
-   'A planilha recebeu o ajuste, mas a fórmula do prêmio não confirmou o valor. Não tente aprovar novamente sem conferir a aba.';
+   'Planilha atualizada. Mínimo confirmado '+money(result.actualMin)+
+   ' • máximo calculado '+money(result.actualMax)+'. '+
+   (result.verifiedMaximum?'Máximo conforme estimativa. ':
+    'ATENÇÃO: máximo calculado difere da estimativa '+money(result.estimatedMax)+'. ')+
+   (result.audited?'Histórico registrado. ':'Auditoria pendente. ')+
+   'O GitHub/Mercado Negro não foi republicado automaticamente.':
+   'BUFF/NERF gravado, mas o mínimo calculado não corresponde à proposta. Confira a planilha antes de qualquer nova aprovação.';
   refreshPriceAlerts();
  }catch(error){message.textContent='SEM CONFIRMAÇÃO DE AJUSTE: '+(error?.message||String(error));}
  finally{summary();}

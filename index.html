@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
-  <link rel="stylesheet" href="assets/acoes-planejador.css?v=6">
+  <link rel="stylesheet" href="assets/acoes-planejador.css?v=7">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -327,10 +327,10 @@
                 </label>
               </div>
               <div class="ap-management-risk">
-                <label class="ap-field">Chance de vitória simulada (%)<input type="number" id="apPortfolioWinChance" min="0" max="100" step="5" placeholder="Não informada"></label>
+                <label class="ap-field">Chance de vitória simulada (%)<input type="number" id="apPortfolioWinChance" min="0" max="100" step="5" value="40"></label>
                 <label class="ap-field">Espera média da polícia (min)<input type="number" id="apPortfolioPoliceWait" min="0" max="600" placeholder="Não informada"></label>
                 <label class="ap-field">Duração da ação (min)<input type="number" id="apPortfolioDuration" min="0" max="600" placeholder="Não informada"></label>
-                <p>As três entradas são hipóteses da gestão aplicadas igualmente para comparar ações. Sem chance, o sistema não calcula retorno esperado. Sem duração e espera, não calcula lucro por hora. Cooldown não incluído.</p>
+                <p>Chance de vitória padrão: 40%, definida pela gestão devido à desvantagem numérica frente à polícia, e não medida em estatísticas. As três entradas podem ser alteradas. Sem chance, o sistema não calcula retorno esperado. Sem duração e espera, não calcula lucro por hora. Cooldown não incluído.</p>
               </div>
               <div class="ap-table-scroll ap-management-scroll">
                 <table class="ap-management-table">
@@ -435,10 +435,10 @@
                     <div class="ap-intel-fields">
                       <label class="ap-field">Espera estimada pela polícia (min)<input id="apPoliceWait" type="number" min="0" max="600" placeholder="Não informada"></label>
                       <label class="ap-field">Duração estimada da ação (min)<input id="apActionDuration" type="number" min="0" max="600" placeholder="Não informada"></label>
-                      <label class="ap-field">Chance estimada de vitória (%)<input id="apWinChance" type="number" min="1" max="100" placeholder="Não informada"></label>
+                      <label class="ap-field">Chance estimada de vitória (%)<input id="apWinChance" type="number" min="0" max="100" value="40"></label>
                       <label class="ap-field">Lucro alvo por jogador/hora (R$)<input id="apHourlyTarget" type="number" min="0" step="1000" value="0"></label>
                     </div>
-                    <p class="ap-row-muted">Sem tempo de espera ou taxa histórica de vitória, o sistema não inventa esses números. Os parâmetros informados são hipóteses para orientar a decisão, não fatos do servidor.</p>
+                    <p class="ap-row-muted">40% de chance de vitória é uma premissa editável da gestão, por haver mais policiais que invasores. Não é uma taxa de sucesso real. A espera e a duração só são consideradas quando informadas.</p>
                     <div id="apIntelligenceResult" class="ap-intel-decision"></div>
                     <p class="ap-sub">A sugestão considera o lucro em caso de vitória e o capital investido para definir a meta. A perda na derrota aparece no resultado, mas não é ponderada sem uma taxa real de vitórias.</p>
                     <div class="ap-filter-row">
@@ -448,11 +448,12 @@
                       <label class="ap-field">Taxa de lavagem (%)<input id="apTax" type="number" min="0" max="99" step="1" value="30"></label>
                     </div>
                     <div id="apGoals" class="ap-cards"></div>
+                    <div class="ap-recommend-approval" id="apDecisionPayoutCompare" aria-live="polite"></div>
                     <div id="apResult" class="ap-result"></div><p id="apProposal" class="ap-row-muted"></p>
                     <label class="ap-field">Motivo da decisão / observações<input id="apDecisionReason" type="text" maxlength="600" placeholder="Ex.: insumos subiram; espera policial elevada"></label>
                   <div class="ap-filter-row ap-manual-row">
                       <label class="ap-field">Prêmio mínimo manual (sujo)<input id="apManual" type="number" min="1" placeholder="Digite um valor para simular/aprovar"></label>
-                      <div id="apManualOutcome" class="ap-hint"></div>
+                      <div id="apManualOutcome" class="ap-hint"></div><p class="ap-row-muted" id="apManualRangeHelp">O prêmio máximo manual é estimado com a proporção entre o mínimo e o máximo publicados. A planilha calcula o máximo definitivo.</p>
                     </div>
                     <div class="ap-actions"><button type="button" class="ap-button primary" id="apCopy">Copiar análise</button>
                       <button type="button" class="ap-button" id="apApprove" hidden>Aprovar valor recomendado</button>
@@ -1090,7 +1091,7 @@
   <script src="assets/mission-planner.js?v=12.18.1"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=15.7.2"></script>
+  <script type="module" src="assets/app.js?v=15.7.3"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>

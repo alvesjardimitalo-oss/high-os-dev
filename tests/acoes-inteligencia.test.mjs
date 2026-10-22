@@ -47,8 +47,8 @@ test('Baixa real não é chamada de buff automático',()=>{
 });
 test('Cálculo de risco pondera vitória e perda integral, sem prever chance sozinho',()=>{
  const d=analyzeDecision(action,catalog,{team:2});
- assert.equal(d.valid,true);assert.equal(d.winChance,null);
- assert.equal(d.expected,null);assert.equal(d.hourly,null);
+ assert.equal(d.valid,true);assert.equal(d.winChance,.4);
+ assert.equal(d.expected,-19700);assert.equal(d.hourly,null);
  assert.equal(d.calc.kit.total,139500);
  assert.equal(d.calc.kit.winCost,50000);
  assert.equal(d.calc.netMin,160000);
@@ -108,12 +108,12 @@ test('Novos controles de decisão, histórico, refência e valores manuais fazem
  assert.match(app,/actionSaveReference/);
  assert.match(app,/actionRejectProposal/);
  assert.match(app,/actionReadSheetPrizes/);
- assert.match(app,/acoes-planejador-ui\.js\?v=6/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=7/);
  assert.match(app,/root\+':batchUpdate'/);
 });
 
 test('Valor sugerido fica visível e combina mínimo, máximo e lucro por participante',()=>{
- const d=analyzeDecision(action,catalog,{team:2,targetPerPlayer:140000,roi:.25});
+ const d=analyzeDecision(action,catalog,{team:2,targetPerPlayer:140000,roi:.25,winChance:null});
  assert.equal(d.direction,'CONSIDERAR BUFF');
  assert.equal(d.recommendedMin,471429);
  assert.equal(d.recommendedMax,565715);
@@ -123,7 +123,7 @@ test('Valor sugerido fica visível e combina mínimo, máximo e lucro por partic
  assert.ok(d.eligibleForSheet);
 });
 test('Ação saudável recomenda MANTER prêmio atual e não simula nerf',()=>{
- const d=analyzeDecision(action,catalog,{team:2,targetPerPlayer:80000,roi:0});
+ const d=analyzeDecision(action,catalog,{team:2,targetPerPlayer:80000,roi:0,winChance:null});
  assert.equal(d.direction,'MANTER');
  assert.equal(d.recommendedMin,300000);
  assert.equal(d.recommendedMax,360000);
@@ -148,8 +148,30 @@ test('A sugestão aparece na capa, na lista e possui atalho para a aprovação',
  assert.match(ui,/showMainRecommendation\(d\)/);
  assert.match(ui,/data-ap-action/);
  assert.match(ui,/SUGESTÃO/);
- assert.match(ui,/RECOMENDADO \(MÍNIMO\)/);
+ assert.match(ui,/payoutPair\('RECOMENDADO • SUJO',d.recommendedMin,d.recommendedMax/);
  assert.match(ui,/id="apOpenStrategy"/);
  assert.match(ui,/details\.open=true/);
  assert.match(ui,/value=manual\?state\.manualPayout:d\.recommendedMin/);
+});
+
+test('Padrão de 40% exige prêmio mais alto para compensar derrotas, sem ser dado observado',()=>{
+ const without=analyzeDecision(action,catalog,{team:2,winChance:null});
+ const assumed=analyzeDecision(action,catalog,{team:2});
+ assert.equal(assumed.winChance,.4);
+ assert.equal(assumed.expected,-19700);
+ assert.ok(assumed.suggested>without.suggested);
+ assert.ok(assumed.recommendedMax>assumed.recommendedMin);
+ assert.ok(assumed.remarks.some(x=>x.includes('premissa de gestão')));
+});
+test('Faixas mínimo e máximo atuais e recomendadas visíveis, inclusive na aprovação',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../assets/modules/acoes-planejador-ui.js',import.meta.url),'utf8');
+ assert.ok(html.includes('id="apDecisionPayoutCompare"'));
+ assert.ok(html.includes('id="apWinChance" type="number" min="0" max="100" value="40"'));
+ assert.ok(html.includes('id="apPortfolioWinChance" min="0" max="100" step="5" value="40"'));
+ assert.match(ui,/payoutPair\('ATUAL • SUJO',p.min,p.max\)/);
+ assert.match(ui,/payoutPair\('RECOMENDADO • SUJO',d.recommendedMin,d.recommendedMax/);
+ assert.match(ui,/officialMax:p.max/);
+ assert.match(ui,/proposedMin:value,proposedMax/);
+ assert.match(ui,/winChance:d.winChance/);
 });

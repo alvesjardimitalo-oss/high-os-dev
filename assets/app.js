@@ -1624,14 +1624,14 @@ async function actionReadSheetPrizes(){
  const root='https://sheets.googleapis.com/v4/spreadsheets/'+DLV_VIP_SHEET_ID;
  const range=encodeURIComponent("'VALORES AÇÃO BLIPADA'!A1:AD400");
  const [{extractPublishedActionPrizes},response]=await Promise.all([
-  import('./modules/acoes-sheet-sync.js?v=2'),
+  import('./modules/acoes-sheet-sync.js?v=3'),
   facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token})
  ]);
  const prizes=extractPublishedActionPrizes(response.values||[]);
  if(!prizes.length)throw Error('Não encontrei prêmios válidos na aba VALORES AÇÃO BLIPADA.');
  return {prizes,readAt:new Date().toISOString()};
 }
-async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,tax,reason='',source='sugestao'}){
+async function syncApprovedActionPayout({name,officialMin,officialMax,proposedMin,proposedMax,team,cost,tax,winChance,reason='',source='sugestao'}){
  if(!currentUser||!canEditModule('economia'))throw Error('Sem permissão de edição de Economia.');
  const value=Number(proposedMin);
  if(!Number.isFinite(value)||value<=0)throw Error('Não há prêmio sugerido válido.');
@@ -1643,7 +1643,8 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
    facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token}),
    facSheetFetch(root+'/values/'+range+'?valueRenderOption=FORMULA',{token})
  ]);
- const candidate=planApprovedActionSheetUpdate(first.values||[],name,officialMin,value);
+ const candidate=planApprovedActionSheetUpdate(first.values||[],name,officialMin,value,
+  {officialMax,proposedMax});
  // A leitura utiliza o nome da aba, mas a gravação usa o sheetId.
  // Uma aba recriada com outro ID não pode causar escrita em um lugar errado.
  const sheetInfo=await facSheetFetch(root+'?fields=sheets.properties(sheetId,title)',{token});
@@ -1658,21 +1659,26 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
  }
  const proposal='AÇÃO: '+name+'\nINVASORES: '+team+
  '\nPrêmio mínimo atual (sujo): '+Math.round(candidate.previousMin).toLocaleString('pt-BR')+
- '\nNovo prêmio sugerido (sujo): '+value.toLocaleString('pt-BR')+
+ '\nPrêmio máximo atual (sujo): '+Math.round(candidate.previousMax).toLocaleString('pt-BR')+
+ '\nNovo prêmio mínimo proposto (sujo): '+value.toLocaleString('pt-BR')+
+ '\nNovo prêmio máximo INDICATIVO (sujo): '+Math.round(candidate.proposedMax).toLocaleString('pt-BR')+
+ '\nChance de vitória assumida: '+Math.round((Number(winChance)||0)*100)+'% (premissa de gestão, não estatística real)'+
  '\nVariação: '+candidate.delta.toLocaleString('pt-BR')+
  '\nBUFF: '+candidate.oldBuff+' → '+candidate.nextBuff+
  '\nNERF: '+candidate.oldNerf+' → '+candidate.nextNerf+
- '\n\nDeseja APROVAR e atualizar somente o BUFF/NERF na aba existente VALORES AÇÃO BLIPADA?';
+ '\n\nO máximo é recalculado por FÓRMULA: a estimativa acima NÃO é uma edição direta do valor máximo. Confirmo a alteração dos ajustes de BUFF/NERF na aba VALORES AÇÃO BLIPADA?';
  if(!confirm(proposal))return {cancelled:true};
  // A confirmação pode levar tempo: validar novamente as células antes do POST.
  const fresh=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token});
- const checked=planApprovedActionSheetUpdate(fresh.values||[],name,officialMin,value);
+ const checked=planApprovedActionSheetUpdate(fresh.values||[],name,officialMin,value,{officialMax,proposedMax});
  if(checked.buff.rowIndex!==candidate.buff.rowIndex||
     checked.buff.columnIndex!==candidate.buff.columnIndex||
     checked.nerf.rowIndex!==candidate.nerf.rowIndex||
     checked.nerf.columnIndex!==candidate.nerf.columnIndex||
     checked.oldBuff!==candidate.oldBuff||checked.oldNerf!==candidate.oldNerf||
-    Math.abs(checked.previousMin-candidate.previousMin)>.01)
+    Math.abs(checked.previousMin-candidate.previousMin)>.01||
+    Math.abs(checked.previousMax-candidate.previousMax)>.01||
+    checked.max.rowIndex!==candidate.max.rowIndex||checked.max.columnIndex!==candidate.max.columnIndex)
   throw Error('A planilha foi alterada durante a confirmação. Nenhuma alteração aplicada; refaça a análise.');
  // Reconfere fórmulas após a aprovação do gestor e antes da gravação.
  const latestFormulas=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=FORMULA',{token});
@@ -1689,8 +1695,11 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
  const after=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token});
  const pos=checked.min;
  const calculatedMinimum=Number(after.values?.[pos.rowIndex]?.[pos.columnIndex]);
+ const calculatedMaximum=Number(after.values?.[checked.max.rowIndex]?.[checked.max.columnIndex]);
+ const verifiedMaximum=Number.isFinite(calculatedMaximum)&&
+  Math.abs(calculatedMaximum-checked.proposedMax)<=Math.max(2,Math.abs(checked.proposedMax)*.005);
  const verified=Number.isFinite(calculatedMinimum)&&Math.abs(calculatedMinimum-value)<2;
- const {extractPublishedActionPrizes}=await import('./modules/acoes-sheet-sync.js?v=2');
+ const {extractPublishedActionPrizes}=await import('./modules/acoes-sheet-sync.js?v=3');
  const actual=extractPublishedActionPrizes(after.values||[]).find(x=>
   x.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()===
   name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase());
@@ -1698,14 +1707,18 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
  try{
   await addDoc(histCol,{tipo:'AJUSTE_PREMIACAO_ACAO',usuario:currentUser.email,
    acao:name,grupo:'ECONOMIA_ILEGAL',invasores:team,custoKit:cost,
-   taxaLavagem:tax,premioMinAnterior:checked.previousMin,premioMinProposto:value,
+   taxaLavagem:tax,winChanceAssumida:Number.isFinite(winChance)?winChance:null,
+   premioMinAnterior:checked.previousMin,premioMaxAnterior:checked.previousMax,
+   premioMinProposto:value,premioMaxEstimado:checked.proposedMax,
+   premioMaxConfirmado:Number.isFinite(calculatedMaximum)?calculatedMaximum:null,
    buffAnterior:checked.oldBuff,nerfAnterior:checked.oldNerf,
    buffNovo:checked.nextBuff,nerfNovo:checked.nextNerf,
    origem:source,motivo:String(reason).slice(0,600),
    planilha:'VALORES AÇÃO BLIPADA',data:serverTimestamp()});
   audited=true;
  }catch(error){console.warn('[AÇÕES] Atualização feita, mas falha ao registrar auditoria:',error)}
- return {updated:true,verified,audited,previous:checked.previousMin,next:value,
+ return {updated:true,verified,verifiedMaximum,audited,previous:checked.previousMin,
+  previousMax:checked.previousMax,next:value,estimatedMax:checked.proposedMax,
   actualMin:verified&&actual?actual.min:null,actualMax:verified&&actual?actual.max:null,
   actualBuff:verified&&actual?actual.buff:null,actualNerf:verified&&actual?actual.nerf:null,
   publicationPending:true};
@@ -1728,7 +1741,7 @@ if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','gr
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='chat')setTimeout(()=>startChat(),0);
 if(page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60);
-if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=6').then(mod=>mod.mountActionPlanner({
+if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=7').then(mod=>mod.mountActionPlanner({
  onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
  onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
  onRejectAction:canEditModule('economia')?actionRejectProposal:null,

@@ -241,3 +241,21 @@
 .ap-root .ap-choice-result{display:block;color:#c5ebba!important;font-weight:800!important;overflow-wrap:anywhere}
 @media(max-width:1040px){.ap-root .ap-recommend-foot{align-items:flex-start;flex-direction:column}.ap-root .ap-recommend-compare strong{font-size:20px}}
 @media(max-width:550px){.ap-root .ap-recommend-main{padding:13px}.ap-root .ap-recommend-compare{gap:6px;grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr)}.ap-root .ap-recommend-compare strong{font-size:17px}.ap-root .ap-recommend-band{gap:8px 13px}}
+
+
+/* 15.7.3 — mínimos e máximos lado a lado, incl. conferência pré-aprovação */
+.ap-root .ap-recommend-pair{min-width:0;display:block}
+.ap-root .ap-recommend-pair-title{display:block;color:#d3c0e5;font-weight:850;font-size:10px;letter-spacing:.08em;margin-bottom:10px}
+.ap-root .ap-recommend-pair-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ap-root .ap-recommend-pair-values>span{display:block;min-width:0}
+.ap-root .ap-recommend-pair-values small{display:block;font-size:9px;letter-spacing:.03em;color:#b6a5c6;font-weight:750;margin-bottom:4px}
+.ap-root .ap-recommend-pair-values strong{font-size:clamp(13px,1.5vw,21px);font-weight:850;line-height:1.35;color:#eae0f8;overflow-wrap:anywhere}
+.ap-root .ap-recommend-final .ap-recommend-pair-values strong{color:#abf3c8}
+.ap-root .ap-recommend-nerf .ap-recommend-final .ap-recommend-pair-values strong{color:#f2dc9b}
+.ap-root .ap-recommend-approval{border:1px solid #6f5981;border-radius:11px;margin:14px 0;padding:14px;background:#251b31}
+.ap-root .ap-recommend-approval>.ap-recommend-top{margin-bottom:12px;font-size:11px;color:#d5c6e1}
+.ap-root .ap-recommend-two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.ap-root .ap-recommend-approval .ap-row-muted{margin-top:12px;line-height:1.6}
+.ap-root .ap-recommend-compare .ap-recommend-pair{padding:2px 0}
+@media(max-width:780px){.ap-root .ap-recommend-compare{grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr);gap:5px}.ap-root .ap-recommend-pair-values{grid-template-columns:1fr;gap:8px}.ap-root .ap-recommend-pair-values strong{font-size:16px}}
+@media(max-width:530px){.ap-root .ap-recommend-two-columns{gap:10px}.ap-root .ap-recommend-pair-title{font-size:9px}.ap-root .ap-recommend-pair-values strong{font-size:14px}.ap-root .ap-recommend-approval{padding:10px}}
