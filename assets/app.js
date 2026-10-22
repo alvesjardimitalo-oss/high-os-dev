@@ -3413,7 +3413,6 @@ b.arena]];
    for(const [label,
 saved] of singles){const v=getDetailValue(label,d)||saved;
 if(v)L.push('',`- ${label}:`,`  ${fmtCds(v)}`)}
-   if(b.bauCapacidade)L.push(`- Capacidade do Baú: ${b.bauCapacidade}`);
 
    if(b.outros){L.push('','- Outros benefícios / setagens:');
 L.push(...String(b.outros).split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(x=>`- ${x}`))}
@@ -3557,6 +3556,11 @@ if(d)L.push(d);
  }
  return L.join('\n');
 
+}
+
+function updateRequestPreview(){
+ const preview=$('#reqPreview');
+ if(preview)preview.value=buildRequestText();
 }
 
 function openRequestModal(id='',group=''){
@@ -13291,7 +13295,7 @@ async function refreshDiscordChat(key){
  try{
   const me=String(currentUser.email||'').toLowerCase(),other=String(chatRecipientEmail||'').toLowerCase(),cid=chatConversationId(me,other);
   const rows=(await highOsStoreList('chat_mensagens')).filter(x=>x.conversationId===cid&&Array.isArray(x.participants)&&x.participants.includes(me)).sort((a,b)=>String(a.createdAtText||'').localeCompare(String(b.createdAtText||''))).slice(-CHAT_PAGE_SIZE);
-  renderChatMessages(rows);if(activeMeetingRoom)renderTeamCallFiles();
+  renderChatMessages(rows);
  }catch(err){console.warn('[HIGH OS][CHAT] Discord storage',err)}
 }
 function subscribeChatConversation(){
