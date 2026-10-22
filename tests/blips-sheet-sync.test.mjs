@@ -132,3 +132,40 @@ test('Alteração explícita bloqueia campo histórico dividido em várias célu
   assert.equal(batches.length,0,'falha deve ocorrer antes de qualquer batchUpdate');
  });
 });
+
+
+test('Mecânica com categoria própria nunca é forçada para Apoio na planilha',async()=>{
+ const rows=fakeSheet();rows[0][4]='APOIO';rows[1][6]='IlegalMechanic02';
+ await withSheet(rows,async batches=>{
+  const result=await syncBlipsCoordinates({token:'mock',groups:[{
+   group:'IlegalMechanic02',segmento:'MECÂNICA ILEGAL',perfilTecnico:{operacional:{}}
+  }]});
+  assert.deepEqual(result.categoryMismatches,[{group:'IlegalMechanic02',actual:'APOIO',expected:'MECANICAILEGAL'}]);
+  assert.equal(result.created,0);
+  assert.equal(batches.length,0,'quadro histórico não pode ser apagado/movido silenciosamente');
+ });
+});
+test('Hospital personalizado recebe quadro na categoria Hospital Ilegal',async()=>{
+ const rows=fakeSheet();rows[0][4]='APOIO';rows[1][6]='OutroGroup';
+ await withSheet(rows,async batches=>{
+  const result=await syncBlipsCoordinates({token:'mock',groups:[{
+   group:'IlegalMedic01',segmento:'HOSPITAL ILEGAL',qg:'Hospital Norte',perfilTecnico:{operacional:{}}
+  }]});
+  assert.equal(result.created,1);
+  assert.deepEqual(result.sectionsAdded,['HOSPITALILEGAL']);
+  const written=writes(batches);
+  assert.ok(written.some(x=>x.value==='HOSPITAL ILEGAL'));
+  assert.ok(written.some(x=>x.value==='IlegalMedic01')||batches.length>0);
+ });
+});
+test('Uma seção personalizada já existente é reconhecida e reutilizada',async()=>{
+ const rows=fakeSheet();rows[0][4]='MECÂNICA ILEGAL';rows[1][6]='N/A';rows[2][6]='';
+ await withSheet(rows,async batches=>{
+  const result=await syncBlipsCoordinates({token:'mock',groups:[{
+   group:'IlegalMechanic02',segmento:'MECÂNICA ILEGAL',qg:'Nova Era',perfilTecnico:{operacional:{}}
+  }]});
+  assert.equal(result.created,1);
+  assert.deepEqual(result.sectionsAdded,[]);
+  assert.ok(writes(batches).some(x=>x.row===1&&x.col===6&&x.value==='IlegalMechanic02'));
+ });
+});
