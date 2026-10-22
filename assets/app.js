@@ -1585,15 +1585,15 @@ const ACTION_REGISTRY_DOC='acoes_cadastro_v1';
 async function actionReadRegistry(){
  if(!currentUser||!canViewModule('planejador-acoes'))throw Error('Acesso ao Planejador de Ações não autorizado.');
  const snap=await getDoc(doc(db,'highos','data','config',ACTION_REGISTRY_DOC));
- const {cleanRegistry}=await import('./modules/acoes-cadastro.js?v=1');
+ const {cleanRegistry}=await import('./modules/acoes-cadastro.js?v=3');
  return cleanRegistry(snap.exists()?snap.data():null);
 }
 async function actionMutateRegistry({kind,entry=null,name='',oldName='',expectedRevision}={}){
  // O match /highos/data/config/{outro} das rules atuais permite edição só
  // para ADMIN; nenhuma nova regra Firebase precisa ser publicada.
  if(!currentUser||!isAdmin()||!canEditModule('economia'))throw Error('Cadastro de ações disponível apenas para administrador com acesso à Economia.');
- if(!['save','delete','archive','restore'].includes(kind))throw Error('Operação inválida.');
- const {applyRegistryMutation}=await import('./modules/acoes-cadastro.js?v=1');
+ if(!['save','delete','archive','restore','npc-save'].includes(kind))throw Error('Operação inválida.');
+ const {applyRegistryMutation}=await import('./modules/acoes-cadastro.js?v=3');
  const source=await fetch('https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/acoes-blipadas.json',{cache:'no-store'});
  if(!source.ok)throw Error('Não foi possível conferir ações oficiais. Nenhuma alteração aplicada.');
  const published=(await source.json()).acoes||[];
@@ -1608,7 +1608,7 @@ async function actionMutateRegistry({kind,entry=null,name='',oldName='',expected
  });
  try{
   await addDoc(histCol,{tipo:'CADASTRO_ACOES',operacao:kind,
-   acao:String(entry?.nome||name||oldName).slice(0,100),
+   acao:String(entry?.nome||entry?.market||name||oldName).slice(0,100),
    usuario:currentUser.email,data:serverTimestamp(),revisao:result.revision});
  }catch(err){console.warn('[AÇÕES] Cadastro salvo, mas auditoria histórica indisponível:',err);}
  return result;
