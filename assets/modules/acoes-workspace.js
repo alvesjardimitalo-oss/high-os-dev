@@ -1,5 +1,5 @@
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=4';
-import {createNpcWorkbench} from './acoes-npc-ui.js?v=2';
+import {createNpcWorkbench} from './acoes-npc-ui.js?v=3';
 
 /** Navigation, profiles and Firestore-backed internal action registration.
  * The official market catalog is always read-only and remains the reference.
@@ -25,6 +25,11 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  }
  function paint(){
   root.dataset.apSection=view;root.dataset.apProfileTab=tab;
+  const area=view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'roubados'):'acoes';
+  root.dataset.economyArea=area;
+  root.querySelectorAll('[data-economy-area]').forEach(btn=>{
+   if(btn.dataset.economyArea===area)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');
+  });
   root.querySelectorAll('[data-ap-nav]').forEach(btn=>{
    const on=btn.dataset.apNav===(view==='profile'?'catalog':view);
    if(on)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');
@@ -151,6 +156,12 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   await load();refresh();
  }
  root.addEventListener('click',ev=>{
+  const area=ev.target.closest('[data-economy-area]');
+  if(area){
+   if(area.dataset.economyArea==='acoes')navigate('overview');
+   else{npc?.selectMarket(area.dataset.economyArea==='quebrados'?'ARMAS_QUEBRADAS':'CASAS');navigate('npc');}
+   return;
+  }
   const nav=ev.target.closest('[data-ap-nav]');
   if(nav){navigate(nav.dataset.apNav);return;}
   const profile=ev.target.closest('[data-ap-profile]');
@@ -195,7 +206,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  });
  $('apEditorDialog')?.addEventListener('close',()=>{draft=null;original='';});
  npc=createNpcWorkbench({
-  root,getRegistry:()=>registry,getCatalog,canEdit:writable,
+  root,getRegistry:()=>registry,getCatalog,canEdit:writable,onMarketChange:paint,
   onSave:async entry=>{
    if(!writable())throw Error('Sem permissão para alterar os compradores NPC.');
    registry=cleanRegistry(await onMutateRegistry({
@@ -208,3 +219,4 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  return {load,merged,paint,openProfile,openSuggestion,navigate,reload};
 
 }
+

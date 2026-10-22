@@ -734,3 +734,11 @@
 #page-planejador-acoes .ap-npc .ap-filter-row>.ap-actions{margin-left:auto;flex-wrap:wrap}
 #page-planejador-acoes .ap-npc table{min-width:810px}
 #page-planejador-acoes .ap-npc-scenario[hidden]{display:none!important}
+
+
+/* Economia Ilegal: três áreas com a mesma identidade do sistema. */
+#page-planejador-acoes .ap-root .ap-economy-navigation{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0 0 12px}
+#page-planejador-acoes .ap-root[data-ap-section="npc"] .ap-action-navigation,
+#page-planejador-acoes .ap-root[data-ap-section="npc"] .ap-toolbar{display:none!important}
+#page-planejador-acoes .ap-npc-total{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+@media(max-width:720px){#page-planejador-acoes .ap-root .ap-economy-navigation{grid-template-columns:1fr!important}}

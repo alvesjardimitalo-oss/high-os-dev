@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
-  <link rel="stylesheet" href="assets/acoes-planejador.css?v=11">
+  <link rel="stylesheet" href="assets/acoes-planejador.css?v=12">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -97,7 +97,7 @@
           <button class="nav-item" data-page="historico">◷ <span>Histórico</span></button>
           <button class="nav-item" data-page="diario">▦ <span>Diário Operacional</span></button>
           <button class="nav-item" data-page="planejador">◎ <span>Planejador de Missões</span></button>
-          <button class="nav-item" data-page="planejador-acoes">▣ <span>Planejador de Ações</span></button>
+          <button class="nav-item" data-page="planejador-acoes">▣ <span>Economia Ilegal</span></button>
           <button class="nav-item admin-only" data-page="usuarios">♟ <span>Usuários</span></button>
           <button class="nav-item admin-only" data-page="administracao">⚠ <span>Administração</span></button>
         </nav>
@@ -288,8 +288,8 @@
         </section>
         <section class="page" id="page-planejador-acoes">
           <div class="page-head">
-            <div><div class="eyebrow">HIGH OS • CENTRO DE GESTÃO ECONÔMICA</div><h2>GESTÃO DE AÇÕES</h2>
-              <p class="page-subtitle">Controle o investimento e a reposição dos kits, acompanhe mudanças de preços do Mercado Negro e simule os valores mínimo/máximo para cadastrar no Suricato Roubos. As premiações atuais ficam preservadas até decisão da gestão.</p>
+            <div><div class="eyebrow">HIGH OS • CENTRO DE GESTÃO ECONÔMICA</div><h2>ECONOMIA ILEGAL</h2>
+              <p class="page-subtitle">Gerencie ações blipadas, custos dos kits e pagamentos dos comerciantes. Acompanhe o dinheiro sujo gerado, compare a rentabilidade e avalie ajustes de preços e premiações.</p>
             </div><span class="dev-badge">GESTÃO ECONÔMICA</span>
           </div>
           <div id="actionEconomyPlanner" class="ap-root">
@@ -301,12 +301,16 @@
                 <button type="button" class="ap-button primary" id="apNewAction" hidden>+ Cadastrar ação</button>
               </div>
             </div>
-            <nav class="ap-navigation" aria-label="Seções do Planejador de Ações">
+            <nav class="ap-navigation ap-economy-navigation" aria-label="Economia Ilegal">
+              <button type="button" data-economy-area="acoes" aria-current="page">Planejador de Ações Blipadas</button>
+              <button type="button" data-economy-area="quebrados">Comerciante de Itens Quebrados</button>
+              <button type="button" data-economy-area="roubados">Comerciante de Itens Roubados</button>
+            </nav>
+            <nav class="ap-navigation ap-action-navigation" aria-label="Seções das ações blipadas">
               <button type="button" data-ap-nav="overview" aria-current="page">Visão geral</button>
               <button type="button" data-ap-nav="catalog">Catálogo de ações</button>
               <button type="button" data-ap-nav="ranking">Rankings</button>
               <button type="button" data-ap-nav="prices">Preços e alertas</button>
-              <button type="button" data-ap-nav="npc">Compradores NPC</button>
             </nav>
             <div id="apRegistryNotice" class="ap-hint" hidden></div>
             <section class="ap-panel ap-management" data-ap-subpage="overview" aria-labelledby="apManagementTitle">
@@ -364,22 +368,22 @@
             <section class="ap-panel ap-npc" data-ap-subpage="npc" aria-labelledby="apNpcHeading">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">MONITORAMENTO DA ECONOMIA ILEGAL</span>
-                  <h3 id="apNpcHeading">Compradores NPC — itens de casas e armas quebradas</h3>
-                  <p class="ap-sub">Cadastre o preço em dinheiro sujo pago por item e a quantidade observada no inventário do NPC. Cada salvamento registra uma fotografia do estoque para comparação futura; estoque não comprova vendas acumuladas quando há reset.</p></div>
+                  <h3 id="apNpcHeading">Comerciante de Itens Roubados</h3>
+                  <p class="ap-sub">Controle o preço pago em dinheiro sujo e a quantidade já comprada pelo comerciante. O total por item é preço × quantidade; alterações de preço exigem histórico para apurar o pagamento real acumulado.</p></div>
               </div>
               <div class="ap-filter-row">
-                <label class="ap-field">Comprador NPC<select id="apNpcMarket"><option value="CASAS">Comprador de itens das casas</option><option value="ARMAS_QUEBRADAS">Comprador de armas quebradas</option></select></label>
-                <div class="ap-actions"><button type="button" id="apNpcReset" class="ap-button">Descartar edição</button><button type="button" id="apNpcAdd" class="ap-button">+ Adicionar item</button><button type="button" id="apNpcSave" class="ap-button primary">Salvar itens e estoque</button></div>
+                <label class="ap-field">Comprador NPC<select id="apNpcMarket"><option value="CASAS">Comerciante de Itens Roubados</option><option value="ARMAS_QUEBRADAS">Comerciante de Itens Quebrados</option></select></label>
+                <div class="ap-actions"><button type="button" id="apNpcReset" class="ap-button">Descartar edição</button><button type="button" id="apNpcAdd" class="ap-button">+ Adicionar item</button><button type="button" id="apNpcSave" class="ap-button primary">Salvar preços e quantidades</button></div>
               </div>
               <p class="ap-row-muted" id="apNpcStatus"></p>
               <div id="apNpcMessage" class="ap-hint" hidden></div>
               <div class="ap-table-scroll">
                 <table class="ap-management-table">
-                  <thead><tr><th>ITEM COMPRADO PELO NPC</th><th>CÓDIGO</th><th>PREÇO UNITÁRIO SUJO</th><th>QUANTIDADE NO NPC</th><th>ENCONTRADOS NESTA CASA *</th><th>GESTÃO</th></tr></thead>
+                  <thead><tr><th>ITEM COMPRADO PELO NPC</th><th>CÓDIGO</th><th>PREÇO UNITÁRIO SUJO</th><th>QUANTIDADE JÁ COMPRADA</th><th>DINHEIRO SUJO GERADO *</th><th>ENCONTRADOS NESTA CASA *</th><th>GESTÃO</th></tr></thead>
                   <tbody id="apNpcRows"></tbody>
                 </table>
               </div>
-              <p class="ap-row-muted">* A coluna de itens encontrados é apenas para simular uma tentativa de roubo de casa e não altera o inventário real do NPC.</p>
+              <p class="ap-row-muted">* Dinheiro sujo gerado: estimativa da quantidade comprada aos preços atuais. O contador cobre o período acumulado pelo NPC. Na simulação de casas, informe os itens encontrados por tentativa.</p>
               <div id="apNpcStats" class="ap-npc-stats"></div>
               <p id="apNpcHistory" class="ap-row-muted"></p>
               <div id="apNpcScenario" class="ap-npc-scenario">
@@ -1183,7 +1187,7 @@
   <script src="assets/mission-planner.js?v=12.18.1"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=15.8.5"></script>
+  <script type="module" src="assets/app.js?v=15.9.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
@@ -1309,3 +1313,4 @@ Armas02;08/09/2026;7;8;9;10;11;12;10;8"></textarea><div class="modal-actions"><b
 
 </body>
 </html>
+

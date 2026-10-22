@@ -2,7 +2,7 @@ import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=4';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=6';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=4';
-import {createActionWorkspace} from './acoes-workspace.js?v=4';
+import {createActionWorkspace} from './acoes-workspace.js?v=5';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -799,3 +799,4 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
   root.querySelector('#apRetry')?.addEventListener('click',()=>{location.reload();});
  }
 }
+

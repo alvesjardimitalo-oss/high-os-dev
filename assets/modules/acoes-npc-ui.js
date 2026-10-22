@@ -1,16 +1,19 @@
+import {BROKEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=1';
 import {npcStats,houseLootScenario} from './acoes-npc-core.js?v=2';
 import {priceOf} from './acoes-core.js?v=5';
 
-export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave}){
+export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave,onMarketChange=()=>{}}){
  const $=id=>root.querySelector('#'+id);
  const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
  const money=n=>Number.isFinite(n)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(n):'A informar';
  const n=v=>v===''||v===null||v===undefined?null:Number.isFinite(Number(v))?Number(v):null;
- const keys={CASAS:'Itens roubados de casas',ARMAS_QUEBRADAS:'Armas quebradas'};
+ const keys={CASAS:'Comerciante de Itens Roubados',ARMAS_QUEBRADAS:'Comerciante de Itens Quebrados'};
  let market='CASAS',draft=[],loot=[],saving=false,priceMode='pista';
+ const drafts=new Map();
  const persisted=()=>getRegistry()?.npcMarkets?.[market]||{items:[],history:[]};
  function hydrate(){
-  draft=(persisted().items||[]).map(x=>({...x}));
+  const saved=persisted();
+  draft=(drafts.get(market) || (saved.updatedAt||saved.items?.length?saved.items:market==='ARMAS_QUEBRADAS'?BROKEN_ITEMS_SNAPSHOT:[])).map(x=>({...x}));
   loot=draft.map(()=>0);
   render();
  }
@@ -24,6 +27,7 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave})
     precoSujo:val('precoSujo'),quantidadeNpc:val('quantidadeNpc')};
    loot[index]=Math.max(0,Number(row.querySelector('[data-npc-loot]')?.value)||0);
   }
+  drafts.set(market,draft.map(x=>({...x})));
  }
  function rowsHtml(){
   return draft.map((it,i)=>
@@ -32,6 +36,7 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave})
    '<td><input class="ap-table-input" data-npc-field="codigo" maxlength="100" value="'+safe(it.codigo||'')+'" placeholder="Código (opcional)"></td>'+
    '<td><input class="ap-table-input" type="number" min="0" step="1" data-npc-field="precoSujo" value="'+safe(it.precoSujo??'')+'" placeholder="R$ sujo"></td>'+
    '<td><input class="ap-table-input" type="number" min="0" step="1" data-npc-field="quantidadeNpc" value="'+safe(it.quantidadeNpc??'')+'" placeholder="Desconhecido"></td>'+
+   '<td class="ap-npc-total" data-npc-total>'+safe(n(it.quantidadeNpc)===null||n(it.precoSujo)===null?'A informar':money(n(it.quantidadeNpc)*n(it.precoSujo)))+'</td>'+
    (market==='CASAS'?'<td><input class="ap-table-input" type="number" min="0" max="100000" step="1" data-npc-loot value="'+safe(loot[i]||0)+'" aria-label="Quantidade desse item encontrada na casa"></td>':'<td>—</td>')+
    '<td><button type="button" class="ap-button ap-danger" data-npc-remove="'+i+'" '+(canEdit()?'':'disabled')+' title="Remover item do cadastro">✕</button></td></tr>'
   ).join('');
@@ -40,30 +45,31 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave})
   const table=$('apNpcRows'),status=$('apNpcStatus');
   if(!table)return;
   if($('apNpcMarket'))$('apNpcMarket').value=market;
-  if($('apNpcMarketTitle'))$('apNpcMarketTitle').textContent=keys[market];
+  if($('apNpcHeading'))$('apNpcHeading').textContent=keys[market];
   if($('apNpcSave'))$('apNpcSave').disabled=!canEdit()||saving;
   if($('apNpcAdd'))$('apNpcAdd').disabled=!canEdit();
   table.innerHTML=rowsHtml()||
-   '<tr><td colspan="6" class="ap-row-muted">Nenhum item cadastrado neste NPC. As fotos com os preços poderão ser transcritas para esta tabela.</td></tr>';
+   '<tr><td colspan="7" class="ap-row-muted">Nenhum item cadastrado neste NPC. As fotos com os preços poderão ser transcritas para esta tabela.</td></tr>';
   if(status)status.textContent='Última atualização registrada: '+(persisted().updatedAt?
-   new Date(persisted().updatedAt).toLocaleString('pt-BR'):'sem dados compartilhados')+
-   ' • Os números informados representam o estoque/contador exibido pelo NPC no momento da leitura.';
+   new Date(persisted().updatedAt).toLocaleString('pt-BR'):market==='ARMAS_QUEBRADAS'?'imagens de 22/10/2026':'sem dados compartilhados')+
+   (market==='ARMAS_QUEBRADAS'&&!persisted().updatedAt?' • Base: 28 itens transcritos das imagens de 22/10/2026. Sem sincronização ao vivo.':' • Contador acumulado de itens já comprados. Atualização manual.');
   const count=persisted().history?.length||0;
   if($('apNpcHistory'))$('apNpcHistory').textContent='Snapshots anteriores salvos: '+count+
-   '. Diferenças de estoque são indícios de movimentação, não comprovam vendas se o servidor reiniciar ou limpar os dados.';
+   '. Cada registro preserva preços e quantidades. Se o contador diminuir, começa uma nova base de comparação; o dinheiro anteriormente pago não é apagado da cidade.';
   summarize();
  }
  function summarize(){
   const metrics=$('apNpcStats'),scenario=$('apNpcScenario');
   if(!metrics)return;
   const stats=npcStats(draft);
-  const rows=stats.ranked.slice(0,6);
+  const rows=[...stats.ranked].sort((a,b)=>b.stock*b.price-a.stock*a.price).slice(0,10);
+  for(const row of elRows()){const it=draft[Number(row.dataset.npcIndex)];const total=row.querySelector('[data-npc-total]');if(total&&it)total.textContent=n(it.quantidadeNpc)===null||n(it.precoSujo)===null?'A informar':money(n(it.quantidadeNpc)*n(it.precoSujo));}
   metrics.innerHTML='<div class="ap-management-kpis">'+[
-   ['Itens registrados',stats.registered],['Com estoque informado',stats.observed],
-   ['Unidades observadas',stats.observed?stats.units:'A informar'],
-   ['Total nominal comprado pelo NPC',stats.observed?money(stats.grossDirty):'A informar']
+   ['Itens registrados',stats.registered],['Com quantidade informada',stats.observed],
+   ['Itens já comprados',stats.observed?stats.units:'A informar'],
+   ['Dinheiro sujo gerado • preços atuais',stats.observed?money(stats.grossDirty):'A informar']
   ].map(([label,value])=>'<div class="ap-kpi"><small>'+safe(label)+'</small><strong>'+safe(value)+'</strong></div>').join('')+'</div>'+
-  '<div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>MAIS FREQUENTES NO ESTOQUE</th><th>QUANTIDADE</th><th>PAGAMENTO UNITÁRIO</th><th>TOTAL NOMINAL (SUJO)</th></tr></thead><tbody>'+
+  '<div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>MAIOR GERAÇÃO DE DINHEIRO SUJO</th><th>QUANTIDADE</th><th>PAGAMENTO UNITÁRIO</th><th>TOTAL AOS PREÇOS ATUAIS (SUJO)</th></tr></thead><tbody>'+
   (rows.length?rows.map(x=>'<tr><td>'+safe(x.nome)+'</td><td>'+safe(x.stock)+'</td><td>'+safe(money(x.price))+'</td><td>'+safe(money(x.stock*x.price))+'</td></tr>').join(''):
    '<tr><td colspan="4">Informe as quantidades mostradas pelo NPC para gerar o ranking.</td></tr>')+
   '</tbody></table></div>';
@@ -95,7 +101,7 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave})
  }
  root.addEventListener('change',e=>{
   if(e.target.id==='apNpcMarket'){
-   collect();market=e.target.value in keys?e.target.value:'CASAS';hydrate();showMessage('');return;
+   selectMarket(e.target.value);return;
   }
   if(e.target.id==='apNpcPriceMode'){priceMode=e.target.value==='parceria'?'parceria':'pista';summarize();}
   if(['apNpcLockpickQty','apNpcWash'].includes(e.target.id))summarize();
@@ -113,19 +119,24 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave})
   if(rem){if(!canEdit())return;collect();const i=Number(rem.dataset.npcRemove);
    draft.splice(i,1);loot.splice(i,1);render();return;}
   if(e.target.closest('#apNpcReset')){
-   hydrate();showMessage('Rascunho descartado. Cadastro do último salvamento restaurado.');return;
+   drafts.delete(market);hydrate();showMessage('Rascunho descartado. Cadastro do último salvamento restaurado.');return;
   }
   if(e.target.closest('#apNpcSave')){
    if(!canEdit()||saving)return;collect();saving=true;
    const btn=$('apNpcSave');btn.disabled=true;
    try{
     // Registro consistente via revisão transacional, compartilhado com os demais cadastros.
-    await onSave({market,items:draft});
-    hydrate();showMessage('Tabela do NPC e fotografia das quantidades salvas. Os preços oficiais do mercado não foram modificados.');
+    const savedMarket=market;
+    await onSave({market:savedMarket,items:draft.map(x=>({...x}))});
+    drafts.delete(savedMarket);hydrate();showMessage('Preços em dinheiro sujo e quantidades compradas salvos. Os preços oficiais do mercado não foram modificados.');
    }catch(err){showMessage('Não foi possível salvar: '+(err?.message||err),true);}
    finally{saving=false;btn.disabled=!canEdit();}
   }
  });
  hydrate();
- return {refresh:hydrate};
+ function selectMarket(next){
+  collect();market=next in keys?next:'CASAS';hydrate();showMessage('');onMarketChange();
+ }
+ return {refresh(){drafts.clear();hydrate();},selectMarket,market:()=>market};
 }
+

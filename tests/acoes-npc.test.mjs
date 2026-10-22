@@ -65,7 +65,10 @@ test('interface dos NPCs preserva subpágina e cadastro administrativo',()=>{
  const app=readFileSync(new URL('../assets/app.js',import.meta.url),'utf8');
  for(const id of ['apNpcRows','apNpcSave','apNpcMarket','apNpcScenario','apNpcLootSummary','apNpcStats'])
   assert.ok(html.includes('id="'+id+'"'),id);
- assert.match(html,/data-ap-nav="npc"/);
+ assert.match(html,/data-economy-area="quebrados"/);
+ assert.match(html,/data-economy-area="roubados"/);
+ assert.match(html,/data-ap-subpage="npc"/);
  assert.match(ui,/createNpcWorkbench/);
  assert.match(app,/npc-save/);
 });
+
