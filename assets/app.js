@@ -11118,6 +11118,7 @@ $('#movementConfirm')?.addEventListener('click', async () => {
   if(!reason) return alert('Informe o motivo da operação.');
   if(!confirm(`Confirmar operação entre ${src.group} e ${dst.group}? Esta ação será registrada no histórico.`)) return;
 
+  let committed = false;
   try{
     const a = {...src};
     const b = {...dst};
@@ -11145,11 +11146,9 @@ $('#movementConfirm')?.addEventListener('click', async () => {
     const batch = writeBatch(db);
     batch.set(doc(db,'highos','data','faccoes',src.group), a);
     batch.set(doc(db,'highos','data','faccoes',dst.group), b);
-    await batch.commit();
-    await syncGroupsToOfficialSheet([a,
-b],{quiet:true});
 
-    await addDoc(histCol, {
+    // Guardar log e vínculos junto com as alterações principais.
+    batch.set(doc(histCol), {
       tipo: movementMode === 'TRANSFER_PANEL' ? 'TRANSFERENCIA_PAINEL' : 'TROCA_QG',
 
       group: src.group,
@@ -11172,15 +11171,9 @@ b],{quiet:true});
       usuario: currentUser.email,
 
       data: serverTimestamp()
-    });
-
-    /* V12.5 - trilha estruturada de ocupação. Não move nem duplica as
-       métricas brutas: registra qual facção passou a ocupar cada Group e
-       a data efetiva. Falha desta trilha não cancela a transferência já
-       concluída; o histórico auditável acima continua preservado. */
+    })
+    // O histórico de ocupação participa da MESMA gravação atômica dos Groups.
     if(movementMode === 'TRANSFER_PANEL'){
-      try{
-        const occupationBatch=writeBatch(db);
         const stamp=Date.now();
         const moved=[
           {before:src,after:b,from:src.group,to:dst.group},
@@ -11190,7 +11183,7 @@ b],{quiet:true});
           const faction=String(mv.before?.faccao||'').trim();
           if(!faction)return;
           const oid=(orgKey(faction)+'_'+effectiveDate+'_'+stamp+'_'+n).replace(/[^a-zA-Z0-9_-]/g,'_');
-          occupationBatch.set(doc(db,'highos','data','ocupacoes',oid),{
+          batch.set(doc(db,'highos','data','ocupacoes',oid),{
             organizacaoId:orgKey(faction),
             faccao:faction,
             groupOrigem:mv.from,
@@ -11206,15 +11199,13 @@ b],{quiet:true});
             createdBy:currentUser.email
           });
         });
-        await occupationBatch.commit();
-      }catch(occErr){console.warn('[OCUPAÇÕES] transferência concluída, mas trilha estruturada não foi gravada:',occErr?.message||occErr)}
     }
 
     /* V10.31 - sincroniza as organizações movimentadas em uma única
        confirmação. Em troca de duas facções deixa de fazer duas escritas
        sequenciais independentes. */
-    const orgMoveBatch=writeBatch(db);
-    let orgMoveCount=0;
+    
+
     for(const rec of [a,
 b]){
       if(rec.faccao){
@@ -11222,16 +11213,21 @@ b]){
         const next={nome:rec.faccao,status:'ATIVA',groupAtual:rec.group,segmentoAtual:rec.segmento||'',qgAtual:rec.qg||'',lider:rec.lider||''};
         const igual=existing?.id&&Object.keys(next).every(k=>String(existing[k]??'')===String(next[k]??''));
         if(!igual){
-          orgMoveBatch.set(doc(db,'highos','data','organizacoes',orgKey(rec.faccao)), {
+          batch.set(doc(db,'highos','data','organizacoes',orgKey(rec.faccao)), {
             ...next,
             updatedAt:serverTimestamp(),
             updatedBy:currentUser.email
           }, {merge:true});
-          orgMoveCount++;
+
         }
       }
     }
-    if(orgMoveCount)await orgMoveBatch.commit();
+
+    await batch.commit();
+    committed = true;
+    const sheetOk=await syncGroupsToOfficialSheet([a,b],{quiet:true});
+
+
 
     const localA={...clonePlain(a),id:src.id||src.group,updatedBy:currentUser.email};
     const localB={...clonePlain(b),id:dst.id||dst.group,updatedBy:currentUser.email};
@@ -11248,9 +11244,9 @@ b]){
 
     $('#movementModal')?.classList.add('hidden');
     closeGroupProfilePage();
-    alert('Operação concluída e registrada no histórico.');
+    alert(sheetOk?'Operação concluída, registrada e planilhas sincronizadas.':'Operação concluída no High OS, mas a planilha está PENDENTE. Reconecte o Google Sheets e execute a sincronização.');
   }catch(e){
-    alert('Falha na operação: ' + e.message);
+    alert(committed?'Dados gravados no High OS, mas houve falha após a confirmação. Recarregue a página para conferir o resultado: '+e.message:'Falha na operação; nada foi confirmado: ' + e.message);
   }
 });
 
