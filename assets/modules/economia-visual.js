@@ -14,13 +14,18 @@ export function createEconomyVisual({root,getRegistry,getCatalog,getActions}){
  const field=(label,key,min,max,step=1)=>'<label class="ap-field">'+label+'<input type="number" data-ev="'+key+'" value="'+s[key]+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>';
  const market=(key,fallback)=>{const m=getRegistry()?.npcMarkets?.[key];return m?.updatedAt||m?.items?.length?m.items:fallback;};
  function render(){
- host.innerHTML='<div class="ap-heading"><div><span class="ap-section-kicker">LABORATÓRIO DE BALANCEAMENTO</span><h3>'+({acoes:'Simular recompensa da ação',roubados:'Simular rendimento da residência',portamalas:'Simular porta-malas e desmanche',quebrados:'Simular pagamento por item quebrado'}[area]||'Simular rendimento')+'</h3><p class="ap-sub">Compare o cenário atual com uma proposta. Os ajustes abaixo são simulações.</p></div></div><nav class="ap-navigation" aria-label="Processos econômicos">'+(area==='roubados'?[['casas','Retorno imediato'],['corridas','Potencial dos cartões']]:[]).map(([k,v])=>'<button type="button" data-ev-mode="'+k+'" '+(s.mode===k?'aria-current="page"':'')+'>'+v+'</button>').join('')+'</nav><ol class="ap-economy-flow">'+(s.mode==='acoes'?['Comprar o kit','Disputar a ação','Receber ou perder','Repor e calcular lucro']:s.mode==='quebrados'?['Obter item quebrado','Vender ao comerciante','Receber dinheiro sujo','Medir volume e impacto']:s.mode==='corridas'?['Obter cartão','Participar da corrida','Concluir ou perder','Receber e descontar custos']:['Comprar gazua','Dividir custo pelos usos','Recuperar loot'+(s.mode==='veiculo'?' e veículo':''),'Vender e calcular lucro']).map((x,i)=>'<li><small>ETAPA '+(i+1)+'</small><strong>'+x+'</strong></li>').join('')+'</ol><div class="ap-filter-row">'+
- (s.mode==='casas'||s.mode==='veiculo'?field('Usos por gazua • estimativa','life',1,100)+field('Locais / sorteios por tentativa','points',1,100):'')+
- (s.mode==='acoes'?'<label class="ap-field">Ação<select data-ev="action">'+getActions().map(a=>'<option value="'+esc(a.nome)+'" '+(s.action===a.nome?'selected':'')+'>'+esc(a.nome)+'</option>').join('')+'</select></label>':'')+
- (s.mode!=='corridas'?field(s.mode==='acoes'?'Alteração da recompensa (%)':'Alteração dos preços do NPC (%)','shift',-100,500):field('Cartões recuperados','cards',0,100)+field('Corridas por cartão • estimativa','runs',1,100))+
- (s.mode==='quebrados'?field('Unidades futuras por item • cenário','volume',0,100000):field('Lavagem (%)','tax',0,99))+
- (s.mode==='corridas'||s.mode==='veiculo'?field('Chance de concluir (%) • hipótese','success',0,100)+field('Custo médio adicional por tentativa','repair',0,10000000):'')+
- (s.mode==='veiculo'?field('Pagamento do desmanche • sujo','scrap',0,10000000):'')+'</div><div data-ev-result aria-live="polite"></div>';
+ const titles={acoes:'Quanto sobra em uma ação?',roubados:'Quanto sobra em uma casa?',portamalas:'Quanto sobra no roubo de veículo?',quebrados:'Quanto o NPC vai pagar?'};
+ const choose=s.mode==='acoes'?'<label class="ap-field">Escolha a ação<select data-ev="action">'+getActions().map(a=>'<option value="'+esc(a.nome)+'" '+(s.action===a.nome?'selected':'')+'>'+esc(a.nome)+'</option>').join('')+'</select></label>':'';
+ const advanced=(s.mode==='casas'||s.mode==='veiculo'?field('Quantos roubos a gazua dura?','life',1,100)+field('Quantos locais serão vasculhados?','points',1,100):'')+
+ (s.mode==='quebrados'?field('Quantas unidades de cada item serão vendidas?','volume',0,100000):field('Taxa da lavagem (%)','tax',0,99))+
+ (s.mode==='corridas'?field('Quantos cartões?','cards',0,100)+field('Corridas por cartão','runs',1,100):'')+
+ (s.mode==='corridas'||s.mode==='veiculo'?field('Chance de terminar sem perder (%)','success',0,100)+field('Gasto médio com reparos e perdas','repair',0,10000000):'')+
+ (s.mode==='veiculo'?field('Quanto o desmanche paga? • sujo','scrap',0,10000000):'');
+ host.innerHTML='<h3>'+ (s.mode==='corridas'?'Quanto os cartões podem render?':titles[area])+'</h3><p class="ap-sub">Veja o resultado de uma tentativa e teste uma mudança.</p>'+
+ (area==='roubados'?'<nav class="ap-navigation" aria-label="Processos econômicos">'+[['casas','Dinheiro do roubo'],['corridas','Cartões de corrida']].map(([k,v])=>'<button type="button" data-ev-mode="'+k+'" '+(s.mode===k?'aria-current="page"':'')+'>'+v+'</button>').join('')+'</nav>':'')+
+ '<div class="ap-filter-row">'+choose+(s.mode!=='corridas'?field(s.mode==='acoes'?'Aumentar ou diminuir o prêmio (%)':'Aumentar ou diminuir o pagamento do NPC (%)','shift',-100,500):'')+'</div>'+
+ (s.mode!=='corridas'?'<p class="ap-row-muted">Use 0 para manter, 20 para aumentar 20% ou -20 para reduzir 20%.</p>':'')+
+ '<div data-ev-result aria-live="polite"></div><details class="ap-simple-details"><summary>Ajustar os dados da conta</summary><div class="ap-filter-row">'+advanced+'</div></details><p class="ap-row-muted">Esta é uma simulação. Para valer na cidade, a mudança precisa ser aplicada no sistema responsável.</p>';
  summarize();
  }
  function summarize(){
@@ -54,7 +59,18 @@ export function createEconomyVisual({root,getRegistry,getCatalog,getActions}){
  add('Potencial bruto mínimo • sujo',count*13000,count*13000*chance);add('Potencial bruto máximo • sujo',count*26000,count*26000*chance);add('Retorno mínimo após lavagem e custos',count*13000*wash-repair,count*13000*chance*wash-repair);add('Retorno máximo após lavagem e custos',count*26000*wash-repair,count*26000*chance*wash-repair);
  note='Atual = concluir todas as corridas. Proposto = chance de conclusão informada. Pagamento de R$ 13 mil a R$ 26 mil sujos, cerca de 3 corridas por cartão. Custos adicionais são médios por tentativa; inclua reparos e perdas esperadas do veículo. Potencial futuro, separado da receita do roubo.';
  }
- host.querySelector('[data-ev-result]').innerHTML='<div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>Indicador</th><th>Atual</th><th>Proposto</th><th>Impacto</th></tr></thead><tbody>'+rows.map(([l,a,b])=>'<tr><td>'+l+'</td><td>'+money(a)+'</td><td>'+money(b)+'</td><td>'+money(Number.isFinite(a)&&Number.isFinite(b)?b-a:null)+'</td></tr>').join('')+'</tbody></table></div><p class="ap-hint">'+esc(note)+'</p>'+(detail.startsWith('<')?'<details><summary>Impacto por item</summary>'+detail+'</details>':'<p class="ap-row-muted">'+esc(detail)+'</p>');
+ const card=(label,value)=>'<div class="ap-kpi"><small>'+esc(label)+'</small><strong>'+esc(money(value))+'</strong></div>';
+ let selected=[];
+ if(s.mode==='casas'||s.mode==='veiculo')selected=[['Você gasta por roubo',rows[0]?.[1]],['Você recebe • sujo',rows[2]?.[1]],['Sobra após lavagem • valor conhecido',rows[3]?.[1]]];
+ else if(s.mode==='acoes')selected=[['Você precisa para montar o kit',rows[0]?.[1]],['Recebe se vencer • mínimo sujo',rows[1]?.[1]],['Sobra se vencer • prêmio mínimo',rows[3]?.[1]]];
+ else if(s.mode==='quebrados')selected=[['NPC paga hoje • volume informado',rows[0]?.[1]],['NPC pagaria com a mudança',rows[0]?.[2]]];
+ else selected=[['Pode render no mínimo • sujo',rows[0]?.[2]],['Pode render no máximo • sujo',rows[1]?.[2]]];
+ const impactRow=s.mode==='acoes'?rows[3]:s.mode==='quebrados'?rows[0]:s.mode==='corridas'?rows[2]:rows[3];
+ const delta=impactRow&&Number.isFinite(impactRow[1])&&Number.isFinite(impactRow[2])?impactRow[2]-impactRow[1]:null;
+ const impact=s.mode==='corridas'?'Cartão não é dinheiro recebido: depende de completar as corridas.':delta===null?'Faltam preços para terminar esta conta.':delta===0?'Sem mudança no resultado.':delta>0?'Com essa mudança, o resultado passa de '+money(impactRow[1])+' para '+money(impactRow[2])+' — '+money(delta)+' a mais.':'Com essa mudança, o resultado passa de '+money(impactRow[1])+' para '+money(impactRow[2])+' — '+money(-delta)+' a menos.';
+ const basis=s.mode==='casas'?'Conta para '+s.points+' armários, com uma gazua durando '+s.life+' invasões. Só inclui dinheiro e itens com preço conhecido.':s.mode==='veiculo'?'Conta para '+s.points+' sorteio(s), com a gazua durando '+s.life+' usos. O desmanche só entra se você informar o pagamento.':s.mode==='quebrados'?'Exemplo com '+s.volume+' vendas futuras de cada item. Não altera o que já foi pago.':s.mode==='acoes'?'Lucro na vitória desconta a lavagem e o que precisa repor. Na derrota, o kit pode ser perdido.':'Cada cartão permite cerca de 3 corridas de R$ 13 mil a R$ 26 mil sujos.';
+ host.querySelector('[data-ev-result]').innerHTML='<div class="ap-management-kpis ap-simple-kpis">'+selected.map(([l,v])=>card(l,v)).join('')+'</div><p class="ap-simple-answer">'+esc(impact)+'</p><p class="ap-row-muted">'+esc(basis)+'</p><details class="ap-simple-details"><summary>Ver a conta completa</summary><div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>O que estamos calculando</th><th>Hoje</th><th>Com a mudança</th></tr></thead><tbody>'+rows.map(([l,a,b])=>'<tr><td>'+esc(l)+'</td><td>'+money(a)+'</td><td>'+money(b)+'</td></tr>').join('')+'</tbody></table></div><p>'+esc(note)+'</p>'+(detail.startsWith('<')?detail:'<p>'+esc(detail)+'</p>')+'</details>';
+
  }
  host.addEventListener('click',e=>{const b=e.target.closest('[data-ev-mode]');if(!b)return;s.mode=b.dataset.evMode;s.shift=0;s.life=s.mode==='veiculo'?3:6;s.points=s.mode==='veiculo'?1:15;render();});
  host.addEventListener('input',e=>{const key=e.target.dataset.ev;if(!key)return;if(key==='action')s[key]=e.target.value;else{if(e.target.value===''||!e.target.validity.valid)return;s[key]=Number(e.target.value);}summarize();});
@@ -63,6 +79,6 @@ export function createEconomyVisual({root,getRegistry,getCatalog,getActions}){
   host.hidden=!mode;if(!mode)return;
   if(area!==next){area=next;s.mode=mode;s.shift=0;s.life=next==='portamalas'?3:6;s.points=next==='portamalas'?1:15;}
   const selector=next==='acoes'?'[data-ap-subpage="overview"]':next==='quebrados'?'[data-ap-subpage="npc"]':'[data-ap-subpage="loot"]';
-  const panel=root.querySelector(selector);if(panel)panel.append(host);render();
+  const panel=root.querySelector(selector);if(panel){const heading=panel.querySelector('.ap-heading');if(heading)heading.after(host);else panel.prepend(host);}render();
  }};
 }

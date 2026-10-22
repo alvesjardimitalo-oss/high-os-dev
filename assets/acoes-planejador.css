@@ -775,3 +775,5 @@
 #page-planejador-acoes #apNpcMarket{display:none!important}
 #page-planejador-acoes .ap-npc .ap-filter-row>.ap-field:has(#apNpcMarket){display:none!important}
 #page-planejador-acoes .ap-economy-lab{border-top:1px solid var(--ap-border);padding-top:20px;margin-top:24px}
+
+#page-planejador-acoes .ap-simple-details{border:1px solid var(--ap-border);border-radius:10px;padding:14px;margin-block:16px}#page-planejador-acoes .ap-simple-details>summary{cursor:pointer;font-weight:600}#page-planejador-acoes .ap-simple-details[open]>summary{margin-bottom:16px}#page-planejador-acoes .ap-simple-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}#page-planejador-acoes .ap-simple-answer{font-size:1.1rem;font-weight:600;padding:16px;border-left:3px solid var(--ap-gold,#c6a75e);background:rgba(127,127,127,.06)}#page-planejador-acoes .ap-economy-lab{border:0;padding:0;margin-block:20px}#page-planejador-acoes .ap-management>.ap-heading .ap-actions{display:none}#page-planejador-acoes .ap-economy-lab h3{font-size:1.3rem}@media(max-width:720px){#page-planejador-acoes .ap-simple-kpis{grid-template-columns:1fr}}

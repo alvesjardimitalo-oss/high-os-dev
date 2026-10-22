@@ -1,7 +1,7 @@
-import {createEconomyVisual} from './economia-visual.js?v=2';
-import {createHouseWorkbench} from './roubos-loot-ui.js?v=5';
+import {createEconomyVisual} from './economia-visual.js?v=3';
+import {createHouseWorkbench} from './roubos-loot-ui.js?v=6';
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
-import {createNpcWorkbench} from './acoes-npc-ui.js?v=6';
+import {createNpcWorkbench} from './acoes-npc-ui.js?v=7';
 
 /** Navigation, profiles and Firestore-backed internal action registration.
  * The official market catalog is always read-only and remains the reference.
@@ -31,6 +31,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   visual?.selectArea(area);
   const lootHeading=$('apLootHeading');if(lootHeading)lootHeading.textContent={roubados:'Roubo de residências',lootnpc:'Loot de NPC',portamalas:'Roubo de veículos e porta-malas'}[area]||'Gestão dos roubos';
   if($('apHouseMerchant'))$('apHouseMerchant').hidden=area!=='roubados';
+  if($('apLootDetails')){if(area==='lootnpc')$('apLootDetails').open=true;else $('apLootDetails').open=false;}
   if($('apBackHouse'))$('apBackHouse').hidden=area!=='comerciante';
   root.dataset.economyArea=area;
   root.querySelectorAll('[data-economy-area]').forEach(btn=>{

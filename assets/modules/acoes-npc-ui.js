@@ -65,14 +65,14 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave,o
   const rows=[...stats.ranked].sort((a,b)=>b.stock*b.price-a.stock*a.price).slice(0,10);
   for(const row of elRows()){const it=draft[Number(row.dataset.npcIndex)];const total=row.querySelector('[data-npc-total]');if(total&&it)total.textContent=n(it.quantidadeNpc)===null||n(it.precoSujo)===null?'A informar':money(n(it.quantidadeNpc)*n(it.precoSujo));}
   metrics.innerHTML='<div class="ap-management-kpis">'+[
-   ['Itens registrados',stats.registered],['Com quantidade informada',stats.observed],
+   
    ['Itens já comprados',stats.observed?stats.units:'A informar'],
-   ['Dinheiro sujo gerado • preços atuais',stats.observed?money(stats.grossDirty):'A informar']
+   ['Valor dessas compras aos preços de hoje',stats.observed?money(stats.grossDirty):'A informar']
   ].map(([label,value])=>'<div class="ap-kpi"><small>'+safe(label)+'</small><strong>'+safe(value)+'</strong></div>').join('')+'</div>'+
-  '<div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>MAIOR GERAÇÃO DE DINHEIRO SUJO</th><th>QUANTIDADE</th><th>PAGAMENTO UNITÁRIO</th><th>TOTAL AOS PREÇOS ATUAIS (SUJO)</th></tr></thead><tbody>'+
+  '<details class="ap-simple-details"><summary>Ver os itens mais vendidos</summary><div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>MAIOR GERAÇÃO DE DINHEIRO SUJO</th><th>QUANTIDADE</th><th>PAGAMENTO UNITÁRIO</th><th>TOTAL AOS PREÇOS ATUAIS (SUJO)</th></tr></thead><tbody>'+
   (rows.length?rows.map(x=>'<tr><td>'+safe(x.nome)+'</td><td>'+safe(x.stock)+'</td><td>'+safe(money(x.price))+'</td><td>'+safe(money(x.stock*x.price))+'</td></tr>').join(''):
    '<tr><td colspan="4">Informe as quantidades mostradas pelo NPC para gerar o ranking.</td></tr>')+
-  '</tbody></table></div>';
+  '</tbody></table></div></details>';
   if(!scenario)return;
   scenario.hidden=market!=='CASAS';
   if(market!=='CASAS')return;

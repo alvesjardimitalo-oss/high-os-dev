@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
-  <link rel="stylesheet" href="assets/acoes-planejador.css?v=15">
+  <link rel="stylesheet" href="assets/acoes-planejador.css?v=16">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -318,9 +318,10 @@
             <div id="apRegistryNotice" class="ap-hint" hidden></div>
             <section class="ap-panel ap-management" data-ap-subpage="overview" aria-labelledby="apManagementTitle">
               <div class="ap-heading">
-                <div><span class="ap-section-kicker">CONTROLE EXECUTIVO • CARTEIRA DE AÇÕES</span><h3 id="apManagementTitle">Central de gestão e prioridades</h3></div>
+                <div><span class="ap-section-kicker">AÇÕES BLIPADAS</span><h3 id="apManagementTitle">Escolha uma ação e veja o resultado</h3></div>
                 <div class="ap-actions"><span class="ap-status" id="apManagementDate">Indicadores calculados com dados oficiais publicados</span><button type="button" class="ap-button" id="apManageShowAll">Mostrar todas</button><button type="button" class="ap-button" id="apManagementExport">Exportar carteira CSV</button></div>
               </div>
+              <details class="ap-simple-details"><summary>Ver todas as ações, rankings de prioridade e filtros</summary>
               <div class="ap-management-kpis" id="apManagementKpis" aria-live="polite"></div>
               <div class="ap-management-toolbar">
                 <label class="ap-field">Filtrar o diagnóstico
@@ -353,7 +354,7 @@
                   <tbody id="apManagementList"></tbody>
                 </table>
               </div>
-              <p class="ap-row-muted" id="apManagementMethod"></p>
+              <p class="ap-row-muted" id="apManagementMethod"></p></details>
             </section>
             <section class="ap-panel ap-intel-alerts" data-ap-subpage="prices" aria-labelledby="apPriceAlertsTitle">
               <div class="ap-heading">
@@ -370,7 +371,7 @@
             </section>
             <section class="ap-panel ap-house" data-ap-subpage="loot" aria-label="Rendimento dos roubos">
               <div class="ap-heading"><div><span class="ap-section-kicker">RENDIMENTO POR TENTATIVA</span><h3 id="apLootHeading">Gestão dos roubos</h3></div><button type="button" id="apHouseMerchant" class="ap-button">Etapa final • Comerciante de Itens Roubados</button></div>
-              <div id="apHouseWorkbench"></div>
+              <details class="ap-simple-details" id="apLootDetails"><summary>Ver itens, chances e registrar um roubo</summary><div id="apHouseWorkbench"></div></details>
             </section>
             <section class="ap-panel ap-npc" data-ap-subpage="npc" aria-labelledby="apNpcHeading">
               <div class="ap-heading">
@@ -378,6 +379,8 @@
                   <h3 id="apNpcHeading">Comerciante de Itens Roubados</h3><button type="button" class="ap-button" id="apBackHouse">Voltar ao rendimento dos roubos</button>
                   <p class="ap-sub">Controle o preço pago em dinheiro sujo e a quantidade já comprada pelo comerciante. O total por item é preço × quantidade; alterações de preço exigem histórico para apurar o pagamento real acumulado.</p></div>
               </div>
+              <div id="apNpcStats" class="ap-npc-stats"></div>
+              <details class="ap-simple-details"><summary>Ver itens e editar preços do comerciante</summary>
               <div class="ap-filter-row">
                 <label class="ap-field">Comprador NPC<select id="apNpcMarket"><option value="CASAS">Comerciante de Itens Roubados</option><option value="ARMAS_QUEBRADAS">Comerciante de Itens Quebrados</option></select></label>
                 <div class="ap-actions"><button type="button" id="apNpcReset" class="ap-button">Descartar edição</button><button type="button" id="apNpcAdd" class="ap-button">+ Adicionar item</button><button type="button" id="apNpcSave" class="ap-button primary">Salvar preços e quantidades</button></div>
@@ -391,7 +394,7 @@
                 </table>
               </div>
               <p class="ap-row-muted">* Dinheiro sujo gerado: estimativa da quantidade comprada aos preços atuais. O contador cobre o período acumulado pelo NPC. A análise por casa está em Roubo de Casas e Loot.</p>
-              <div id="apNpcStats" class="ap-npc-stats"></div>
+              </details>
               <p id="apNpcHistory" class="ap-row-muted"></p>
               <div id="apNpcScenario" class="ap-npc-scenario">
                 <div class="ap-heading"><div><span class="ap-section-kicker">SIMULAÇÃO ECONÔMICA • ROUBO DE CASAS</span><h3>Quanto rende uma casa?</h3></div></div>
@@ -1194,7 +1197,7 @@
   <script src="assets/mission-planner.js?v=12.18.1"></script>
   <script src="assets/mission-planner-nav.js?v=12.8.1"></script>
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=15.12.1"></script>
+  <script type="module" src="assets/app.js?v=15.12.2"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
