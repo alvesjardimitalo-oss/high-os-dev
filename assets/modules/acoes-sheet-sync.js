@@ -12,7 +12,7 @@ const num=v=>{
  return Number.isFinite(value)?value:null;
 };
 const str=v=>String(v??'');
-export function planApprovedActionSheetUpdate(rows,name,officialMin,proposedMin){
+export function planApprovedActionSheetUpdate(rows,name,officialMin,proposedMin,{officialMax=null,proposedMax=null}={}){
  const wanted=norm(name);
  if(!wanted||!Array.isArray(rows))throw Error('Dados ou nome de ação inválidos.');
  const candidates=[];
@@ -31,13 +31,17 @@ export function planApprovedActionSheetUpdate(rows,name,officialMin,proposedMin)
   if(candidates.length!==1)throw Error('Campo '+label+' ausente ou duplicado para '+name+'.');
   return candidates[0];
  };
- const minRow=match('PREMIO MINIMO (SUJO)'),buffRow=match('BUFF'),nerfRow=match('NERF');
- const min=num(rows[minRow]?.[col+1]),buff=num(rows[buffRow]?.[col+1]),nerf=num(rows[nerfRow]?.[col+1]);
- if(min===null||buff===null||nerf===null)throw Error('Prêmio, BUFF ou NERF sem valor numérico válido.');
+ const minRow=match('PREMIO MINIMO (SUJO)'),maxRow=match('PREMIO MAXIMO (SUJO)'),buffRow=match('BUFF'),nerfRow=match('NERF');
+ const min=num(rows[minRow]?.[col+1]),max=num(rows[maxRow]?.[col+1]),buff=num(rows[buffRow]?.[col+1]),nerf=num(rows[nerfRow]?.[col+1]);
+ if(min===null||max===null||max<min||buff===null||nerf===null)throw Error('Prêmios mínimo/máximo, BUFF ou NERF sem valores coerentes.');
  if(!Number.isFinite(Number(officialMin))||Math.abs(min-Number(officialMin))>1.01)
   throw Error('O prêmio atual da planilha diverge do Mercado Negro. Sincronize os valores oficiais antes de aprovar qualquer ajuste.');
+ if(officialMax!==null&&(!Number.isFinite(Number(officialMax))||Math.abs(max-Number(officialMax))>1.01))
+  throw Error('O prêmio máximo da planilha diverge do catálogo/valor exibido. Atualize os valores antes de aprovar.');
  const newMin=Number(proposedMin);
  if(!Number.isFinite(newMin)||newMin<0||newMin>1000000000)throw Error('Premiação proposta inválida ou fora do limite de segurança.');
+ const newMax=proposedMax===null?Math.ceil(newMin*max/min):Number(proposedMax);
+ if(!Number.isFinite(newMax)||newMax<newMin||newMax>1000000000)throw Error('Prêmio máximo recomendado inválido ou fora do limite.');
  const delta=Math.round(newMin-min);
  if(delta===0)throw Error('O prêmio proposto não muda o valor atual.');
  const adjustment=Math.round(buff-nerf)+delta;
@@ -45,9 +49,9 @@ export function planApprovedActionSheetUpdate(rows,name,officialMin,proposedMin)
  return {
   name,sheetId:1276582880,
   sheetName:'VALORES AÇÃO BLIPADA',
-  previousMin:min,proposedMin:newMin,delta,
+  previousMin:min,previousMax:max,proposedMin:newMin,proposedMax:newMax,delta,
   oldBuff:buff,oldNerf:nerf,nextBuff,nextNerf,
-  min:{rowIndex:minRow,columnIndex:col+1},
+  min:{rowIndex:minRow,columnIndex:col+1},max:{rowIndex:maxRow,columnIndex:col+1},
   buff:{rowIndex:buffRow,columnIndex:col+1},
   nerf:{rowIndex:nerfRow,columnIndex:col+1}
  };
