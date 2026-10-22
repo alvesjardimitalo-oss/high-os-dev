@@ -1574,6 +1574,67 @@ $('#diarioToday')?.addEventListener('click',()=>{if($('#diarioDate'))$('#diarioD
 $('#diarioDate')?.addEventListener('change',loadOperationalDiary);
 
 // HIGH OS V6.7 · o perfil do Group passa a abrir como página interna, não como modal.
+// O planejador só escreve nos campos BUFF/NERF da aba original após uma
+// confirmação específica do gestor. Não cria abas nem reescreve fórmulas.
+async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,tax}){
+ if(!currentUser||!canEditModule('economia'))throw Error('Sem permissão de edição de Economia.');
+ const value=Number(proposedMin);
+ if(!Number.isFinite(value)||value<=0)throw Error('Não há prêmio sugerido válido.');
+ const token=await facSheetAuthorize();
+ const root='https://sheets.googleapis.com/v4/spreadsheets/'+DLV_VIP_SHEET_ID;
+ const range=encodeURIComponent("'VALORES AÇÃO BLIPADA'!A1:AD400");
+ const [{planApprovedActionSheetUpdate},first,originalFormulas]=await Promise.all([
+   import('./modules/acoes-sheet-sync.js?v=1'),
+   facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token}),
+   facSheetFetch(root+'/values/'+range+'?valueRenderOption=FORMULA',{token})
+ ]);
+ const candidate=planApprovedActionSheetUpdate(first.values||[],name,officialMin,value);
+ const formulaRows=originalFormulas.values||[];
+ for(const cell of [candidate.buff,candidate.nerf]){
+  const input=formulaRows[cell.rowIndex]?.[cell.columnIndex];
+  if(typeof input==='string'&&input.startsWith('='))
+   throw Error('A aba contém uma fórmula no BUFF/NERF. Alteração interrompida para preservar a planilha.');
+ }
+ const proposal='AÇÃO: '+name+'\nINVASORES: '+team+
+ '\nPrêmio mínimo atual (sujo): '+Math.round(candidate.previousMin).toLocaleString('pt-BR')+
+ '\nNovo prêmio sugerido (sujo): '+value.toLocaleString('pt-BR')+
+ '\nVariação: '+candidate.delta.toLocaleString('pt-BR')+
+ '\nBUFF: '+candidate.oldBuff+' → '+candidate.nextBuff+
+ '\nNERF: '+candidate.oldNerf+' → '+candidate.nextNerf+
+ '\n\nDeseja APROVAR e atualizar somente o BUFF/NERF na aba existente VALORES AÇÃO BLIPADA?';
+ if(!confirm(proposal))return {cancelled:true};
+ // A confirmação pode levar tempo: validar novamente as células antes do POST.
+ const fresh=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token});
+ const checked=planApprovedActionSheetUpdate(fresh.values||[],name,officialMin,value);
+ if(checked.buff.rowIndex!==candidate.buff.rowIndex||
+    checked.buff.columnIndex!==candidate.buff.columnIndex||
+    checked.nerf.rowIndex!==candidate.nerf.rowIndex||
+    checked.nerf.columnIndex!==candidate.nerf.columnIndex||
+    checked.oldBuff!==candidate.oldBuff||checked.oldNerf!==candidate.oldNerf||
+    Math.abs(checked.previousMin-candidate.previousMin)>.01)
+  throw Error('A planilha foi alterada durante a confirmação. Nenhuma alteração aplicada; refaça a análise.');
+ const updates=[['buff',checked.nextBuff],['nerf',checked.nextNerf]].map(([key,num])=>({
+   updateCells:{start:{sheetId:checked.sheetId,rowIndex:checked[key].rowIndex,columnIndex:checked[key].columnIndex},
+     rows:[{values:[{userEnteredValue:{numberValue:num}}]}],fields:'userEnteredValue'}
+ }));
+ await facSheetFetch(root+':batchUpdate',{method:'POST',body:{requests:updates},token});
+ const after=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token});
+ const pos=checked.buff;
+ const calculatedMinimum=Number(after.values?.[pos.rowIndex-3]?.[pos.columnIndex]);
+ const verified=Number.isFinite(calculatedMinimum)&&Math.abs(calculatedMinimum-value)<2;
+ let audited=false;
+ try{
+  await addDoc(histCol,{tipo:'AJUSTE_PREMIACAO_ACAO',usuario:currentUser.email,
+   acao:name,grupo:'ECONOMIA_ILEGAL',invasores:team,custoKit:cost,
+   taxaLavagem:tax,premioMinAnterior:checked.previousMin,premioMinProposto:value,
+   buffAnterior:checked.oldBuff,nerfAnterior:checked.oldNerf,
+   buffNovo:checked.nextBuff,nerfNovo:checked.nextNerf,
+   planilha:'VALORES AÇÃO BLIPADA',data:serverTimestamp()});
+  audited=true;
+ }catch(error){console.warn('[AÇÕES] Atualização feita, mas falha ao registrar auditoria:',error)}
+ return {updated:true,verified,audited,previous:checked.previousMin,next:value};
+}
+
 function activateAppPage(page){
  if(page!=='administracao'&&page!=='usuarios'&&!isAdmin()&&!canViewModule(page)){permissionDeniedMessage(page,false);
 const fallback=firstAllowedModule();
@@ -1591,7 +1652,7 @@ if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','gr
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='chat')setTimeout(()=>startChat(),0);
 if(page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60);
-if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=1').then(mod=>mod.mountActionPlanner()).catch(err=>{console.error('[PLANEJADOR DE AÇÕES]',err);const root=document.querySelector('#actionEconomyPlanner');if(root)root.textContent='Não foi possível carregar o Planejador de Ações: '+(err?.message||String(err));});
+if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=1').then(mod=>mod.mountActionPlanner({onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null})).catch(err=>{console.error('[PLANEJADOR DE AÇÕES]',err);const root=document.querySelector('#actionEconomyPlanner');if(root)root.textContent='Não foi possível carregar o Planejador de Ações: '+(err?.message||String(err));});
 
  document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+page));
 
