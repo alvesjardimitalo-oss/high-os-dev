@@ -23,12 +23,16 @@ const median=values=>{
  * Variações históricas são calculadas a partir da referência compartilhada, se existir.
  */
 export function buildManagementBoard(actions,catalog,{
- tax=.3,ammoUse=.25,accessConsumed=true,targetPerPlayer=20000,roi=.25,reference=null
+ tax=.3,ammoUse=.25,accessConsumed=true,targetPerPlayer=20000,roi=.25,reference=null,
+ winChance=null,policeWaitMinutes=null,estimatedActionMinutes=null
 }={}){
  const cleanActions=Array.isArray(actions)?actions:[];
  const opts={tax:clamp(tax,0,.99,.3),ammoUse:clamp(ammoUse,0,1,.25),accessConsumed:!!accessConsumed};
  const goalMember=Math.max(0,numeric(targetPerPlayer)??20000);
  const goalRoi=Math.max(0,numeric(roi)??.25);
+ const chance=winChance===null||winChance===''?null:clamp(winChance,0,1,0);
+ const wait=policeWaitMinutes===null||policeWaitMinutes===''?null:clamp(policeWaitMinutes,0,600,0);
+ const duration=estimatedActionMinutes===null||estimatedActionMinutes===''?null:clamp(estimatedActionMinutes,0,600,0);
  const changes=assessPriceChanges(cleanActions,catalog,reference,opts);
  const changeMap=new Map(changes.changes.map(c=>[norm(c.name),c]));
  const entries=cleanActions.map(action=>{
@@ -41,6 +45,9 @@ export function buildManagementBoard(actions,catalog,{
   const change=changeMap.get(norm(action.nome))||null;
   const reason=[];
   let status='MANTER',priority=0;
+  const expected=valid&&chance!==null?round(chance*calc.netMin+(1-chance)*calc.loss):null;
+  const cycleMinutes=wait!==null&&duration!==null?wait+duration:null;
+  const expectedMemberHour=expected!==null&&cycleMinutes>0?round(expected*60/cycleMinutes/team):null;
   const target=valid?Math.max(goalMember*team,calc.kit.total*goalRoi):null;
   const gap=valid?round(target-calc.netMin):null;
   if(!active){status='INATIVA';priority=-1;}
@@ -81,7 +88,12 @@ export function buildManagementBoard(actions,catalog,{
     reason.push('Acima da meta não significa nerf: considerar espera, derrota e dificuldade');
    }
   }
+  if(active&&valid&&expected!==null&&expected<0&&priority<5){
+   priority=Math.max(priority,4);status='RISCO SIMULADO';
+   reason.unshift('Com a chance informada, o resultado esperado é negativo; cenário hipotético');
+  }
   return {nome:String(action.nome||''),action,calc,active,valid,team,status,priority,reason,change,
+   expected,expectedMemberHour,cycleMinutes,
    target,gap,netMin:calc.netMin,perPlayer:calc.perPlayer,roi:calc.roi,
    capital:calc.kit.total,winCost:calc.kit.winCost,loss:calc.loss,
    cooldownMinutes:finite(numeric(action.cooldown_segundos))?Math.round(Number(action.cooldown_segundos)/60):null};
@@ -98,9 +110,10 @@ export function buildManagementBoard(actions,catalog,{
   emPrejuizo:valid.filter(x=>x.netMin<0).length,
   capitalMediano:median(capitals),lucroMedianoMembro:median(perPlayer),
   maiorInvestimento:capitals.length?Math.max(...capitals):null,
-  lucroNegativo:valid.filter(x=>x.perPlayer<0).length
+  lucroNegativo:valid.filter(x=>x.perPlayer<0).length,
+  perdaEsperada:valid.filter(x=>x.expected!==null&&x.expected<0).length
  };
- return {entries,stats,changes,hasReference:changes.available,
+ return {entries,stats,changes,hasReference:changes.available,scenario:{chance,wait,duration},
   conditions:'Cenário de vitória: preços de pista, kit oficial, maior equipe permitida, prêmio mínimo, lavagem e reposições; não representa resultado real por hora nem risco medido.'};
 }
 
@@ -117,7 +130,8 @@ export function filterManagementEntries(entries,{filter='TODAS',sort='PRIORIDADE
  });
  const sortable={
   'LUCRO_MEMBRO':x=>x.perPlayer,'LUCRO_TOTAL':x=>x.netMin,
-  'CAPITAL':x=>x.capital,'ROI':x=>x.roi
+  'CAPITAL':x=>x.capital,'ROI':x=>x.roi,
+  'RESULTADO_ESPERADO':x=>x.expected,'LUCRO_HORA':x=>x.expectedMemberHour
  };
  if(sort==='PRIORIDADE')return list.sort((a,b)=>b.priority-a.priority||
   (a.gap!==null&&b.gap!==null?b.gap-a.gap:0)||byName(a,b));
