@@ -1,4 +1,5 @@
-import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=2';
+import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=3';
+import {createNpcWorkbench} from './acoes-npc-ui.js?v=1';
 
 /** Navigation, profiles and Firestore-backed internal action registration.
  * The official market catalog is always read-only and remains the reference.
@@ -7,7 +8,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  const $=id=>root.querySelector('#'+id);
  const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
  let registry=cleanRegistry(),ready=false,view='overview',tab='resumo',draft=null,original='',busy=false;
- let lastLoadError='';
+ let lastLoadError='',npc=null;
  const published=()=>getPublished()||[];
  const current=()=>getActions().find(x=>x.nome===getSelected())||null;
  const writable=()=>Boolean(onMutateRegistry&&ready);
@@ -19,7 +20,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  async function load(){
   if(!onReadRegistry){ready=false;return;}
   try{
-   registry=cleanRegistry(await onReadRegistry());ready=true;lastLoadError='';message('');
+   registry=cleanRegistry(await onReadRegistry());ready=true;lastLoadError='';message('');npc?.refresh();
   }catch(e){ready=false;lastLoadError=String(e?.message||e);message('Cadastro interno indisponível: '+lastLoadError);}
  }
  function paint(){
@@ -52,7 +53,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   if(view==='profile'&&!a){view='catalog';root.dataset.apSection=view;}
  }
  function navigate(next,subtab=tab){
-  view=['overview','catalog','ranking','prices','profile'].includes(next)?next:'overview';
+  view=['overview','catalog','ranking','prices','npc','profile'].includes(next)?next:'overview';
   tab=['resumo','custos','cenario','sugestao'].includes(subtab)?subtab:'resumo';
   paint();
   root.scrollIntoView({behavior:'smooth',block:'start'});
@@ -174,6 +175,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   if(ev.target.id!=='apEntryType'||!draft)return;
   collectRows();draft.tipo_acao=ev.target.value;
   if(draft.tipo_acao==='atm'&&!draft.itens.length){draft.itens=[{nome:'C4',quantidade:1,categoria_item:'consumivel',preco_unitario:null}];editorRows();}
+  if(draft.tipo_acao==='casas'&&!draft.itens.length){draft.itens=[{nome:'GAZUA ++',quantidade:1,categoria_item:'consumivel',preco_unitario:null}];editorRows();}
  });
  root.addEventListener('submit',ev=>{
   if(ev.target.id!=='apActionForm')return;
@@ -183,6 +185,17 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   if(ev.key==='Escape'&&$('apEditorDialog').open)closeEditor();
  });
  $('apEditorDialog')?.addEventListener('close',()=>{draft=null;original='';});
+ npc=createNpcWorkbench({
+  root,getRegistry:()=>registry,getCatalog,canEdit:writable,
+  onSave:async entry=>{
+   if(!writable())throw Error('Sem permissão para alterar os compradores NPC.');
+   registry=cleanRegistry(await onMutateRegistry({
+    kind:'npc-save',entry,expectedRevision:registry.revision
+   }));
+   return registry;
+  }
+ });
  paint();
  return {load,merged,paint,openProfile,openSuggestion,navigate,reload};
+
 }
