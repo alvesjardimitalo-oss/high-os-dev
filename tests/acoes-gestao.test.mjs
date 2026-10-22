@@ -84,11 +84,31 @@ test('gestão separa pendências, prejuízo e inativas sem criar preços fictíc
  const sorted=filterManagementEntries(board.entries,{sort:'LUCRO_MEMBRO'});
  assert.equal(sorted.at(-1).nome,'SEM PREÇO');
 });
+
+test('cenário de risco gera resultado esperado e retorno por hora só com hipóteses explícitas',()=>{
+ const without=buildManagementBoard([template],catalog).entries[0];
+ assert.equal(without.expected,null);
+ assert.equal(without.expectedMemberHour,null);
+ const estimated=buildManagementBoard([template],catalog,{
+  winChance:.6,policeWaitMinutes:30,estimatedActionMinutes:20
+ }).entries[0];
+ assert.equal(estimated.expected,40200);
+ assert.equal(estimated.expectedMemberHour,24120);
+ assert.equal(estimated.cycleMinutes,50);
+ const noTimes=buildManagementBoard([template],catalog,{winChance:.6}).entries[0];
+ assert.equal(noTimes.expected,40200);
+ assert.equal(noTimes.expectedMemberHour,null);
+ const worst=buildManagementBoard([template],catalog,{winChance:.3}).entries[0];
+ assert.equal(worst.expected,-49650);
+ assert.equal(worst.status,'RISCO SIMULADO');
+ assert.ok(worst.priority>=4);
+});
+
 test('elementos de navegação e painel gerencial integrados à página original',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
  const ui=readFileSync(new URL('../assets/modules/acoes-planejador-ui.js',import.meta.url),'utf8');
  const app=readFileSync(new URL('../assets/app.js',import.meta.url),'utf8');
- for(const id of ['apManagementKpis','apManagementList','apManagementFilter','apManagementSort','apManagementSearch','apManagementMethod']){
+ for(const id of ['apManagementKpis','apManagementList','apManagementFilter','apManagementSort','apManagementSearch','apManagementMethod','apPortfolioWinChance','apPortfolioPoliceWait','apPortfolioDuration','apManagementExport']){
   assert.match(html,new RegExp('id="'+id+'"'));
  }
  assert.match(ui,/buildManagementBoard/);
