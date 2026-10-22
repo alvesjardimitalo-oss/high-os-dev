@@ -289,7 +289,7 @@
         <section class="page" id="page-planejador-acoes">
           <div class="page-head">
             <div><div class="eyebrow">HIGH OS • CENTRO DE GESTÃO ECONÔMICA</div><h2>GESTÃO DE AÇÕES</h2>
-              <p class="page-subtitle">Monitore a carteira de ações, identifique custos e premiações fora do equilíbrio, priorize revisões e simule decisões com risco, equipe e investimento. Nenhuma hipótese altera automaticamente o Mercado Negro.</p>
+              <p class="page-subtitle">Controle o investimento e a reposição dos kits, acompanhe mudanças de preços do Mercado Negro e simule os valores mínimo/máximo para cadastrar no Suricato Roubos. As premiações atuais ficam preservadas até decisão da gestão.</p>
             </div><span class="dev-badge">GESTÃO ECONÔMICA</span>
           </div>
           <div id="actionEconomyPlanner" class="ap-root">
@@ -340,15 +340,10 @@
                   <input id="apManagementSearch" type="search" placeholder="Nome da ação" aria-label="Buscar na carteira de ações">
                 </label>
               </div>
-              <div class="ap-management-risk">
-                <label class="ap-field">Chance de vitória simulada (%)<input type="number" id="apPortfolioWinChance" min="0" max="100" step="5" value="40"></label>
-                <label class="ap-field">Espera média da polícia (min)<input type="number" id="apPortfolioPoliceWait" min="0" max="600" placeholder="Não informada"></label>
-                <label class="ap-field">Duração da ação (min)<input type="number" id="apPortfolioDuration" min="0" max="600" placeholder="Não informada"></label>
-                <p>Chance de vitória padrão: 40%, definida pela gestão devido à desvantagem numérica frente à polícia, e não medida em estatísticas. As três entradas podem ser alteradas. Sem chance, o sistema não calcula retorno esperado. Sem duração e espera, não calcula lucro por hora. Cooldown não incluído.</p>
-              </div>
+              <div class="ap-management-risk"><p><b>Referência econômica:</b> valores mínimo e máximo já aprovados. O planejador acompanha o custo de compra e reposição dos kits e alerta quando os preços dos insumos sobem ou caem. Regras de invasores/policiais e cooldown são respeitadas como requisitos da ação, sem alterar a recompensa por probabilidade de vitória.</p></div>
               <div class="ap-table-scroll ap-management-scroll">
                 <table class="ap-management-table">
-                  <thead><tr><th>AÇÃO / EQUIPE</th><th>DIAGNÓSTICO</th><th>CAPITAL</th><th>REPÕE NA VITÓRIA</th><th>LUCRO MÍNIMO</th><th>POR MEMBRO</th><th>RESULTADO ESPERADO *</th><th>R$/JOGADOR/H *</th><th>GESTÃO</th></tr></thead>
+                  <thead><tr><th>AÇÃO / EQUIPE</th><th>COOLDOWN</th><th>DIAGNÓSTICO</th><th>CAPITAL</th><th>REPÕE NA VITÓRIA</th><th>LUCRO MÍNIMO</th><th>POR MEMBRO</th><th>RESULTADO ESPERADO *</th><th>R$/JOGADOR/H *</th><th>GESTÃO</th></tr></thead>
                   <tbody id="apManagementList"></tbody>
                 </table>
               </div>
@@ -363,9 +358,9 @@
                   <button type="button" class="ap-button" id="apReadSheet" hidden>Conferir prêmios na planilha</button>
                 </div>
               </div>
-              <p id="apPriceAlertIntro" class="ap-sub">Comparação com a última referência salva pela gestão, nunca com uma estimativa.</p>
+              <p id="apPriceAlertIntro" class="ap-sub">Compare o custo de cada kit com os preços da referência salva. Sem referência, os prêmios atuais são preservados e não há buff sugerido.</p>
               <div id="apPriceAlerts" class="ap-intel-alert-list" aria-live="polite"></div>
-              <p id="apPublicationStatus" class="ap-row-muted">O catálogo do Mercado Negro é público; alterações na planilha podem aguardar republicação no GitHub.</p>
+              <p id="apPublicationStatus" class="ap-row-muted">Preços e premiações oficiais podem depender de publicação no GitHub. Alterações no planejador não atualizam o Suricato Roubos.</p>
             </section>
             <section class="ap-panel ap-rank-hub" data-ap-subpage="ranking" aria-labelledby="apRankingHeading">
               <div class="ap-heading">
@@ -457,6 +452,7 @@
                     <tbody id="apKitRows"></tbody><tfoot><tr><td colspan="3">TOTAL</td><td id="apTotal">—</td><td id="apWinCostTotal">—</td></tr></tfoot></table></div>
                   <p id="apKitComputed" class="ap-row-muted"></p><p id="apWarnings" class="ap-hint"></p>
                 </section>
+                <section class="ap-panel" data-ap-profile-panel="custos"><div id="apExplosiveComparison"></div></section>
                 <section class="ap-panel" data-ap-profile-panel="resumo">
                   <h3>3. Resultados financeiros com o prêmio atual</h3>
                   <div id="apCurrentMetrics" class="ap-cards"></div>
@@ -469,20 +465,10 @@
                 </section>
                 <section class="ap-panel ap-strategy" data-ap-profile-panel="sugestao">
                   <details id="apStrategyDetails" class="ap-disclosure" open>
-                    <summary>5. Central de decisões — buff, nerf ou manter</summary>
-                    <div class="ap-intel-fields">
-                      <label class="ap-field">Espera estimada pela polícia (min)<input id="apPoliceWait" type="number" min="0" max="600" placeholder="Não informada"></label>
-                      <label class="ap-field">Duração estimada da ação (min)<input id="apActionDuration" type="number" min="0" max="600" placeholder="Não informada"></label>
-                      <label class="ap-field">Chance estimada de vitória (%)<input id="apWinChance" type="number" min="0" max="100" value="40"></label>
-                      <label class="ap-field">Lucro alvo por jogador/hora (R$)<input id="apHourlyTarget" type="number" min="0" step="1000" value="0"></label>
-                    </div>
-                    <p class="ap-row-muted">40% de chance de vitória é uma premissa editável da gestão, por haver mais policiais que invasores. Não é uma taxa de sucesso real. A espera e a duração só são consideradas quando informadas.</p>
+                    <summary>5. Impacto de preços — manter, aumentar ou reduzir</summary>
+                    <p class="ap-sub">O pagamento vigente é a base aprovada. Alterações de preço afetam o investimento inicial e os itens consumidos ou repostos. O sistema somente considera revisão de premiação quando há variação comprovada da despesa por ação, nunca pela quantidade de policiais ou por uma chance de vitória presumida.</p>
                     <div id="apIntelligenceResult" class="ap-intel-decision"></div>
-                    <p class="ap-sub">A sugestão considera o lucro em caso de vitória e o capital investido para definir a meta. A perda integral do kit na derrota é ponderada no cenário gerencial de chance de vitória configurado (40% por padrão). A recomendação é gradual e não tenta eliminar todo o risco com um único buff.</p>
                     <div class="ap-filter-row">
-                      <label class="ap-field">Lucro alvo por jogador (R$)<input id="apProfitGoal" type="number" min="0" step="1000" value="20000"></label>
-                      <label class="ap-field">ROI alvo sobre o kit inteiro (%)<input id="apRoiGoal" type="number" min="0" max="200" step="5" value="25"></label>
-                      <label class="ap-field">Margem para nerf (%)<input id="apTolerance" type="number" min="0" max="200" step="5" value="25"></label>
                       <label class="ap-field">Taxa de lavagem (%)<input id="apTax" type="number" min="0" max="99" step="1" value="30"></label>
                     </div>
                     <div id="apGoals" class="ap-cards"></div>
@@ -490,10 +476,11 @@
                     <div id="apResult" class="ap-result"></div><p id="apProposal" class="ap-row-muted"></p>
                     <label class="ap-field">Motivo da decisão / observações<input id="apDecisionReason" type="text" maxlength="600" placeholder="Ex.: insumos subiram; espera policial elevada"></label>
                   <div class="ap-filter-row ap-manual-row">
-                      <label class="ap-field">Prêmio mínimo manual (sujo)<input id="apManual" type="number" min="1" placeholder="Digite um valor para simular/aprovar"></label>
-                      <div id="apManualOutcome" class="ap-hint"></div><p class="ap-row-muted" id="apManualRangeHelp">O prêmio máximo manual é estimado com a proporção entre o mínimo e o máximo publicados. A planilha calcula o máximo definitivo.</p>
+                      <label class="ap-field">Prêmio mínimo manual (sujo)<input id="apManual" type="number" min="1" placeholder="Mínimo a cadastrar no Suricato"></label>
+                      <label class="ap-field">Prêmio máximo manual (sujo)<input id="apManualMax" type="number" min="1" placeholder="Máximo a cadastrar no Suricato"></label>
+                      <div id="apManualOutcome" class="ap-hint"></div><p class="ap-row-muted" id="apManualRangeHelp">Cadastre ou simule os dois valores livremente para o Suricato Roubos. Na planilha histórica de ações blipadas, o máximo oficial segue a fórmula existente.</p>
                     </div>
-                    <div class="ap-actions"><button type="button" class="ap-button primary" id="apCopy">Copiar análise</button>
+                    <div class="ap-actions"><button type="button" class="ap-button primary" id="apCopySuricato">Copiar mínimo e máximo para Suricato</button><button type="button" class="ap-button" id="apCopy">Copiar análise completa</button>
                       <button type="button" class="ap-button" id="apApprove" hidden>Aprovar valor recomendado</button>
                     <button type="button" class="ap-button" id="apApproveManual" hidden>Aprovar valor manual</button>
                     <button type="button" class="ap-button" id="apReject" hidden>Recusar proposta</button>
@@ -510,13 +497,14 @@
                 <div class="ap-editor-header">
                   <div><span class="ap-section-kicker">GESTÃO DE CADASTRO • HIGH OS</span>
                     <h3 id="apEditorHeading">Cadastrar ação</h3>
-                    <p class="ap-sub">Os ajustes são internos ao High OS; o prêmio da planilha oficial não será alterado.</p>
+                    <p class="ap-sub">Planeje ações blipadas, ATM, registradoras e novas modalidades. Edite kit, invasores, policiais, cooldown, mínimo e máximo. O Suricato não é atualizado automaticamente.</p>
                   </div>
                   <button type="button" class="ap-back" id="apCloseEditor" aria-label="Fechar editor">✕</button>
                 </div>
                 <div class="ap-editor-content">
                   <div class="ap-editor-grid">
-                    <label class="ap-field">Nome da ação<input required id="apEntryName" maxlength="100" placeholder="Ex.: Agência Central"></label>
+                    <label class="ap-field">Nome da ação<input required id="apEntryName" maxlength="100" placeholder="Ex.: Roubo de ATM"></label>
+                    <label class="ap-field">Tipo de ação<select id="apEntryType"><option value="blipada">Ação blipada</option><option value="atm">ATM / Caixa eletrônico</option><option value="registradora">Furto de registradora</option><option value="outros">Outra ação</option></select></label>
                     <label class="ap-field">Situação<select id="apEntryStatus"><option value="ativo">Ativa</option><option value="inativo">Inativa</option></select></label>
                     <label class="ap-field">Prêmio mínimo (sujo)<input required type="number" min="1" id="apEntryMin"></label>
                     <label class="ap-field">Prêmio máximo (sujo)<input required type="number" min="1" id="apEntryMax"></label>
@@ -527,7 +515,7 @@
                     <div id="apEditorRules" class="ap-editor-rows"></div></div>
                   <div class="ap-editor-section"><div class="ap-heading"><h4>Itens necessários</h4>
                     <button type="button" class="ap-button" id="apAddItem">+ Item</button></div>
-                    <p class="ap-row-muted">Informe exatamente o nome do item cadastrado no Mercado Negro, para que o preço seja encontrado.</p>
+                    <p class="ap-row-muted">Kit totalmente editável: inclua e remova itens, quantidades, categoria de consumo e custo unitário. Deixe o preço em branco para sincronizar com o Mercado Negro. Ações sem insumos podem ter kit vazio. Em ATM, compare C4 e C4 ++ no perfil.</p>
                     <div id="apEditorItems" class="ap-editor-rows"></div>
                     <datalist id="apItemNames"></datalist>
                   </div>
