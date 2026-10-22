@@ -2858,18 +2858,18 @@ ultimoRecolhimento:{...recolhimento,
 possuiEvidencia:!!recollectPanelImage},
 observacoes:old.observacoes||'',
 updatedAt:serverTimestamp(),
-updatedBy:currentUser.email};try{let evidenceId='';if(recollectPanelImage){const ev=await addDoc(collection(db,'highos','data','evidencias_recolhimento'),{tipo:'PRINT_PAINEL',
+updatedBy:currentUser.email};try{let committed=false;const recollectBatch=writeBatch(db);let evidenceId='';if(recollectPanelImage){const evidenceRef=doc(collection(db,'highos','data','evidencias_recolhimento'));recollectBatch.set(evidenceRef,{tipo:'PRINT_PAINEL',
 group,
 faccao:old.faccao||'',
 motivo:reason,
 imagemDataUrl:recollectPanelImage,
 createdAt:serverTimestamp(),
 createdAtText:new Date().toISOString(),
-createdBy:currentUser.email});evidenceId=ev.id}recolhimento.evidenciaId=evidenceId;data.ultimoRecolhimento.evidenciaId=evidenceId;
+createdBy:currentUser.email});evidenceId=evidenceRef.id}recolhimento.evidenciaId=evidenceId;data.ultimoRecolhimento.evidenciaId=evidenceId;
 /* O bot posta o extrato (e o print, no baixo contingente) no tópico do Group
    e no canal de recolhidas do Discord do Ilegal. Só vai no PUT; não fica no registro local. */
 const [tituloRec,...corpoRec]=String(recolhimento.extrato||'').split('\n');
-await setDoc(doc(db,'highos','data','faccoes',group),{...data,anuncioRecolhimento:{title:tituloRec,description:corpoRec.join('\n').trim(),imageDataUrl:recollectPanelImage||''}});const recollectBatch=writeBatch(db);
+recollectBatch.set(doc(db,'highos','data','faccoes',group),{...data,anuncioRecolhimento:{title:tituloRec,description:corpoRec.join('\n').trim(),imageDataUrl:recollectPanelImage||''}});
 if(old.faccao){const oid=orgKey(old.faccao);recollectBatch.set(doc(db,'highos','data','organizacoes',oid),{nome:old.faccao,
 status:'SEM_GROUP',
 groupAtual:'',
@@ -2884,8 +2884,7 @@ for(const d of activeDeliveries)recollectBatch.set(doc(db,'highos','data','entre
 recolhimento,
 recolhidaEm:serverTimestamp(),
 recolhidaPor:currentUser.email},{merge:true});
-if(old.faccao||activeDeliveries.length)await recollectBatch.commit();
-await addDoc(histCol,{sessionId:currentSessionId||'',
+recollectBatch.set(doc(histCol),{sessionId:currentSessionId||'',
 tipo:'RECOLHIMENTO',
 group,
 faccao:old.faccao||'',
@@ -2902,7 +2901,10 @@ extratoRecolhimento:recolhimento.extrato,
 antes:snapshot(old),
 depois:snapshot(data),
 usuario:currentUser.email,
-data:serverTimestamp()});await syncGroupsToOfficialSheet([data],{quiet:true});
+data:serverTimestamp()});
+await recollectBatch.commit();
+committed=true;
+const sheetSynced=await syncGroupsToOfficialSheet([data],{quiet:true});
 const fix=faccoes.findIndex(x=>x.group===group);
 if(fix>=0)faccoes[fix]={...clonePlain(data),id:faccoes[fix].id||group,updatedBy:currentUser.email};
 if(old.faccao){
@@ -2914,7 +2916,7 @@ const activeIds=new Set(activeDeliveries.map(d=>d.id));
 entregas=entregas.map(d=>activeIds.has(d.id)?{...d,status:'RECOLHIDA',recolhimento:clonePlain(recolhimento),recolhidaPor:currentUser.email}:d);
 queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('organizacoes',Date.now());queryFreshAt.set('entregas',Date.now());
 renderFaccoes();renderOrganizations();renderDeliveries();
-closeRecollectModal();closeGroupProfilePage();alert('Facção recolhida com sucesso. O extrato e a evidência foram registrados no histórico.')}catch(err){alert('Erro ao recolher: '+err.message)}finally{recollectInFlight=false;if(submitBtn)submitBtn.disabled=false}});
+closeRecollectModal();closeGroupProfilePage();alert(sheetSynced?'Facção recolhida com sucesso. Histórico, organização e evidências registrados.':'Facção recolhida no High OS. Planilha PENDENTE: conecte o Google Sheets e sincronize novamente.')}catch(err){alert('Erro ao recolher: '+err.message)}finally{recollectInFlight=false;if(submitBtn)submitBtn.disabled=false}});
 
 function snapshot(o){if(!o)return null;
 const x={...o};
