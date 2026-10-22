@@ -148,7 +148,7 @@ test('A sugestão aparece na capa, na lista e possui atalho para a aprovação',
  assert.match(ui,/showMainRecommendation\(d\)/);
  assert.match(ui,/data-ap-action/);
  assert.match(ui,/SUGESTÃO/);
- assert.match(ui,/RECOMENDADO \(MÍNIMO\)/);
+ assert.match(ui,/payoutPair\('RECOMENDADO • SUJO',d.recommendedMin,d.recommendedMax/);
  assert.match(ui,/id="apOpenStrategy"/);
  assert.match(ui,/details\.open=true/);
  assert.match(ui,/value=manual\?state\.manualPayout:d\.recommendedMin/);
