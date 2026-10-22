@@ -69,7 +69,7 @@ export function buildManagementBoard(actions,catalog,{
     }else if(change.difference>0){
      reason.push('Mais capital imobilizado, mesmo sem queda comprovada do lucro na vitória');
      priority=Math.max(priority,2);
-     if(status==='MANTER')status='CONFERIR INVESTIMENTO';
+     if(status==='MANTER'||status==='CONFERIR CUSTOS')status='CONFERIR INVESTIMENTO';
     }else if(change.difference<0){
      reason.push('Insumos mais baratos; redução do prêmio não é automática');
      priority=Math.max(priority,1);
