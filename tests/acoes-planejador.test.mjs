@@ -101,3 +101,13 @@ test('Item inativo do Mercado Negro não permite validar custo para buff/nerf',(
  assert.equal(result.status,'INSUMO SEM PREÇO');
  assert.equal(result.payoutAdjustable,false);
 });
+
+test('A aprovação exige GID da aba original e revalida fórmulas antes do POST',()=>{
+ const app=readFileSync(new URL('../assets/app.js',import.meta.url),'utf8');
+ const fn=app.slice(app.indexOf('async function syncApprovedActionPayout('),app.indexOf('function activateAppPage(',app.indexOf('async function syncApprovedActionPayout(')));
+ assert.match(fn,/sheets\.properties\(sheetId,title\)/);
+ assert.match(fn,/Number\(sheetEntry\.properties\.sheetId\)!==candidate\.sheetId/);
+ assert.match(fn,/latestFormulas=await facSheetFetch/);
+ assert.match(fn,/BUFF\/NERF recebeu uma fórmula durante a confirmação/);
+ assert.ok(fn.indexOf('latestFormulas=await')<fn.indexOf("root+':batchUpdate'"));
+});
