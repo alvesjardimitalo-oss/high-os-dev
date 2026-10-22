@@ -526,10 +526,11 @@ async function copyProposal(){
 }
 async function copySuricato(){
  const a=action(),d=decision();if(!a||!d.valid)return;
- const minimum=Number.isFinite(state.manualPayout)&&state.manualPayout>0?state.manualPayout:d.recommendedMin;
+ const manualMin=Number.isFinite(state.manualPayout)&&state.manualPayout>0;
+ const minimum=manualMin?state.manualPayout:d.calc.min;
  const maximum=Number.isFinite(state.manualMaxPayout)&&state.manualMaxPayout>0?
-  state.manualMaxPayout:Number.isFinite(state.manualPayout)&&state.manualPayout>0?
-  recommendedMaximum(d.calc.min,d.calc.max,minimum):d.recommendedMax;
+  state.manualMaxPayout:manualMin?
+  recommendedMaximum(d.calc.min,d.calc.max,minimum):d.calc.max;
  const status=el('apCopyStatus');
  if(!Number.isFinite(minimum)||!Number.isFinite(maximum)||maximum<minimum){
   status.textContent='Corrija os valores mínimo e máximo antes de copiar para o Suricato.';return;
