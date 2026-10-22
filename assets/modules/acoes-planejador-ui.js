@@ -6,7 +6,7 @@ const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency
 const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(x):'—';
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
 let approveHandler=null,approvedThisSession=new Set();
-const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'por-jogador',priceShift:0,ammoUse:.25,roi:.25,
+const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,quantities:{},prices:{},manualPayout:null};
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
@@ -33,7 +33,7 @@ function actionsList(){
  el('apActionCount').textContent=results.length+' de '+actions.length+' ações';
  el('apActionList').innerHTML=results.map(a=>{
   const p=calculateAction(a,catalog,{team:defaultTeam(a),kitMode:state.kitMode,priceMode:state.priceMode,
-   priceShift:state.priceShift,ammoUse:state.ammoUse,tax:state.tax});
+   priceShift:state.priceShift,ammoUse:state.ammoUse,accessConsumed:state.accessConsumed,tax:state.tax});
   const match=p.kit.missing.length?'Custos pendentes':
    'Vitória '+money(p.netMin)+' · Derrota '+money(p.loss);
   return '<button type="button" class="ap-choice" data-ap-action="'+safe(a.nome)+'" aria-pressed="'+(a.nome===selection?'true':'false')+'">'+
@@ -76,7 +76,7 @@ function kitTable(){
  const p=calculateAction(action(),catalog,options());
  el('apKitRows').innerHTML=p.kit.lines.map(l=>
   '<tr><td><span class="ap-item-name">'+safe(l.name)+'</span><span class="ap-item-source">'+
-  safe(categoryLabel[l.category]||l.category)+' · '+safe(l.source)+'</span></td>'+
+  safe(l.category==='acesso'&&!state.accessConsumed?'Acesso • reutilizável':categoryLabel[l.category]||l.category)+' · '+safe(l.source)+'</span></td>'+
   '<td><input class="ap-table-input" aria-label="Quantidade de '+safe(l.name)+'" type="number" min="0" max="500" step="1" data-ap-qty="'+l.index+'" value="'+safe(l.qty)+'"></td>'+
   '<td><input class="ap-table-input" aria-label="Preço base de '+safe(l.name)+'" type="number" min="0" step="1" data-ap-price="'+l.index+'" placeholder="Sem preço" value="'+safe(l.baseUnit??'')+'">'+
   (p.kit.priceShift?'<span class="ap-item-source">Com variação: '+safe(money(l.unit))+'</span>':'')+'</td>'+
@@ -117,7 +117,7 @@ function summary(){
   warns.push('Algumas armas cadastradas são insuficientes para o número de jogadores.');
  if(state.priceShift)warns.push('Alta/queda de preço é hipotética e não altera o catálogo oficial.');
  const warning=el('apWarnings');warning.className='ap-hint'+(warns.length?' warn':'');
- warning.textContent=warns.join(' ')||'Na vitória, armas e munições não utilizadas permanecem com a facção. Coletes e pendrives são consumidos. Na derrota, todo o kit é perdido.';
+ warning.textContent=warns.join(' ')||'Na vitória, armas e munições não utilizadas permanecem com a facção. Coletes são de uso único. O consumo de pendrives é configurável. Na derrota, todo o kit é perdido.';
  const cs=v=>v===null?'':v>=0?'good':'bad';
  el('apQuickMetrics').innerHTML=[
   kpi('Prêmio atual (sujo)',money(p.min)+' a '+money(p.max),'gold'),
@@ -203,7 +203,7 @@ async function copyProposal(){
  'PRÊMIO MÍNIMO SUGERIDO: '+money(p.payoutNeeded),
  'PRÊMIO MÁXIMO SUGERIDO: '+money(p.payoutMax),
  'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
- 'Hipóteses: pendrive consumido, colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
+ 'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
  'Premiações atuais já incluem buffs/nerfs existentes. Nenhuma mudança automática no jogo.'].join('\n');
  const status=el('apCopyStatus');
  try{await navigator.clipboard.writeText(text);status.textContent='Análise copiada. Verifique os cenários antes de qualquer alteração oficial.';}
@@ -298,6 +298,7 @@ function listeners(){
   if(e.id==='apStatusFilter'){state.status=e.value;actionsList();}
   else if(e.id==='apPriceMode'){state.priceMode=e.value;state.prices={};render();}
   else if(e.id==='apKitMode'){state.kitMode=e.value;state.quantities={};render();}
+  else if(e.id==='apAccessMode'){state.accessConsumed=e.value==='consumido';render();}
   else if(e.id==='apTeam'){state.team=Number(e.value);state.quantities={};render();}
  });
 }
