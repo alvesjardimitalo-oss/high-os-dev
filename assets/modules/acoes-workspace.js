@@ -58,6 +58,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   if(view==='profile'&&!a){view='catalog';root.dataset.apSection=view;}
  }
  function navigate(next,subtab=tab){
+  if(next==='npc'&&subtab==='casas')npc?.selectMarket('CASAS');
   view=['overview','catalog','ranking','prices','npc','profile'].includes(next)?next:'overview';
   tab=['resumo','custos','cenario','sugestao'].includes(subtab)?subtab:'resumo';
   paint();
