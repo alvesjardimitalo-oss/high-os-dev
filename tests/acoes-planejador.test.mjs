@@ -74,6 +74,17 @@ test('Consumo de munição é em pacotes inteiros, sem falsa precisão',()=>{
  assert.equal(all.winCost,116500);
  assert.equal(kitFor(store,products,{team:3,ammoUse:.25}).lines[1].replacementQty,1);
 });
+test('Pendrive pode ser configurado como reutilizável sem afetar o prejuízo na derrota',()=>{
+ const normal=calculateAction(store,products,{team:4,accessConsumed:true});
+ const reusable=calculateAction(store,products,{team:4,accessConsumed:false});
+ assert.equal(normal.kit.access,10500);
+ assert.equal(reusable.kit.access,0);
+ assert.equal(reusable.kit.winCost,65500);
+ assert.equal(reusable.kit.total,268500);
+ assert.equal(reusable.loss,-268500);
+ assert.equal(reusable.kit.lines[3].retainedValue,10500);
+ assert.equal(reusable.netMin-normal.netMin,10500);
+});
 test('Colete e pendrive são repostos a cada vitória, não apenas na derrota',()=>{
  const p=kitFor(store,products,{team:4,ammoUse:0});
  assert.equal(p.armors,52000);
@@ -153,10 +164,11 @@ test('Nova página mantém permissões, listagem, controles e dois resultados ex
  const ui=readFileSync(new URL('../assets/modules/acoes-planejador-ui.js',import.meta.url),'utf8');
  assert.match(app,/'planejador-acoes':'economia'/);
  assert.match(app,/if\(page==='planejador-acoes'\)import\('\.\/modules\/acoes-planejador-ui\.js/);
- for(const id of ['apActionList','apQuickMetrics','apOutcome','apScenarios','apPriceShift','apAmmoUse','apWinCostTotal','apApprove']){
+ for(const id of ['apActionList','apQuickMetrics','apOutcome','apScenarios','apPriceShift','apAmmoUse','apAccessMode','apWinCostTotal','apApprove']){
   assert.ok(html.includes('id="'+id+'"'),id);
  }
  assert.doesNotMatch(html,/id="apReuse"/);
+ assert.match(ui,/kitMode:'oficial'/);
  assert.match(ui,/Kit mantido/);
  assert.match(ui,/state\.priceShift!==0\|\|Object\.keys\(state\.prices\)/);
  assert.match(ui,/prejuízo|Prejuízo/i);
