@@ -86,7 +86,7 @@ export function analyzeDecision(action,catalog,{
  const direction=!valid?'PENDENTE':!significant?'MANTER':
   deltaNet>0?'CONSIDERAR BUFF':'CONSIDERAR REDUÇÃO';
  const recommendedMin=valid?proposed:null;
- const recommendedMax=valid?recommendedMaximum(p.min,p.max,recommendedMin):null;
+ const recommendedMax=valid?Math.max(recommendedMin,Math.round(p.max+(recommendedMin-p.min))):null; // Compensar mesma despesa nas duas pontas, sem inflar amplitude.
  const recommendedDelta=recommendedMin===null?null:round(recommendedMin-p.min);
  const recommendedPercent=recommendedDelta===null||p.min<=0?null:recommendedDelta/p.min;
  const recommendedProfit=recommendedMin===null||p.kit.winCost===null?null:
