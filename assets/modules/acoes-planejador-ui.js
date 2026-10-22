@@ -1,5 +1,6 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
+import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides} from './acoes-inteligencia.js?v=1';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -7,16 +8,104 @@ const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency
 const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(x):'—';
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
 let approveHandler=null,approvedThisSession=new Set();
+let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecisions=null,onReadSheet=null;
+let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
- targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null};
+ targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:null,targetHourly:0};
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
+const decision=()=>analyzeDecision(action(),catalog,{...options(),team:state.team,referenceTeam:defaultTeam(action())});
 const kpi=(label,value,style='',info='')=>'<div class="ap-kpi '+style+'"><small>'+safe(label)+'</small><strong>'+safe(value)+'</strong>'+(info?'<div class="ap-extra">'+safe(info)+'</div>':'')+'</div>';
 const chip=s=>'<span class="ap-tag '+(['BUFF','NERF','REVISAR CUSTO','INSUMO SEM PREÇO','EQUIPE INVÁLIDA'].includes(s)?'warning':s==='MANTER'?'good':'')+'">'+safe(s)+'</span>';
 function choose(name){
  selection=name;localIndex=0;state.prices={};state.quantities={};state.manualPayout=null;
  state.team=defaultTeam(action());el('apManual').value='';render();
+}
+
+
+function refreshPriceAlerts(){
+ if(!el('apPriceAlerts')||!catalog)return;
+ const report=assessPriceChanges(actions,catalog,reference,{tax:state.tax,ammoUse:state.ammoUse,
+  accessConsumed:state.accessConsumed});
+ const intro=el('apPriceAlertIntro'),box=el('apPriceAlerts'),save=el('apSaveReference');
+ if(save)save.hidden=!onSaveReference;
+ if(!report.available){
+  intro.textContent='Nenhuma referência anterior salva. Para detectar alterações reais, registre o catálogo atual uma única vez.';
+  box.innerHTML='<p class="ap-hint">Sem referência histórica: nenhuma alta ou queda será inventada. A gestão pode guardar os preços atuais e compará-los nas próximas visitas.</p>';
+ }else{
+  intro.textContent='Comparado à referência da gestão de '+(new Date(report.referenceDate).toLocaleString('pt-BR')||'data não informada')+
+   ' • '+report.up+' ações encareceram • '+report.down+' ficaram mais baratas.';
+  box.innerHTML=report.changes.length?
+   report.changes.slice(0,12).map(c=>
+    '<button type="button" class="ap-price-alert" data-ap-action="'+safe(c.name)+'">'+
+     '<span><b>'+safe(c.name)+'</b><small>'+c.team+' participantes • '+c.items.map(x=>safe(x.name)).slice(0,4).join(' / ')+'</small></span>'+
+     '<span class="'+(c.difference>0?'ap-alert-up':'ap-alert-down')+'"><b>'+
+      (c.difference>0?'+':'')+safe(money(c.difference))+'</b><small>'+
+      (c.percent===null?'Variação não informada':percent(c.percent))+
+      ' • '+(c.difference>0?'considerar revisão de buff':'considerar revisão de nerf')+'</small>'+
+      '<small>Lucro/membro: '+safe(money(c.oldProfitPerMember))+' → '+safe(money(c.newProfitPerMember))+'</small></span></button>'
+   ).join(''):'<p class="ap-hint">Nenhuma alteração de custo encontrada desde a referência salva.</p>';
+ }
+ const pending=actions.filter(a=>a.premioFonte==='Google Sheets').length;
+ const info=el('apPublicationStatus');
+ if(info)info.textContent=pending?
+   pending+' premiação(ões) conferida(s) na planilha. O Mercado Negro público pode estar desatualizado; publicação no GitHub é separada e não é feita automaticamente por esta tela.':
+   'Prêmios carregados do catálogo público. Para conferir alterações recentes da planilha, use “Conferir prêmios na planilha”. Alterações aprovadas não publicam automaticamente no GitHub.';
+ const read=el('apReadSheet');if(read)read.hidden=!onReadSheet;
+}
+async function saveReference(){
+ if(!onSaveReference)return;
+ if(!confirm('Salvar os preços atuais como referência compartilhada? Isso substitui a referência anterior e zera os alertas de variação para novas comparações.'))return;
+ const status=el('apPriceAlertIntro');
+ try{
+  const snapshot=makePriceReference(catalog);
+  const result=await onSaveReference(snapshot);
+  if(!result?.saved)throw Error('O servidor não confirmou a gravação.');
+  reference=snapshot;refreshPriceAlerts();
+  status.textContent='Referência salva. Novas alterações de preço aparecerão aqui quando o módulo consultar o catálogo novamente.';
+ }catch(e){status.textContent='Não foi possível salvar a referência: '+(e.message||String(e));}
+}
+async function refreshPriceCatalog(){
+ const button=el('apRefreshPrices');if(button)button.disabled=true;
+ try{
+  const responses=await Promise.all([fetch(ACOES_SOURCE,{cache:'no-store'}),fetch(CATALOGO_SOURCE,{cache:'no-store'})]);
+  if(responses.some(x=>!x.ok))throw Error('Fonte indisponível.');
+  const data=await responses[0].json(),next=await responses[1].json();
+  if(!Array.isArray(data.acoes)||!Array.isArray(next.itens))throw Error('Formato inválido.');
+  publishedActions=data.acoes;actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+  catalog=next;meta=data.meta||{};
+  if(!action())selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
+  if(action())render();
+  lastPriceRead=new Date().toISOString();
+  el('apSource').textContent='Mercado Negro • catálogo consultado agora • '+catalog.itens.length+
+   ' produtos • '+actions.length+' ações'+(sheetOverrides.length?' • prêmios da planilha sobrepostos':'');
+ }catch(e){el('apPriceAlertIntro').textContent='Não foi possível atualizar o Mercado Negro: '+(e.message||String(e));}
+ finally{if(button)button.disabled=false;}
+}
+async function refreshSheetPrizes(){
+ if(!onReadSheet)return;
+ const button=el('apReadSheet');button.disabled=true;
+ try{
+  const result=await onReadSheet();
+  sheetOverrides=result.prizes||[];
+  actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+  if(action())render();
+  el('apCopyStatus').textContent='Prêmios lidos diretamente da planilha às '+new Date(result.readAt).toLocaleTimeString('pt-BR')+
+   '. Se divergirem do Mercado Negro público, a publicação do catálogo permanece pendente.';
+ }catch(e){el('apCopyStatus').textContent='Erro ao conferir planilha: '+(e.message||String(e));}
+ finally{button.disabled=false;}
+}
+async function showDecisionHistory(){
+ if(!onReadDecisions)return;
+ const box=el('apDecisionHistory');box.hidden=false;box.textContent='Consultando histórico...';
+ try{
+  const items=await onReadDecisions();
+  box.innerHTML=items.length?items.map(d=>
+   '<div class="ap-decision-history-line"><b>'+safe(d.decisao||d.tipo)+'</b> • '+safe(d.acao||'Referência de preços')+
+   ' • '+safe(d.usuario)+' • '+safe(d.motivo||'Sem justificativa cadastrada')+'</div>'
+  ).join(''):'<p class="ap-row-muted">Nenhuma decisão anterior encontrada.</p>';
+ }catch(e){box.textContent='Histórico indisponível: '+(e.message||String(e));}
 }
 
 function rankFormat(mode,value){
@@ -148,7 +237,7 @@ function scenarios(){
  const rules=getRules(action(),place());
  if(!rules.length){el('apScenarios').innerHTML='<p class="ap-row-muted">Nenhuma faixa de invasores publicada.</p>';return;}
  const body=rules.map(r=>{
-  const p=calculateAction(action(),catalog,{...options(),team:r.invasores,quantities:{},prices:{}});
+  const p=analyzeDecision(action(),catalog,{...options(),team:r.invasores,quantities:{},prices:{},referenceTeam:defaultTeam(action())}).calc;
   return '<tr class="'+(r.invasores===Number(state.team)?'ap-scenario-active':'')+'">'+
    '<td><button type="button" class="ap-button" data-ap-team="'+r.invasores+'">'+r.invasores+'</button></td>'+
    '<td>'+safe(r.policiais??'—')+'</td><td>'+safe(money(p.kit.total))+'</td>'+
@@ -162,8 +251,8 @@ function scenarios(){
 }
 function summary(){
  const a=action();if(!a)return;
- const p=calculateAction(a,catalog,options());
- el('apActionStatus').innerHTML=chip(a.status==='inativo'?'INATIVA':p.status);
+ const d=decision(),p=d.calc;
+ el('apActionStatus').innerHTML=chip(a.status==='inativo'?'INATIVA':d.direction);
  el('apKitComputed').textContent='Kit cadastrado na fonte: '+money(p.kit.official)+' • Capital simulado: '+money(p.kit.total);
  const warns=[];
  if(!p.teamValid)warns.push('Equipe não prevista nas regras de invasores.');
@@ -174,6 +263,7 @@ function summary(){
  if(state.kitMode==='oficial'&&p.kit.lines.some(i=>i.category==='arma'&&i.qty<p.team))
   warns.push('Algumas armas cadastradas são insuficientes para o número de jogadores.');
  if(state.priceShift)warns.push('Alta/queda de preço é hipotética e não altera o catálogo oficial.');
+ if(d.modeled)warns.push('PRÊMIO PROPORCIONAL SIMULADO: valor NÃO oficial. Retorne ao prêmio publicado antes de qualquer aprovação.');
  const warning=el('apWarnings');warning.className='ap-hint'+(warns.length?' warn':'');
  warning.textContent=warns.join(' ')||'Na vitória, armas e munições não utilizadas permanecem com a facção. Coletes são de uso único. O consumo de pendrives é configurável. Na derrota, todo o kit é perdido.';
  const cs=v=>v===null?'':v>=0?'good':'bad';
@@ -204,44 +294,60 @@ function summary(){
  ].join('');
  el('apGoals').innerHTML=[
   kpi('Meta de lucro total na vitória',money(p.targetProfit),'gold','Meta individual ou ROI sobre kit completo'),
-  kpi('Prêmio mínimo proposto (sujo)',money(p.payoutNeeded),'gold'),
-  kpi('Prêmio máximo proposto (sujo)',money(p.payoutMax)),
-  kpi('Diferença sugerida',p.delta===null?'A confirmar':(p.delta>=0?'+':'−')+money(Math.abs(p.delta)),p.delta===null?'':p.delta>=0?'good':'bad'),
-  kpi('Lucro na vitória com proposta',money(p.proposedNet),cs(p.proposedNet)),
-  kpi('Lucro por jogador com proposta',money(p.proposedPerPlayer),cs(p.proposedPerPlayer)),
+  kpi('Prêmio mínimo sugerido (sujo)',money(d.suggested),'gold'),
+  kpi('Prêmio máximo publicado (sujo)',money(p.max)),
+  kpi('Diferença sugerida',d.delta===null?'A confirmar':(d.delta>=0?'+':'−')+money(Math.abs(d.delta)),d.delta===null?'':d.delta>=0?'good':'bad'),
+  kpi('Lucro na vitória com proposta',money(d.suggested===null||p.kit.winCost===null?null:d.suggested*(1-p.tax)-p.kit.winCost),cs(p.proposedNet)),
+  kpi('Lucro por jogador com proposta',money(d.suggested===null||p.kit.winCost===null?null:(d.suggested*(1-p.tax)-p.kit.winCost)/p.team),cs(p.proposedPerPlayer)),
   kpi('ROI alvo sobre kit inteiro',percent(p.targetROI)),
   kpi('ROI atual na vitória',percent(p.roi))
  ].join('');
- const message=p.status==='BUFF'?'Lucro na vitória abaixo da meta: considerar aumento.':
-  p.status==='NERF'?'Lucro na vitória acima da meta: considerar redução.':
-  p.status==='MANTER'?'Lucro na vitória dentro da meta.':'Revisar regras, preços e quantidades antes de propor ajustes.';
- const out=el('apResult');out.className='ap-result'+(['BUFF','NERF'].includes(p.status)?' warning':'');
- out.innerHTML='<strong>'+safe(p.status)+'</strong><span>'+safe(message)+'</span>';
- el('apProposal').textContent='Cenário: '+p.team+' jogadores • lavagem '+percent(p.tax)+
-  ' • capital '+money(p.kit.total)+' • repõe se vencer '+money(p.kit.winCost)+
-  ' • perde se derrotado '+money(p.kit.lossCost)+'. A proposta considera o lucro da vitória, sem estimar chance de derrota. Buffs passados já estão incluídos.';
+ const risk=el('apIntelligenceResult');
+ risk.innerHTML=[
+  kpi('Decisão sugerida',d.direction,'gold'),
+  kpi('Prêmio sugerido',money(d.suggested),'gold'),
+  kpi('Taxa mínima para empatar',percent(d.breakEven)),
+  kpi('Resultado esperado com chance informada',money(d.expected),d.expected===null?'':d.expected>=0?'good':'bad'),
+  kpi('Lucro mínimo/jogador/hora',money(d.hourly),d.hourly===null?'':d.hourly>=0?'good':'bad'),
+  kpi('Tempo total estimado',d.totalMinutes===null?'Não informado':d.totalMinutes+' min')
+ ].join('')+'<p class="ap-row-muted">'+d.remarks.map(safe).join(' ')+'</p>';
+ const out=el('apResult');out.className='ap-result'+(d.direction==='CONSIDERAR BUFF'?' warning':'');
+ out.innerHTML='<strong>'+safe(d.direction)+'</strong><span>'+safe(
+  'Ajuste proposto sobre prêmio mínimo. Lucro por membro '+money(p.perPlayer)+
+  ' • derrota '+money(p.loss)+'. A decisão final é da gestão.')+'</span>';
+ el('apProposal').textContent='Cenário: '+p.team+' jogadores • prêmio '+(d.modeled?'HIPOTÉTICO proporcional':'publicado')+
+  ' • lavado '+percent(p.tax)+' • capital '+money(p.kit.total)+
+  ' • reposição '+money(p.kit.winCost)+' • perda total ao ser derrotado '+money(p.kit.lossCost)+
+  '. A espera e a taxa de vitória não são presumidas; sem esses dados, buff/nerf requer julgamento humano.';
  const alternative=el('apManualOutcome');
  alternative.textContent=state.manualPayout===null?'Insira outro prêmio para estimar a vitória.':
   p.kit.winCost===null?'Algum preço está pendente.':
   'Com '+money(state.manualPayout)+' sujo, lucro na vitória de '+
   money(state.manualPayout*(1-p.tax)-p.kit.winCost)+' ('+
   money((state.manualPayout*(1-p.tax)-p.kit.winCost)/p.team)+' por jogador). Prejuízo na derrota: '+money(p.loss)+'.';
- el('apCopy').disabled=!p.payoutAdjustable;
- const hypothetical=state.priceShift!==0||Object.keys(state.prices).length>0||Object.keys(state.quantities).length>0;
- const sync=el('apApprove');if(sync){
-  sync.hidden=!approveHandler;
-  sync.disabled=!approveHandler||!['BUFF','NERF'].includes(p.status)||hypothetical||approvedThisSession.has(a.nome);
-  sync.title=hypothetical?'Remova ajustes hipotéticos para sincronizar a planilha.':'Exige confirmação antes de escrever.';
+ el('apCopy').disabled=!d.valid;
+ const saveAllowed=!!approveHandler&&d.eligibleForSheet&&!approvedThisSession.has(a.nome);
+ for(const [id,available] of [
+  ['apApprove',saveAllowed&&Number.isFinite(d.suggested)&&Math.abs(d.suggested-p.min)>1],
+  ['apApproveManual',saveAllowed&&Number.isFinite(state.manualPayout)&&state.manualPayout>0&&Math.abs(state.manualPayout-p.min)>1],
+  ['apReject',!!onRejectAction&&d.valid]
+ ]){
+  const button=el(id);if(button){
+   button.hidden=(id==='apReject'?!onRejectAction:!approveHandler);
+   button.disabled=!available;
+   button.title=!d.eligibleForSheet?'Só é possível aprovar o prêmio publicado, sem ajustes hipotéticos no kit ou nos insumos.':
+    'A alteração na planilha exige confirmação específica.';
+  }
  }
  scenarios();
 }
 function render(){
  if(!action())return;
- actionsList();rankBoard();teamOptions();photosAndRules();kitTable();summary();
+ actionsList();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
 }
 async function copyProposal(){
- const a=action(),p=calculateAction(a,catalog,options());
- if(!p.payoutAdjustable)return;
+ const a=action(),d=decision(),p=d.calc;
+ if(!d.valid)return;
  const text=['HIGH ROLEPLAY — ANÁLISE ECONÔMICA DE AÇÃO',
  'AÇÃO: '+a.nome,'AVALIAÇÃO: '+p.status,
  'JOGADORES: '+p.team+' / POLICIAIS: '+(p.rule?.policiais??'Não informado'),
@@ -258,32 +364,68 @@ async function copyProposal(){
  'SALDO NO CAIXA AO VENCER NA PRIMEIRA AÇÃO COM KIT NOVO: '+money(p.firstRunNetMin),
  'PREJUÍZO SE PERDER: '+money(p.loss)+' (sem prêmio; equipamento perdido)',
  'META POR JOGADOR: '+money(p.targetPerPlayer)+' / META ROI DO KIT: '+percent(p.targetROI),
- 'PRÊMIO MÍNIMO SUGERIDO: '+money(p.payoutNeeded),
- 'PRÊMIO MÁXIMO SUGERIDO: '+money(p.payoutMax),
+ 'PRÊMIO MÍNIMO SUGERIDO: '+money(d.suggested),
+ 'PRÊMIO MÁXIMO PUBLICADO: '+money(p.max),
  'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
  'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
+ 'DECISÃO: '+d.direction,'RISCO: chance '+(d.winChance===null?'não informada':percent(d.winChance))+' | espera '+(d.wait===null?'não informada':d.wait+' min'),
+ 'AVISO: se prêmio proporcional for selecionado, o valor é hipotético, não oficial.',
  'Premiações atuais já incluem buffs/nerfs existentes. Nenhuma mudança automática no jogo.'].join('\n');
  const status=el('apCopyStatus');
  try{await navigator.clipboard.writeText(text);status.textContent='Análise copiada. Verifique os cenários antes de qualquer alteração oficial.';}
  catch{status.textContent='Área de transferência indisponível no navegador.';}
 }
-async function approveProposal(){
+async function approveProposal(mode='sugestao'){
  if(!approveHandler)return;
- const a=action(),p=calculateAction(a,catalog,options());
- if(!['BUFF','NERF'].includes(p.status)||approvedThisSession.has(a.nome)||state.priceShift!==0||Object.keys(state.prices).length||Object.keys(state.quantities).length)return;
- const button=el('apApprove'),message=el('apCopyStatus');
- button.disabled=true;message.textContent='Verificando a aba original e aguardando aprovação segura...';
+ const a=action(),d=decision(),p=d.calc;
+ const manual=mode==='manual',value=manual?state.manualPayout:d.suggested;
+ if(!d.eligibleForSheet||approvedThisSession.has(a.nome)||!Number.isFinite(value)||
+    value<=0||Math.abs(value-p.min)<=1){
+  el('apCopyStatus').textContent='Prêmio inválido ou cenário hipotético. Restaure os preços e o prêmio publicados antes de aprovar.';
+  return;
+ }
+ const buttons=[el('apApprove'),el('apApproveManual'),el('apReject')].filter(Boolean);
+ buttons.forEach(x=>x.disabled=true);
+ const message=el('apCopyStatus'),reason=el('apDecisionReason')?.value?.trim()||'';
+ message.textContent='Conferindo células, fórmulas e premiação oficial da planilha...';
  try{
-  const result=await approveHandler({name:a.nome,officialMin:p.min,proposedMin:p.payoutNeeded,
-    team:p.team,cost:p.kit.total,tax:p.tax});
-  if(result?.cancelled){message.textContent='Aprovação cancelada. Nenhuma célula foi alterada.';return;}
-  if(!result?.updated)throw Error('A sincronização não confirmou a alteração.');
+  const result=await approveHandler({name:a.nome,officialMin:p.min,proposedMin:value,
+   team:p.team,cost:p.kit.total,tax:p.tax,reason,
+   source:manual?'manual':'sugestao'});
+  if(result?.cancelled){message.textContent='Aprovação cancelada. Nada foi alterado.';return;}
+  if(!result?.updated)throw Error('A planilha não confirmou a alteração.');
   approvedThisSession.add(a.nome);
-  message.textContent='BUFF/NERF atualizado na aba original. '+(result.verified?'Prêmio conferido.':'Confira o resultado da fórmula no Google Sheets.')+
-    (result.audited?' Auditoria registrada no High OS.':' Histórico do High OS pendente.');
- }catch(error){
-  message.textContent='NÃO SINCRONIZADO: '+(error?.message||String(error));
- }finally{button.disabled=approvedThisSession.has(a.nome)||!['BUFF','NERF'].includes(p.status);}
+  if(result.verified&&Number.isFinite(result.actualMin)&&Number.isFinite(result.actualMax)){
+   const record={name:a.nome,min:result.actualMin,max:result.actualMax,
+    buff:result.actualBuff,nerf:result.actualNerf};
+   sheetOverrides=sheetOverrides.filter(x=>norm(x.name)!==norm(a.nome)).concat([record]);
+   actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+   render();
+  }
+  message.textContent=result.verified?
+   'Ajuste confirmado na planilha. '+(result.audited?'Histórico registrado. ':'Auditoria pendente. ')+
+   'A publicação no GitHub/Mercado Negro NÃO é automática; confira o status da fonte.':
+   'A planilha recebeu o ajuste, mas a fórmula do prêmio não confirmou o valor. Não tente aprovar novamente sem conferir a aba.';
+  refreshPriceAlerts();
+ }catch(error){message.textContent='SEM CONFIRMAÇÃO DE AJUSTE: '+(error?.message||String(error));}
+ finally{summary();}
+}
+async function rejectProposal(){
+ if(!onRejectAction)return;
+ const a=action(),d=decision();
+ const reason=el('apDecisionReason')?.value?.trim();
+ if(!reason){el('apCopyStatus').textContent='Para recusar, informe o motivo no campo “Motivo da decisão”.';return;}
+ const amount=Number.isFinite(state.manualPayout)&&state.manualPayout>0?state.manualPayout:d.suggested;
+ if(!Number.isFinite(amount)||!d.valid)return;
+ if(!confirm('Registrar recusa da proposta de '+a.nome+'? Isso NÃO modifica a premiação.'))return;
+ const btn=el('apReject');btn.disabled=true;
+ try{
+  const result=await onRejectAction({name:a.nome,oldMin:d.calc.min,newMin:amount,
+   reason,team:d.team,source:state.manualPayout!=null?'manual':'sugestao'});
+  if(!result?.recorded)throw Error('Histórico não confirmado.');
+  el('apCopyStatus').textContent='Proposta recusada e registrada. Nenhum valor da planilha foi alterado.';
+ }catch(e){el('apCopyStatus').textContent='Falha ao registrar recusa: '+(e.message||String(e));}
+ finally{btn.disabled=false;}
 }
 function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"';}
 function exportAnalysis(){
@@ -317,7 +459,13 @@ function listeners(){
   const preset=ev.target.closest('[data-ap-shift]');
   if(preset){state.priceShift=Number(preset.dataset.apShift)/100;el('apPriceShift').value=Math.round(state.priceShift*100);render();return;}
   if(ev.target.closest('#apCopy'))copyProposal();
-  if(ev.target.closest('#apApprove'))approveProposal();
+  if(ev.target.closest('#apApproveManual')){approveProposal('manual');return;}
+  if(ev.target.closest('#apApprove')){approveProposal('sugestao');return;}
+  if(ev.target.closest('#apReject')){rejectProposal();return;}
+  if(ev.target.closest('#apSaveReference')){saveReference();return;}
+  if(ev.target.closest('#apRefreshPrices')){refreshPriceCatalog();return;}
+  if(ev.target.closest('#apReadSheet')){refreshSheetPrizes();return;}
+  if(ev.target.closest('#apHistory')){showDecisionHistory();return;}
   if(ev.target.closest('#apExport'))exportAnalysis();
  });
  root.addEventListener('input',ev=>{
@@ -348,10 +496,16 @@ function listeners(){
    return;
   }
   const fields={apProfitGoal:['targetPerPlayer',1],apRoiGoal:['roi',.01],
-   apTolerance:['tolerance',.01],apTax:['tax',.01],apManual:['manualPayout',1]};
+   apTolerance:['tolerance',.01],apTax:['tax',.01],apManual:['manualPayout',1],
+   apPoliceWait:['policeWaitMinutes',1],apActionDuration:['estimatedActionMinutes',1],
+   apWinChance:['winChance',.01],apHourlyTarget:['targetHourly',1]};
   const f=fields[target.id];if(!f)return;
-  if(target.value===''){if(target.id==='apManual')state.manualPayout=null;}
-  else state[f[0]]=Math.max(0,Number(target.value)||0)*f[1];
+  if(target.value===''){
+   if(['apManual','apPoliceWait','apActionDuration','apWinChance'].includes(target.id))state[f[0]]=null;
+  }else{
+   const v=Number(target.value);
+   if(Number.isFinite(v))state[f[0]]=Math.max(0,v)*f[1];
+  }
   if(target.id==='apTax')actionsList();
   if(target.id==='apTax')rankBoard();
   summary();
@@ -364,10 +518,15 @@ function listeners(){
   else if(e.id==='apKitMode'){state.kitMode=e.value;state.quantities={};render();}
   else if(e.id==='apAccessMode'){state.accessConsumed=e.value==='consumido';render();}
   else if(e.id==='apTeam'){state.team=Number(e.value);state.quantities={};render();}
+  else if(e.id==='apTeamPayout'){state.teamPayout=e.value;render();}
  });
 }
-export async function mountActionPlanner({onApproveAction=null}={}){
+export async function mountActionPlanner({onApproveAction=null,onReadReference:readReference=null,
+ onSaveReference:savePriceReference=null,onRejectAction:rejectAction=null,
+ onReadDecisions:readDecisions=null,onReadSheet:readSheet=null}={}){
  approveHandler=onApproveAction;
+ onReadReference=readReference;onSaveReference=savePriceReference;
+ onRejectAction=rejectAction;onReadDecisions=readDecisions;onReadSheet=readSheet;
  root=el('actionEconomyPlanner');if(!root||ready)return;
  ready=true;
  try{
@@ -375,7 +534,12 @@ export async function mountActionPlanner({onApproveAction=null}={}){
   if(responses.some(r=>!r.ok))throw Error('Falha ao consultar o Mercado Negro. HTTP: '+responses.map(r=>r.status).join(' / '));
   const [data,prices]=await Promise.all(responses.map(r=>r.json()));
   if(!Array.isArray(data.acoes)||!data.acoes.length||!Array.isArray(prices.itens))throw Error('Formato de dados inválido ou incompleto.');
-  actions=data.acoes;catalog=prices;meta=data.meta||{};
+  actions=data.acoes;publishedActions=data.acoes;catalog=prices;meta=data.meta||{};
+  lastPriceRead=new Date().toISOString();
+  if(onReadReference){
+   try{reference=await onReadReference();}
+   catch(e){console.warn('[AÇÕES] Referência de preço indisponível:',e)}
+  }
   const publishedWash=Number(meta.taxa_lavagem);
   state.tax=Number.isFinite(publishedWash)&&publishedWash>=0&&publishedWash<1?publishedWash:.3;
   el('apTax').value=Math.round(state.tax*100);

@@ -1578,7 +1578,60 @@ $('#diarioDate')?.addEventListener('change',loadOperationalDiary);
 // HIGH OS V6.7 · o perfil do Group passa a abrir como página interna, não como modal.
 // O planejador só escreve nos campos BUFF/NERF da aba original após uma
 // confirmação específica do gestor. Não cria abas nem reescreve fórmulas.
-async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,tax}){
+// High OS Dev 15.7 — baseline compartilhado e decisões auditadas.
+const ACTION_PRICES_REFERENCE='acoes_precos_referencia_v1';
+function actionEconomyAuthorized(){if(!currentUser||!canEditModule('economia'))throw Error('Você não tem permissão de alterar a Economia.');}
+async function actionReadReference(){
+ if(!currentUser||!canViewModule('planejador-acoes'))return null;
+ const data=await highOsStoreGet('config',ACTION_PRICES_REFERENCE).catch(()=>null);
+ return data?.snapshot||null;
+}
+async function actionSaveReference(snapshot){
+ actionEconomyAuthorized();
+ if(snapshot?.version!==1||!Array.isArray(snapshot?.items)||snapshot.items.length<5||snapshot.items.length>500||
+  snapshot.items.some(i=>!i.item||!['ativo','inativo'].includes(i.status)))
+  throw Error('Não foi possível validar a lista de preços de referência.');
+ await setDoc(doc(db,'highos','data','config',ACTION_PRICES_REFERENCE),{
+  snapshot,updatedAt:new Date().toISOString(),updatedBy:currentUser.email
+ });
+ try{await addDoc(histCol,{tipo:'REFERENCIA_PRECOS_ACOES',usuario:currentUser.email,
+  data:serverTimestamp(),qtd: snapshot.items.length,referencia:snapshot.createdAt});}
+ catch(e){console.warn('[AÇÕES] Referência salva, auditoria pendente',e)}
+ return {saved:true};
+}
+async function actionRejectProposal({name,oldMin,newMin,reason,team,source}){
+ actionEconomyAuthorized();
+ if(!name||!Number.isFinite(Number(newMin))||!String(reason||'').trim())
+  throw Error('A recusa exige ação, prêmio proposto e uma justificativa.');
+ await addDoc(histCol,{tipo:'DECISAO_PREMIACAO_ACAO',decisao:'RECUSADA',acao:name,
+  usuario:currentUser.email,novoPremio:Number(newMin),premioAnterior:Number(oldMin),
+  invasores:Number(team)||0,origem:source||'simulacao',motivo:String(reason).slice(0,600),
+  data:serverTimestamp()});
+ return {recorded:true};
+}
+async function actionReadDecisions(){
+ if(!currentUser||!canViewModule('planejador-acoes'))throw Error('Sem permissão.');
+ const items=await highOsStoreList('historico');
+ return (items||[]).filter(x=>['AJUSTE_PREMIACAO_ACAO','DECISAO_PREMIACAO_ACAO','REFERENCIA_PRECOS_ACOES'].includes(x.tipo))
+ .sort((a,b)=>String(b.data||b.createdAt||'').localeCompare(String(a.data||a.createdAt||''))).slice(0,40)
+ .map(x=>({tipo:x.tipo,acao:x.acao||'',decisao:x.decisao||'',usuario:x.usuario||'',
+  data:x.data||x.createdAt||'',motivo:x.motivo||'',premioMinAnterior:x.premioMinAnterior??x.premioAnterior??null,
+  premioMinProposto:x.premioMinProposto??x.novoPremio??null}));
+}
+async function actionReadSheetPrizes(){
+ actionEconomyAuthorized();
+ const token=await facSheetAuthorize();
+ const root='https://sheets.googleapis.com/v4/spreadsheets/'+DLV_VIP_SHEET_ID;
+ const range=encodeURIComponent("'VALORES AÇÃO BLIPADA'!A1:AD400");
+ const [{extractPublishedActionPrizes},response]=await Promise.all([
+  import('./modules/acoes-sheet-sync.js?v=2'),
+  facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token})
+ ]);
+ const prizes=extractPublishedActionPrizes(response.values||[]);
+ if(!prizes.length)throw Error('Não encontrei prêmios válidos na aba VALORES AÇÃO BLIPADA.');
+ return {prizes,readAt:new Date().toISOString()};
+}
+async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,tax,reason='',source='sugestao'}){
  if(!currentUser||!canEditModule('economia'))throw Error('Sem permissão de edição de Economia.');
  const value=Number(proposedMin);
  if(!Number.isFinite(value)||value<=0)throw Error('Não há prêmio sugerido válido.');
@@ -1586,7 +1639,7 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
  const root='https://sheets.googleapis.com/v4/spreadsheets/'+DLV_VIP_SHEET_ID;
  const range=encodeURIComponent("'VALORES AÇÃO BLIPADA'!A1:AD400");
  const [{planApprovedActionSheetUpdate},first,originalFormulas]=await Promise.all([
-   import('./modules/acoes-sheet-sync.js?v=1'),
+   import('./modules/acoes-sheet-sync.js?v=2'),
    facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token}),
    facSheetFetch(root+'/values/'+range+'?valueRenderOption=FORMULA',{token})
  ]);
@@ -1637,6 +1690,10 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
  const pos=checked.min;
  const calculatedMinimum=Number(after.values?.[pos.rowIndex]?.[pos.columnIndex]);
  const verified=Number.isFinite(calculatedMinimum)&&Math.abs(calculatedMinimum-value)<2;
+ const {extractPublishedActionPrizes}=await import('./modules/acoes-sheet-sync.js?v=2');
+ const actual=extractPublishedActionPrizes(after.values||[]).find(x=>
+  x.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()===
+  name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase());
  let audited=false;
  try{
   await addDoc(histCol,{tipo:'AJUSTE_PREMIACAO_ACAO',usuario:currentUser.email,
@@ -1644,10 +1701,14 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
    taxaLavagem:tax,premioMinAnterior:checked.previousMin,premioMinProposto:value,
    buffAnterior:checked.oldBuff,nerfAnterior:checked.oldNerf,
    buffNovo:checked.nextBuff,nerfNovo:checked.nextNerf,
+   origem:source,motivo:String(reason).slice(0,600),
    planilha:'VALORES AÇÃO BLIPADA',data:serverTimestamp()});
   audited=true;
  }catch(error){console.warn('[AÇÕES] Atualização feita, mas falha ao registrar auditoria:',error)}
- return {updated:true,verified,audited,previous:checked.previousMin,next:value};
+ return {updated:true,verified,audited,previous:checked.previousMin,next:value,
+  actualMin:verified&&actual?actual.min:null,actualMax:verified&&actual?actual.max:null,
+  actualBuff:verified&&actual?actual.buff:null,actualNerf:verified&&actual?actual.nerf:null,
+  publicationPending:true};
 }
 
 function activateAppPage(page){
@@ -1667,7 +1728,12 @@ if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','gr
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='chat')setTimeout(()=>startChat(),0);
 if(page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60);
-if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=3').then(mod=>mod.mountActionPlanner({onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null})).catch(err=>{console.error('[PLANEJADOR DE AÇÕES]',err);const root=document.querySelector('#actionEconomyPlanner');if(root)root.textContent='Não foi possível carregar o Planejador de Ações: '+(err?.message||String(err));});
+if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=4').then(mod=>mod.mountActionPlanner({
+ onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
+ onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
+ onRejectAction:canEditModule('economia')?actionRejectProposal:null,
+ onReadDecisions:actionReadDecisions,onReadSheet:canEditModule('economia')?actionReadSheetPrizes:null
+})).catch(err=>{console.error('[PLANEJADOR DE AÇÕES]',err);const root=document.querySelector('#actionEconomyPlanner');if(root)root.textContent='Não foi possível carregar o Planejador de Ações: '+(err?.message||String(err));});
 
  document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+page));
 
