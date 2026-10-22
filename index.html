@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
-  <link rel="stylesheet" href="assets/acoes-planejador.css?v=7">
+  <link rel="stylesheet" href="assets/acoes-planejador.css?v=8">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -372,7 +372,7 @@
               <aside class="ap-panel ap-aside">
                 <h3>Ações disponíveis</h3>
                 <input class="ap-search" id="apSearch" type="search" placeholder="Pesquise pelo nome da ação" aria-label="Buscar ação">
-                <select id="apStatusFilter" class="ap-search" style="margin-top:9px" aria-label="Filtrar ações">
+                <select id="apStatusFilter" class="ap-search" aria-label="Filtrar ações">
                   <option value="ATIVAS">Somente ativas</option><option value="TODAS">Todas</option><option value="REVISAR">Com preços pendentes</option>
                 </select>
                 <p class="ap-row-muted" id="apActionCount">—</p>
@@ -440,7 +440,7 @@
                     </div>
                     <p class="ap-row-muted">40% de chance de vitória é uma premissa editável da gestão, por haver mais policiais que invasores. Não é uma taxa de sucesso real. A espera e a duração só são consideradas quando informadas.</p>
                     <div id="apIntelligenceResult" class="ap-intel-decision"></div>
-                    <p class="ap-sub">A sugestão considera o lucro em caso de vitória e o capital investido para definir a meta. A perda na derrota aparece no resultado, mas não é ponderada sem uma taxa real de vitórias.</p>
+                    <p class="ap-sub">A sugestão considera o lucro em caso de vitória e o capital investido para definir a meta. A perda integral do kit na derrota é ponderada no cenário gerencial de chance de vitória configurado (40% por padrão). A recomendação é gradual e não tenta eliminar todo o risco com um único buff.</p>
                     <div class="ap-filter-row">
                       <label class="ap-field">Lucro alvo por jogador (R$)<input id="apProfitGoal" type="number" min="0" step="1000" value="20000"></label>
                       <label class="ap-field">ROI alvo sobre o kit inteiro (%)<input id="apRoiGoal" type="number" min="0" max="200" step="5" value="25"></label>
