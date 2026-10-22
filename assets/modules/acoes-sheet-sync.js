@@ -47,6 +47,7 @@ export function planApprovedActionSheetUpdate(rows,name,officialMin,proposedMin)
   sheetName:'VALORES AÇÃO BLIPADA',
   previousMin:min,proposedMin:newMin,delta,
   oldBuff:buff,oldNerf:nerf,nextBuff,nextNerf,
+  min:{rowIndex:minRow,columnIndex:col+1},
   buff:{rowIndex:buffRow,columnIndex:col+1},
   nerf:{rowIndex:nerfRow,columnIndex:col+1}
  };
