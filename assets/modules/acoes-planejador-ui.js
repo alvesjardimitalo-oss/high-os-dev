@@ -237,7 +237,7 @@ function scenarios(){
  const rules=getRules(action(),place());
  if(!rules.length){el('apScenarios').innerHTML='<p class="ap-row-muted">Nenhuma faixa de invasores publicada.</p>';return;}
  const body=rules.map(r=>{
-  const p=calculateAction(action(),catalog,{...options(),team:r.invasores,quantities:{},prices:{}});
+  const p=analyzeDecision(action(),catalog,{...options(),team:r.invasores,quantities:{},prices:{},referenceTeam:defaultTeam(action())}).calc;
   return '<tr class="'+(r.invasores===Number(state.team)?'ap-scenario-active':'')+'">'+
    '<td><button type="button" class="ap-button" data-ap-team="'+r.invasores+'">'+r.invasores+'</button></td>'+
    '<td>'+safe(r.policiais??'—')+'</td><td>'+safe(money(p.kit.total))+'</td>'+
@@ -251,8 +251,8 @@ function scenarios(){
 }
 function summary(){
  const a=action();if(!a)return;
- const p=calculateAction(a,catalog,options());
- el('apActionStatus').innerHTML=chip(a.status==='inativo'?'INATIVA':p.status);
+ const d=decision(),p=d.calc;
+ el('apActionStatus').innerHTML=chip(a.status==='inativo'?'INATIVA':d.direction);
  el('apKitComputed').textContent='Kit cadastrado na fonte: '+money(p.kit.official)+' • Capital simulado: '+money(p.kit.total);
  const warns=[];
  if(!p.teamValid)warns.push('Equipe não prevista nas regras de invasores.');
@@ -263,6 +263,7 @@ function summary(){
  if(state.kitMode==='oficial'&&p.kit.lines.some(i=>i.category==='arma'&&i.qty<p.team))
   warns.push('Algumas armas cadastradas são insuficientes para o número de jogadores.');
  if(state.priceShift)warns.push('Alta/queda de preço é hipotética e não altera o catálogo oficial.');
+ if(d.modeled)warns.push('PRÊMIO PROPORCIONAL SIMULADO: valor NÃO oficial. Retorne ao prêmio publicado antes de qualquer aprovação.');
  const warning=el('apWarnings');warning.className='ap-hint'+(warns.length?' warn':'');
  warning.textContent=warns.join(' ')||'Na vitória, armas e munições não utilizadas permanecem com a facção. Coletes são de uso único. O consumo de pendrives é configurável. Na derrota, todo o kit é perdido.';
  const cs=v=>v===null?'':v>=0?'good':'bad';
@@ -293,34 +294,50 @@ function summary(){
  ].join('');
  el('apGoals').innerHTML=[
   kpi('Meta de lucro total na vitória',money(p.targetProfit),'gold','Meta individual ou ROI sobre kit completo'),
-  kpi('Prêmio mínimo proposto (sujo)',money(p.payoutNeeded),'gold'),
-  kpi('Prêmio máximo proposto (sujo)',money(p.payoutMax)),
-  kpi('Diferença sugerida',p.delta===null?'A confirmar':(p.delta>=0?'+':'−')+money(Math.abs(p.delta)),p.delta===null?'':p.delta>=0?'good':'bad'),
-  kpi('Lucro na vitória com proposta',money(p.proposedNet),cs(p.proposedNet)),
-  kpi('Lucro por jogador com proposta',money(p.proposedPerPlayer),cs(p.proposedPerPlayer)),
+  kpi('Prêmio mínimo sugerido (sujo)',money(d.suggested),'gold'),
+  kpi('Prêmio máximo publicado (sujo)',money(p.max)),
+  kpi('Diferença sugerida',d.delta===null?'A confirmar':(d.delta>=0?'+':'−')+money(Math.abs(d.delta)),d.delta===null?'':d.delta>=0?'good':'bad'),
+  kpi('Lucro na vitória com proposta',money(d.suggested===null||p.kit.winCost===null?null:d.suggested*(1-p.tax)-p.kit.winCost),cs(p.proposedNet)),
+  kpi('Lucro por jogador com proposta',money(d.suggested===null||p.kit.winCost===null?null:(d.suggested*(1-p.tax)-p.kit.winCost)/p.team),cs(p.proposedPerPlayer)),
   kpi('ROI alvo sobre kit inteiro',percent(p.targetROI)),
   kpi('ROI atual na vitória',percent(p.roi))
  ].join('');
- const message=p.status==='BUFF'?'Lucro na vitória abaixo da meta: considerar aumento.':
-  p.status==='NERF'?'Lucro na vitória acima da meta: considerar redução.':
-  p.status==='MANTER'?'Lucro na vitória dentro da meta.':'Revisar regras, preços e quantidades antes de propor ajustes.';
- const out=el('apResult');out.className='ap-result'+(['BUFF','NERF'].includes(p.status)?' warning':'');
- out.innerHTML='<strong>'+safe(p.status)+'</strong><span>'+safe(message)+'</span>';
- el('apProposal').textContent='Cenário: '+p.team+' jogadores • lavagem '+percent(p.tax)+
-  ' • capital '+money(p.kit.total)+' • repõe se vencer '+money(p.kit.winCost)+
-  ' • perde se derrotado '+money(p.kit.lossCost)+'. A proposta considera o lucro da vitória, sem estimar chance de derrota. Buffs passados já estão incluídos.';
+ const risk=el('apIntelligenceResult');
+ risk.innerHTML=[
+  kpi('Decisão sugerida',d.direction,'gold'),
+  kpi('Prêmio sugerido',money(d.suggested),'gold'),
+  kpi('Taxa mínima para empatar',percent(d.breakEven)),
+  kpi('Resultado esperado com chance informada',money(d.expected),d.expected===null?'':d.expected>=0?'good':'bad'),
+  kpi('Lucro mínimo/jogador/hora',money(d.hourly),d.hourly===null?'':d.hourly>=0?'good':'bad'),
+  kpi('Tempo total estimado',d.totalMinutes===null?'Não informado':d.totalMinutes+' min')
+ ].join('')+'<p class="ap-row-muted">'+d.remarks.map(safe).join(' ')+'</p>';
+ const out=el('apResult');out.className='ap-result'+(d.direction==='CONSIDERAR BUFF'?' warning':'');
+ out.innerHTML='<strong>'+safe(d.direction)+'</strong><span>'+safe(
+  'Ajuste proposto sobre prêmio mínimo. Lucro por membro '+money(p.perPlayer)+
+  ' • derrota '+money(p.loss)+'. A decisão final é da gestão.')+'</span>';
+ el('apProposal').textContent='Cenário: '+p.team+' jogadores • prêmio '+(d.modeled?'HIPOTÉTICO proporcional':'publicado')+
+  ' • lavado '+percent(p.tax)+' • capital '+money(p.kit.total)+
+  ' • reposição '+money(p.kit.winCost)+' • perda total ao ser derrotado '+money(p.kit.lossCost)+
+  '. A espera e a taxa de vitória não são presumidas; sem esses dados, buff/nerf requer julgamento humano.';
  const alternative=el('apManualOutcome');
  alternative.textContent=state.manualPayout===null?'Insira outro prêmio para estimar a vitória.':
   p.kit.winCost===null?'Algum preço está pendente.':
   'Com '+money(state.manualPayout)+' sujo, lucro na vitória de '+
   money(state.manualPayout*(1-p.tax)-p.kit.winCost)+' ('+
   money((state.manualPayout*(1-p.tax)-p.kit.winCost)/p.team)+' por jogador). Prejuízo na derrota: '+money(p.loss)+'.';
- el('apCopy').disabled=!p.payoutAdjustable;
- const hypothetical=state.priceShift!==0||Object.keys(state.prices).length>0||Object.keys(state.quantities).length>0;
- const sync=el('apApprove');if(sync){
-  sync.hidden=!approveHandler;
-  sync.disabled=!approveHandler||!['BUFF','NERF'].includes(p.status)||hypothetical||approvedThisSession.has(a.nome);
-  sync.title=hypothetical?'Remova ajustes hipotéticos para sincronizar a planilha.':'Exige confirmação antes de escrever.';
+ el('apCopy').disabled=!d.valid;
+ const saveAllowed=!!approveHandler&&d.eligibleForSheet&&!approvedThisSession.has(a.nome);
+ for(const [id,available] of [
+  ['apApprove',saveAllowed&&Number.isFinite(d.suggested)&&Math.abs(d.suggested-p.min)>1],
+  ['apApproveManual',saveAllowed&&Number.isFinite(state.manualPayout)&&state.manualPayout>0&&Math.abs(state.manualPayout-p.min)>1],
+  ['apReject',!!onRejectAction&&d.valid]
+ ]){
+  const button=el(id);if(button){
+   button.hidden=(id==='apReject'?!onRejectAction:!approveHandler);
+   button.disabled=!available;
+   button.title=!d.eligibleForSheet?'Só é possível aprovar o prêmio publicado, sem ajustes hipotéticos no kit ou nos insumos.':
+    'A alteração na planilha exige confirmação específica.';
+  }
  }
  scenarios();
 }
@@ -329,8 +346,8 @@ function render(){
  actionsList();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
 }
 async function copyProposal(){
- const a=action(),p=calculateAction(a,catalog,options());
- if(!p.payoutAdjustable)return;
+ const a=action(),d=decision(),p=d.calc;
+ if(!d.valid)return;
  const text=['HIGH ROLEPLAY — ANÁLISE ECONÔMICA DE AÇÃO',
  'AÇÃO: '+a.nome,'AVALIAÇÃO: '+p.status,
  'JOGADORES: '+p.team+' / POLICIAIS: '+(p.rule?.policiais??'Não informado'),
@@ -347,10 +364,12 @@ async function copyProposal(){
  'SALDO NO CAIXA AO VENCER NA PRIMEIRA AÇÃO COM KIT NOVO: '+money(p.firstRunNetMin),
  'PREJUÍZO SE PERDER: '+money(p.loss)+' (sem prêmio; equipamento perdido)',
  'META POR JOGADOR: '+money(p.targetPerPlayer)+' / META ROI DO KIT: '+percent(p.targetROI),
- 'PRÊMIO MÍNIMO SUGERIDO: '+money(p.payoutNeeded),
- 'PRÊMIO MÁXIMO SUGERIDO: '+money(p.payoutMax),
+ 'PRÊMIO MÍNIMO SUGERIDO: '+money(d.suggested),
+ 'PRÊMIO MÁXIMO PUBLICADO: '+money(p.max),
  'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
  'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
+ 'DECISÃO: '+d.direction,'RISCO: chance '+(d.winChance===null?'não informada':percent(d.winChance))+' | espera '+(d.wait===null?'não informada':d.wait+' min'),
+ 'AVISO: se prêmio proporcional for selecionado, o valor é hipotético, não oficial.',
  'Premiações atuais já incluem buffs/nerfs existentes. Nenhuma mudança automática no jogo.'].join('\n');
  const status=el('apCopyStatus');
  try{await navigator.clipboard.writeText(text);status.textContent='Análise copiada. Verifique os cenários antes de qualquer alteração oficial.';}
