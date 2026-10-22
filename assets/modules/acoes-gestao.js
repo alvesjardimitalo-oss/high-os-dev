@@ -30,7 +30,7 @@ export function buildManagementBoard(actions,catalog,{
  const opts={tax:clamp(tax,0,.99,.3),ammoUse:clamp(ammoUse,0,1,.25),accessConsumed:!!accessConsumed};
  const goalMember=Math.max(0,numeric(targetPerPlayer)??20000);
  const goalRoi=Math.max(0,numeric(roi)??.25);
- const chance=winChance===null||winChance===''?null:clamp(winChance,0,1,0);
+ const chance=null; // Regras policiais e risco não definem pagamento.
  const wait=policeWaitMinutes===null||policeWaitMinutes===''?null:clamp(policeWaitMinutes,0,600,0);
  const duration=estimatedActionMinutes===null||estimatedActionMinutes===''?null:clamp(estimatedActionMinutes,0,600,0);
  const changes=assessPriceChanges(cleanActions,catalog,reference,opts);
@@ -41,27 +41,24 @@ export function buildManagementBoard(actions,catalog,{
    quantities:{},prices:{},priceShift:0,targetPerPlayer:goalMember,roi:goalRoi});
   const active=action.status!=='inativo';
   const valid=calc.teamValid&&!calc.kit.missing.length&&finite(calc.min)&&finite(calc.max)&&
-   finite(calc.kit.total)&&calc.kit.total>0&&finite(calc.netMin);
+   finite(calc.kit.total)&&calc.kit.total>=0&&finite(calc.netMin);
   const change=changeMap.get(norm(action.nome))||null;
   const reason=[];
   let status='MANTER',priority=0;
-  const expected=valid&&chance!==null?round(chance*calc.netMin+(1-chance)*calc.loss):null;
-  const cycleMinutes=wait!==null&&duration!==null?wait+duration:null;
-  const expectedMemberHour=expected!==null&&cycleMinutes>0?round(expected*60/cycleMinutes/team):null;
-  const target=valid?Math.max(goalMember*team,calc.kit.total*goalRoi):null;
-  const gap=valid?round(target-calc.netMin):null;
+  const expected=null; // Probabilidade de vitória nunca afeta revisão ou classificação.
+  const cycleMinutes=null;
+  const expectedMemberHour=null;
+  const target=null; // Lucro-alvo arbitrário não é critério de buff.
+  const gap=null;
   if(!active){status='INATIVA';priority=-1;}
   else if(!valid){
    status='DADOS PENDENTES';priority=5;
    if(!calc.teamValid)reason.push('Falta regra válida de invasores');
    if(calc.kit.missing.length)reason.push('Sem preço: '+calc.kit.missing.join(', '));
    if(!finite(calc.min)||!finite(calc.max))reason.push('Premiação não informada');
-   if(!finite(calc.kit.total)||calc.kit.total<=0)reason.push('Kit sem capital calculável');
+   if(!finite(calc.kit.total)||calc.kit.total<0)reason.push('Kit sem capital calculável');
   }else{
    if(calc.netMin<0){status='PREJUÍZO NA VITÓRIA';priority=5;reason.push('Lucro mínimo após lavagem e reposições negativo');}
-   else if(gap>Math.max(1000,target*.05)){
-    status='REVISAR EQUILÍBRIO';priority=3;reason.push('Lucro na vitória abaixo da meta definida');
-   }
    if(calc.kit.baselineMismatch){
     reason.push('Custo oficial da ação difere do kit a preços atuais');
     priority=Math.max(priority,3);
@@ -83,14 +80,7 @@ export function buildManagementBoard(actions,catalog,{
      if(status==='MANTER')status='MONITORAR ECONOMIA';
     }
    }
-   if(status==='MANTER')reason.push('Meta atendida no cenário de vitória; risco policial não informado');
-   if(calc.netMin>=0&&gap< -Math.max(1000,target*.25)){
-    reason.push('Acima da meta não significa nerf: considerar espera, derrota e dificuldade');
-   }
-  }
-  if(active&&valid&&expected!==null&&expected<0&&priority<5){
-   priority=Math.max(priority,4);status='RISCO SIMULADO';
-   reason.unshift('Com a chance informada, o resultado esperado é negativo; cenário hipotético');
+   if(status==='MANTER')reason.push('Prêmio aprovado mantido; nenhuma revisão comprovada por preços');
   }
   return {nome:String(action.nome||''),action,calc,active,valid,team,status,priority,reason,change,
    expected,expectedMemberHour,cycleMinutes,
@@ -114,7 +104,7 @@ export function buildManagementBoard(actions,catalog,{
   perdaEsperada:valid.filter(x=>x.expected!==null&&x.expected<0).length
  };
  return {entries,stats,changes,hasReference:changes.available,scenario:{chance,wait,duration},
-  conditions:'Cenário de vitória: preços de pista, kit oficial, maior equipe permitida, prêmio mínimo, lavagem e reposições; não representa resultado real por hora nem risco medido.'};
+  conditions:'Prêmios aprovados mantidos; mudanças de custo são comparadas apenas com a referência salva. Equipes, policiais e cooldown são requisitos operacionais, não multiplicadores da premiação.'};
 }
 
 export function filterManagementEntries(entries,{filter='TODAS',sort='PRIORIDADE',query=''}={}){
