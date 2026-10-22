@@ -376,8 +376,8 @@ function renderExplosiveComparison(){
   target.innerHTML='';target.parentElement.hidden=true;return;
  }
  target.parentElement.hidden=false;
- const noC4=(a.itens||[]).filter(i=>!/^(C4(?:\\s*\\+\\+)?|C4\\+\\+)$/i.test(String(i.nome||'').trim()));
- const usedExplosives=(a.itens||[]).filter(i=>/^(C4(?:\\s*\\+\\+)?|C4\\+\\+)$/i.test(String(i.nome||'').trim()));
+ const noC4=(a.itens||[]).filter(i=>!/^(C4(?:\s*\+\+)?|C4\+\+)$/i.test(String(i.nome||'').trim()));
+ const usedExplosives=(a.itens||[]).filter(i=>/^(C4(?:\s*\+\+)?|C4\+\+)$/i.test(String(i.nome||'').trim()));
  const quantity=usedExplosives.reduce((sum,i)=>sum+(Number(i.quantidade)||0),0)||1;
  const variants=['C4','C4 ++'].map(explosive=>{
   const kit=[...noC4,{nome:explosive,quantidade:quantity,categoria_item:'consumivel'}];
