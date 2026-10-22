@@ -40,6 +40,7 @@ export function buildManagementBoard(actions,catalog,{
   const calc=calculateAction(action,catalog,{...opts,team,priceMode:'pista',kitMode:'oficial',
    quantities:{},prices:{},priceShift:0,targetPerPlayer:goalMember,roi:goalRoi});
   const active=action.status!=='inativo';
+  const variable=action.tipo_acao==='casas'&&action.premio_min===0&&action.premio_max===0;
   const valid=calc.teamValid&&!calc.kit.missing.length&&finite(calc.min)&&finite(calc.max)&&
    finite(calc.kit.total)&&calc.kit.total>=0&&finite(calc.netMin);
   const change=changeMap.get(norm(action.nome))||null;
@@ -51,6 +52,9 @@ export function buildManagementBoard(actions,catalog,{
   const target=null; // Lucro-alvo arbitrário não é critério de buff.
   const gap=null;
   if(!active){status='INATIVA';priority=-1;}
+  else if(variable){
+   status='RECEITA VARIÁVEL';priority=0;reason.push('Receita calculada na subpágina Compradores NPC, conforme itens obtidos em cada casa');
+  }
   else if(!valid){
    status='DADOS PENDENTES';priority=5;
    if(!calc.teamValid)reason.push('Falta regra válida de invasores');
@@ -82,7 +86,7 @@ export function buildManagementBoard(actions,catalog,{
    }
    if(status==='MANTER')reason.push('Prêmio aprovado mantido; nenhuma revisão comprovada por preços');
   }
-  return {nome:String(action.nome||''),action,calc,active,valid,team,status,priority,reason,change,
+  return {nome:String(action.nome||''),action,calc,active,valid,variable,team,status,priority,reason,change,
    expected,expectedMemberHour,cycleMinutes,
    target,gap,netMin:calc.netMin,perPlayer:calc.perPlayer,roi:calc.roi,
    capital:calc.kit.total,winCost:calc.kit.winCost,loss:calc.loss,
@@ -94,7 +98,7 @@ export function buildManagementBoard(actions,catalog,{
  const perPlayer=valid.map(x=>x.perPlayer);
  const stats={
   total:entries.length,active:active.length,inactive:entries.length-active.length,
-  valid:valid.length,pendentes:active.filter(x=>!x.valid).length,
+  valid:valid.length,pendentes:active.filter(x=>!x.valid&&!x.variable).length,
   revisao:active.filter(x=>x.priority>=3).length,
   impactoPrecos:active.filter(x=>!!x.change).length,
   emPrejuizo:valid.filter(x=>x.netMin<0).length,
@@ -111,7 +115,7 @@ export function filterManagementEntries(entries,{filter='TODAS',sort='PRIORIDADE
  const q=norm(query);
  const list=(Array.isArray(entries)?entries:[]).filter(x=>{
   if(q&&!norm(x.nome).includes(q))return false;
-  if(filter==='PENDENTES')return x.active&&!x.valid;
+  if(filter==='PENDENTES')return x.active&&!x.valid&&!x.variable;
   if(filter==='REVISAR')return x.active&&x.priority>=3;
   if(filter==='IMPACTADAS')return x.active&&!!x.change;
   if(filter==='PREJUIZO')return x.active&&x.valid&&x.netMin<0;
