@@ -26,3 +26,14 @@ test('falha no Mercado Negro preserva os módulos e carrega cadastro independent
  try{const mod=await import('data:text/javascript,'+encodeURIComponent(compiled));await mod.mountActionPlanner();assert.equal(markup,'<painel-com-casas-e-loot>');assert.match(message,/continuam disponíveis/);assert.equal(calls[0],'registry');assert.ok(calls.includes('paint'));}
  finally{globalThis.fetch=originalFetch;globalThis.document=originalDocument;delete globalThis.__economiaLoadCalls;}
 });
+
+
+test('navegação separa ações, roubos e comerciantes',()=>{
+ const handlers={};const root={dataset:{},querySelector:()=>null,querySelectorAll:()=>[],addEventListener:(kind,handler)=>{(handlers[kind]??=[]).push(handler);},scrollIntoView(){}};
+ createActionWorkspace({root,getActions:()=>[],getPublished:()=>[],getSelected:()=>'',getCatalog:()=>null,select(){},refresh(){}});
+ const click=area=>handlers.click[0]({target:{closest:selector=>selector==='button[data-economy-area]'?{dataset:{economyArea:area}}:null}});
+ click('acoes');assert.equal(root.dataset.apSection,'overview');assert.equal(root.dataset.economyArea,'acoes');
+ click('roubados');assert.equal(root.dataset.apSection,'loot');
+ click('quebrados');assert.equal(root.dataset.apSection,'npc');
+ click('acoes');assert.equal(root.dataset.apSection,'overview');
+});

@@ -19,9 +19,9 @@ test('venda de itens roubados desconta lavagem e gazua uma única vez',()=>{
  const result=houseLootScenario([{precoSujo:1000}],[2],{lockpickUnit:1000,lockpickQuantity:1,tax:.3});
  assert.equal(result.grossDirty,2000);assert.equal(result.profit,400);
 });
-test('Economia Ilegal oferece três áreas e preserva as subpáginas de ações',()=>{
+test('Economia Ilegal oferece áreas independentes e preserva as subpáginas de ações',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
- for(const area of ['acoes','quebrados','roubados'])assert.match(html,new RegExp('data-economy-area="'+area+'"'));
+ for(const area of ['acoes','quebrados','roubados','lootnpc','portamalas','comerciante'])assert.match(html,new RegExp('data-economy-area="'+area+'"'));
  assert.match(html,/Economia Ilegal/);assert.match(html,/QUANTIDADE JÁ COMPRADA/);
  for(const page of ['overview','workspace','ranking','prices','npc'])assert.match(html,new RegExp('data-ap-subpage="'+page+'"'));
 });

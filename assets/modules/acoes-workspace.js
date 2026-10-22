@@ -1,5 +1,5 @@
-import {createEconomyVisual} from './economia-visual.js?v=1';
-import {createHouseWorkbench} from './roubos-loot-ui.js?v=4';
+import {createEconomyVisual} from './economia-visual.js?v=2';
+import {createHouseWorkbench} from './roubos-loot-ui.js?v=5';
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
 import {createNpcWorkbench} from './acoes-npc-ui.js?v=6';
 
@@ -26,9 +26,12 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   }catch(e){ready=false;lastLoadError=String(e?.message||e);message('Cadastro interno indisponível: '+lastLoadError);}
  }
  function paint(){
-  visual?.refresh();
   root.dataset.apSection=view;root.dataset.apProfileTab=tab;
-  const area=view==='loot'?'roubados':view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'roubados'):'acoes';
+  const area=view==='loot'?({casas:'roubados',npc:'lootnpc',portamalas:'portamalas'}[houses?.mode?.()]||'roubados'):view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'comerciante'):'acoes';
+  visual?.selectArea(area);
+  const lootHeading=$('apLootHeading');if(lootHeading)lootHeading.textContent={roubados:'Roubo de residências',lootnpc:'Loot de NPC',portamalas:'Roubo de veículos e porta-malas'}[area]||'Gestão dos roubos';
+  if($('apHouseMerchant'))$('apHouseMerchant').hidden=area!=='roubados';
+  if($('apBackHouse'))$('apBackHouse').hidden=area!=='comerciante';
   root.dataset.economyArea=area;
   root.querySelectorAll('[data-economy-area]').forEach(btn=>{
    if(btn.dataset.economyArea===area)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');
@@ -163,12 +166,13 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   const area=ev.target.closest('button[data-economy-area]');
   if(area){
    if(area.dataset.economyArea==='acoes')navigate('overview');
-   else if(area.dataset.economyArea==='roubados')navigate('loot');
+   else if(['roubados','lootnpc','portamalas'].includes(area.dataset.economyArea)){houses?.selectMode({roubados:'casas',lootnpc:'npc',portamalas:'portamalas'}[area.dataset.economyArea]);navigate('loot');}
+   else if(area.dataset.economyArea==='comerciante'){npc?.selectMarket('CASAS');navigate('npc');}
    else{npc?.selectMarket('ARMAS_QUEBRADAS');navigate('npc');}
    return;
   }
   if(ev.target.closest('#apHouseMerchant')){npc?.selectMarket('CASAS');navigate('npc');return;}
-  if(ev.target.closest('#apBackHouse')){navigate('loot');return;}
+  if(ev.target.closest('#apBackHouse')){houses?.selectMode('casas');navigate('loot');return;}
   const nav=ev.target.closest('[data-ap-nav]');
   if(nav){navigate(nav.dataset.apNav);return;}
   const profile=ev.target.closest('[data-ap-profile]');

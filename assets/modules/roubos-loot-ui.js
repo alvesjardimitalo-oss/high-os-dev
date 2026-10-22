@@ -4,7 +4,7 @@ import {makeLootPrices,lootPrice,weightedLoot,invasionExpectation,simulateInvasi
 import {priceOf} from './acoes-core.js?v=5';
 
 export function createHouseWorkbench({root,getRegistry,getCatalog,canEdit,onSave}){
- const host=root.querySelector('#apHouseWorkbench');if(!host)return {refresh(){}};
+ const host=root.querySelector('#apHouseWorkbench');if(!host)return {refresh(){},selectMode(){},mode:()=>null};
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=v=>Number.isFinite(v)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(v):'Pendente';
  const pct=v=>new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:2}).format(v);
@@ -90,5 +90,5 @@ export function createHouseWorkbench({root,getRegistry,getCatalog,canEdit,onSave
   catch(err){if($('hlMessage'))$('hlMessage').textContent='Não foi possível registrar: '+err.message;}
   finally{busy=false;if($('hlSave'))$('hlSave').disabled=!canEdit();}
  });
- render();return {refresh:render};
+ render();return {refresh:render,mode:()=>state.mode,selectMode(mode){if(!['casas','npc','portamalas'].includes(mode))return;state.mode=mode;state.stage='projecao';render();}};
 }

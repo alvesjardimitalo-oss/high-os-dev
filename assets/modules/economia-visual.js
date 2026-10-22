@@ -4,16 +4,17 @@ import {makeLootPrices,invasionExpectation,houseSearchParts} from './roubos-loot
 import {BROKEN_ITEMS_SNAPSHOT,STOLEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=2';
 
 export function createEconomyVisual({root,getRegistry,getCatalog,getActions}){
- const navigation=root.querySelector('.ap-economy-navigation');if(!navigation)return {refresh(){}};
+ const navigation=root.querySelector('.ap-economy-navigation');if(!navigation)return {refresh(){},selectArea(){}};
  const host=navigation.ownerDocument.createElement('section');host.className='ap-panel ap-economy-lab';
  navigation.after(host);
+ let area='acoes';
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const money=x=>Number.isFinite(x)?x.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}):'Preço pendente';
- const s={mode:'casas',shift:0,life:6,points:15,tax:30,success:100,repair:0,scrap:0,cards:2,runs:3,action:'',volume:100};
+ const s={mode:'acoes',shift:0,life:6,points:15,tax:30,success:100,repair:0,scrap:0,cards:2,runs:3,action:'',volume:100};
  const field=(label,key,min,max,step=1)=>'<label class="ap-field">'+label+'<input type="number" data-ev="'+key+'" value="'+s[key]+'" min="'+min+'" max="'+max+'" step="'+step+'"></label>';
  const market=(key,fallback)=>{const m=getRegistry()?.npcMarkets?.[key];return m?.updatedAt||m?.items?.length?m.items:fallback;};
  function render(){
- host.innerHTML='<div class="ap-heading"><div><span class="ap-section-kicker">LABORATÓRIO DE BALANCEAMENTO</span><h3>O que muda no rendimento?</h3><p class="ap-sub">Compare o cenário atual com uma proposta. Os ajustes abaixo são simulações.</p></div></div><nav class="ap-navigation" aria-label="Processos econômicos">'+[['casas','Residências'],['veiculo','Veículos e porta-malas'],['quebrados','Itens quebrados'],['acoes','Ações blipadas'],['corridas','Potencial das corridas']].map(([k,v])=>'<button type="button" data-ev-mode="'+k+'" '+(s.mode===k?'aria-current="page"':'')+'>'+v+'</button>').join('')+'</nav><ol class="ap-economy-flow">'+(s.mode==='acoes'?['Comprar o kit','Disputar a ação','Receber ou perder','Repor e calcular lucro']:s.mode==='quebrados'?['Obter item quebrado','Vender ao comerciante','Receber dinheiro sujo','Medir volume e impacto']:s.mode==='corridas'?['Obter cartão','Participar da corrida','Concluir ou perder','Receber e descontar custos']:['Comprar gazua','Dividir custo pelos usos','Recuperar loot'+(s.mode==='veiculo'?' e veículo':''),'Vender e calcular lucro']).map((x,i)=>'<li><small>ETAPA '+(i+1)+'</small><strong>'+x+'</strong></li>').join('')+'</ol><div class="ap-filter-row">'+
+ host.innerHTML='<div class="ap-heading"><div><span class="ap-section-kicker">LABORATÓRIO DE BALANCEAMENTO</span><h3>'+({acoes:'Simular recompensa da ação',roubados:'Simular rendimento da residência',portamalas:'Simular porta-malas e desmanche',quebrados:'Simular pagamento por item quebrado'}[area]||'Simular rendimento')+'</h3><p class="ap-sub">Compare o cenário atual com uma proposta. Os ajustes abaixo são simulações.</p></div></div><nav class="ap-navigation" aria-label="Processos econômicos">'+(area==='roubados'?[['casas','Retorno imediato'],['corridas','Potencial dos cartões']]:[]).map(([k,v])=>'<button type="button" data-ev-mode="'+k+'" '+(s.mode===k?'aria-current="page"':'')+'>'+v+'</button>').join('')+'</nav><ol class="ap-economy-flow">'+(s.mode==='acoes'?['Comprar o kit','Disputar a ação','Receber ou perder','Repor e calcular lucro']:s.mode==='quebrados'?['Obter item quebrado','Vender ao comerciante','Receber dinheiro sujo','Medir volume e impacto']:s.mode==='corridas'?['Obter cartão','Participar da corrida','Concluir ou perder','Receber e descontar custos']:['Comprar gazua','Dividir custo pelos usos','Recuperar loot'+(s.mode==='veiculo'?' e veículo':''),'Vender e calcular lucro']).map((x,i)=>'<li><small>ETAPA '+(i+1)+'</small><strong>'+x+'</strong></li>').join('')+'</ol><div class="ap-filter-row">'+
  (s.mode==='casas'||s.mode==='veiculo'?field('Usos por gazua • estimativa','life',1,100)+field('Locais / sorteios por tentativa','points',1,100):'')+
  (s.mode==='acoes'?'<label class="ap-field">Ação<select data-ev="action">'+getActions().map(a=>'<option value="'+esc(a.nome)+'" '+(s.action===a.nome?'selected':'')+'>'+esc(a.nome)+'</option>').join('')+'</select></label>':'')+
  (s.mode!=='corridas'?field(s.mode==='acoes'?'Alteração da recompensa (%)':'Alteração dos preços do NPC (%)','shift',-100,500):field('Cartões recuperados','cards',0,100)+field('Corridas por cartão • estimativa','runs',1,100))+
@@ -57,5 +58,11 @@ export function createEconomyVisual({root,getRegistry,getCatalog,getActions}){
  }
  host.addEventListener('click',e=>{const b=e.target.closest('[data-ev-mode]');if(!b)return;s.mode=b.dataset.evMode;s.shift=0;s.life=s.mode==='veiculo'?3:6;s.points=s.mode==='veiculo'?1:15;render();});
  host.addEventListener('input',e=>{const key=e.target.dataset.ev;if(!key)return;if(key==='action')s[key]=e.target.value;else{if(e.target.value===''||!e.target.validity.valid)return;s[key]=Number(e.target.value);}summarize();});
- render();return {refresh:render};
+ render();return {refresh:render,selectArea(next){
+  const mode={acoes:'acoes',roubados:'casas',portamalas:'veiculo',quebrados:'quebrados'}[next];
+  host.hidden=!mode;if(!mode)return;
+  if(area!==next){area=next;s.mode=mode;s.shift=0;s.life=next==='portamalas'?3:6;s.points=next==='portamalas'?1:15;}
+  const selector=next==='acoes'?'[data-ap-subpage="overview"]':next==='quebrados'?'[data-ap-subpage="npc"]':'[data-ap-subpage="loot"]';
+  const panel=root.querySelector(selector);if(panel)panel.append(host);render();
+ }};
 }

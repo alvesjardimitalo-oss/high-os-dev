@@ -2,7 +2,7 @@ import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=4';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=6';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=4';
-import {createActionWorkspace} from './acoes-workspace.js?v=13';
+import {createActionWorkspace} from './acoes-workspace.js?v=14';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
