@@ -16,9 +16,11 @@ export function cleanActionEntry(input,{oldName='',published=[],managed=[]}={}){
  const key=normalizeActionName(nome),oldKey=normalizeActionName(oldName);
  const occupied=[...published,...managed].find(a=>normalizeActionName(a.nome)===key);
  if(occupied&&key!==oldKey)throw Error('Já existe outra ação com este nome.');
- const min=finite(input.premio_min),max=finite(input.premio_max);
- if(min===null||min<=0||max===null||max<min||max>1e12)
-  throw Error('Informe prêmios mínimo e máximo válidos. O máximo não pode ser inferior ao mínimo.');
+ const tipo_acao=['blipada','atm','registradora','casas','outros'].includes(input.tipo_acao)?input.tipo_acao:'blipada';
+ const variable=tipo_acao==='casas';
+ const min=finite(input.premio_min)??(variable?0:null),max=finite(input.premio_max)??(variable?0:null);
+ if(min===null||min<0||(!variable&&min<=0)||max===null||max<min||max>1e12)
+  throw Error('Informe prêmios mínimo e máximo válidos. Em roubos de casas, 0/0 representa receita variável do NPC.');
  const status=String(input.status)==='inativo'?'inativo':'ativo';
  const rules=(Array.isArray(input.regras_confronto)?input.regras_confronto:[]).map(row=>({
   invasores:finite(row.invasores),policiais:finite(row.policiais),refens:finite(row.refens)??0
@@ -41,7 +43,6 @@ export function cleanActionEntry(input,{oldName='',published=[],managed=[]}={}){
  const cooldown=finite(input.cooldown_segundos)??0;
  if(cooldown<0||cooldown>86400||!Number.isInteger(cooldown))
   throw Error('Tempo de espera inválido.');
- const tipo_acao=['blipada','atm','registradora','casas','outros'].includes(input.tipo_acao)?input.tipo_acao:'blipada';
  return {...input,nome,tipo_acao,status,premio_min:min,premio_max:max,cooldown_segundos:cooldown,
   itens,regras_confronto:rules,
   locais:Array.isArray(input.locais)?input.locais.slice(0,50):[]};
