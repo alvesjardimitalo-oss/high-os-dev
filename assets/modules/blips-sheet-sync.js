@@ -35,7 +35,7 @@ function pair(x){
  return [plain(x.blip||x.cds)?"BLIP: "+plain(x.blip||x.cds):"",plain(x.spawn)?"SPAWN: "+plain(x.spawn):""].filter(Boolean).join("\n");
 }
 function joinPairs(items){return (items||[]).map(pair).filter(Boolean).join("\n\n");}
-function valuesFor(f){
+export function valuesFor(f){
  const b=f.beneficios||{};
  const t=f.perfilTecnico||{};
  const op=t.operacional||{};
@@ -119,7 +119,7 @@ function safeBlank(rows,sec,entry){
 /* Preenche apenas células pertencentes ao quadro do Group; novas seções são
    clonadas ao FIM da aba com o layout expandido, sem inserir linhas dentro de
    quadros vizinhos nem apagar coordenadas antigas. */
-export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,preserveExisting=true}={}){
+export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,preserveExisting=true,overwriteFieldsByGroup={}}={}){
  if(!token)throw new Error("Conecte o Google Sheets para sincronizar Blips e Coordenadas.");
  const list=[...new Map(groups.filter(g=>g&&plain(g.group)).map(g=>[fold(g.group),g])).values()];
  if(!list.length)return {created:0,updated:0,skipped:0};
@@ -207,16 +207,19 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
   }
   const {s,entry}=selected;
   const fields=valuesFor(f),col=entry.col,header=s.headerRow;
+  const forceFields=new Set((overwriteFieldsByGroup[key]||overwriteFieldsByGroup[f.group]||[]).map(fold));
   // Campos por rótulo, não por posição fixa: há diferenças entre os segmentos.
   for(let r=header;r<Math.min(s.footerRow,header+MAX_FIELDS_SCAN);r++){
    const label=s.newBlock?s.labels[r-header]:cell(rows,r,col-1);
    if(!label||fold(label)==="TRUE")continue;
-   const value=fields[fold(label)];
-   if(!value)continue;
+   const fieldKey=fold(label),value=fields[fieldKey];
+   const explicitChange=forceFields.has(fieldKey);
+   // Só uma alteração EXPLÍCITA pode limpar valor antigo.
+   if(!value&&!explicitChange)continue;
    const found=s.newBlock?"":first(...Array.from({length:6},(_,i)=>cell(rows,r,col+i)));
    if(!isNew&&value===found)continue;
    if(!isNew&&onlyMissing)continue;
-   if(!isNew&&preserveExisting&&found)continue; // nunca sobrescrever CDS já preenchidas ao entregar a facção
+   if(!isNew&&preserveExisting&&found&&!explicitChange)continue; // entrega não altera instalações preexistentes
    const existingAnchor=!s.newBlock&&found
     ? Array.from({length:6},(_,i)=>col+i).find(c=>cell(rows,r,c))??col :col;
    put(requests,TAB_GID,r,existingAnchor,value);
