@@ -374,105 +374,124 @@ function scenarios(){
  el('apScenarios').innerHTML='<table><thead><tr><th>INVASORES</th><th>POLICIAIS</th><th>CAPITAL INICIAL</th><th>REPOSIÇÃO NA VITÓRIA</th><th>LUCRO NA VITÓRIA (MÍN.)</th><th>PREJUÍZO NA DERROTA</th><th>LUCRO / JOGADOR</th></tr></thead><tbody>'+body+'</tbody></table>'+
  '<p class="ap-row-muted">Comparação com os kits padrão para cada equipe; ajustes manuais de itens não são aplicados à matriz.</p>';
 }
+function renderExplosiveComparison(){
+ const target=el('apExplosiveComparison');if(!target)return;
+ const a=action();if(!a||a.tipo_acao!=='atm'){
+  target.innerHTML='';target.parentElement.hidden=true;return;
+ }
+ target.parentElement.hidden=false;
+ const noC4=(a.itens||[]).filter(i=>!/^(C4(?:\\s*\\+\\+)?|C4\\+\\+)$/i.test(String(i.nome||'').trim()));
+ const usedExplosives=(a.itens||[]).filter(i=>/^(C4(?:\\s*\\+\\+)?|C4\\+\\+)$/i.test(String(i.nome||'').trim()));
+ const quantity=usedExplosives.reduce((sum,i)=>sum+(Number(i.quantidade)||0),0)||1;
+ const variants=['C4','C4 ++'].map(explosive=>{
+  const kit=[...noC4,{nome:explosive,quantidade:quantity,categoria_item:'consumivel'}];
+  const simulated=calculateAction({...a,itens:kit},catalog,{...options(),quantities:{},prices:{}});
+  const sourcePrice=priceOf(explosive,catalog,state.priceMode);
+  const purchase=simulated.kit.total,consumed=simulated.kit.winCost;
+  const breakEven=purchase===null?null:Math.ceil(purchase/(1-simulated.tax));
+  return {explosive,qty:quantity,unit:sourcePrice.unit,simulated,purchase,consumed,breakEven};
+ });
+ target.innerHTML='<div class="ap-heading"><div><span class="ap-section-kicker">SIMULADOR DE ATM</span><h3>Comparar C4 e C4 ++</h3></div></div>'+
+  '<p class="ap-sub">Simula '+quantity+' explosivo(s) por tentativa com o mesmo prêmio cadastrado, os demais itens do kit e a lavagem de '+Math.round(state.tax*100)+'%. A opção é uma comparação, não uma exigência confirmada do Suricato.</p>'+
+  '<div class="ap-table-scroll"><table class="ap-management-table"><thead><tr><th>EQUIPAMENTO</th><th>PREÇO UNITÁRIO</th><th>INVESTIMENTO DO KIT</th><th>PRÊMIO MÍN. PARA EMPATAR</th><th>LUCRO COM MÍNIMO</th><th>LUCRO COM MÁXIMO</th></tr></thead><tbody>'+
+  variants.map(v=>'<tr><td><strong>'+safe(v.explosive)+'</strong></td><td>'+safe(money(v.unit))+'</td><td>'+safe(money(v.purchase))+
+   '</td><td>'+safe(money(v.breakEven))+'</td><td>'+safe(money(v.simulated.netMin))+'</td><td>'+safe(money(v.simulated.netMax))+'</td></tr>').join('')+
+  '</tbody></table></div><p class="ap-row-muted">Para caixas com outros requisitos, registre os itens adicionais no cadastro. A premiação usada é a mesma faixa mínimo/máximo desta ação.</p>';
+}
 function summary(){
  const a=action();if(!a)return;
  const d=decision(),p=d.calc;
  showMainRecommendation(d);
  renderApprovalPayoutRange(d);
+ renderExplosiveComparison();
  el('apActionStatus').innerHTML=chip(a.status==='inativo'?'INATIVA':d.direction);
- el('apKitComputed').textContent='Kit cadastrado na fonte: '+money(p.kit.official)+' • Capital simulado: '+money(p.kit.total);
+ el('apKitComputed').textContent='Kit da fonte: '+money(p.kit.official)+' • Investimento atual: '+money(p.kit.total)+
+  ' • '+(a.itens||[]).length+' item(ns) cadastrado(s)';
  const warns=[];
  if(!p.teamValid)warns.push('Equipe não prevista nas regras de invasores.');
- if(p.kit.missing.length)warns.push('Preço ausente: '+p.kit.missing.join(', ')+'. O resultado fica pendente até informar os valores.');
+ if(p.kit.missing.length)warns.push('Preço ausente: '+p.kit.missing.join(', ')+'.');
  if(state.kitMode==='oficial'&&!state.priceShift&&state.priceMode==='pista'&&
-   !Object.keys(state.prices).length&&p.kit.comparison!==null&&Math.abs(p.kit.comparison)>1)
-  warns.push('Kit cadastrado diverge do preço atual em '+money(p.kit.comparison)+'.');
- if(state.kitMode==='oficial'&&p.kit.lines.some(i=>i.category==='arma'&&i.qty<p.team))
-  warns.push('Algumas armas cadastradas são insuficientes para o número de jogadores.');
- if(state.priceShift)warns.push('Alta/queda de preço é hipotética e não altera o catálogo oficial.');
- if(d.modeled)warns.push('PRÊMIO PROPORCIONAL SIMULADO: valor NÃO oficial. Retorne ao prêmio publicado antes de qualquer aprovação.');
+  !Object.keys(state.prices).length&&p.kit.comparison!==null&&Math.abs(p.kit.comparison)>1)
+  warns.push('Custo do kit diverge do custo cadastrado em '+money(p.kit.comparison)+'.');
+ if(state.priceShift)warns.push('Variação de preço hipotética: não atualizar premiações oficiais.');
+ if(d.modeled)warns.push('Prêmio proporcional é hipótese não confirmada pelo Suricato.');
  const warning=el('apWarnings');warning.className='ap-hint'+(warns.length?' warn':'');
- warning.textContent=warns.join(' ')||'Na vitória, armas e munições não utilizadas permanecem com a facção. Coletes são de uso único. O consumo de pendrives é configurável. Na derrota, todo o kit é perdido.';
+ warning.textContent=warns.join(' ')||
+  'Na vitória, armas ficam com a facção; insumos consumidos devem ser repostos. Na derrota, considere a perda integral do kit.';
  const cs=v=>v===null?'':v>=0?'good':'bad';
+ const cooldown=a.cooldown_segundos?Math.ceil(a.cooldown_segundos/60)+' min':'Não informado';
  el('apQuickMetrics').innerHTML=[
-  kpi('Prêmio atual (sujo)',money(p.min)+' a '+money(p.max),'gold'),
-  kpi('Capital necessário',money(p.kit.total)),
-  kpi('Custo para repor após vitória',money(p.kit.winCost)),
-  kpi('Prejuízo na derrota',money(p.loss),'bad')
+  kpi('Pagamento mínimo e máximo (sujo)',money(p.min)+' a '+money(p.max),'gold'),
+  kpi('Investimento necessário para iniciar',money(p.kit.total)),
+  kpi('Itens gastos/reposição após vitória',money(p.kit.winCost)),
+  kpi('Cooldown da ação',cooldown)
  ].join('');
  el('apOutcome').innerHTML=
-  '<div class="ap-outcome ap-win"><div class="ap-outcome-heading"><b>✓ VITÓRIA</b><small>Armas preservadas</small></div>'+
+  '<div class="ap-outcome ap-win"><div class="ap-outcome-heading"><b>✓ ROUBO BEM-SUCEDIDO</b><small>Premiação após lavagem e insumos</small></div>'+
   '<strong>'+safe(money(p.netMin))+' <span>a</span> '+safe(money(p.netMax))+'</strong>'+
-  '<p>Lucro da facção após lavagem e reposições</p><div class="ap-outcome-meta">'+
-  '<span>Repor: <b>'+safe(money(p.kit.winCost))+'</b></span>'+
-  '<span>Kit mantido: <b>'+safe(money(p.kit.retained))+'</b></span></div></div>'+
-  '<div class="ap-outcome ap-lose"><div class="ap-outcome-heading"><b>✕ DERROTA</b><small>Sem prêmio</small></div>'+
-  '<strong>'+safe(money(p.loss))+'</strong><p>Todo o kit é perdido</p>'+
-  '<div class="ap-outcome-meta"><span>Armas, munição, coletes e acesso: <b>perdidos</b></span></div></div>';
+  '<p>Lucro da facção após lavagem e reposição do que foi consumido.</p></div>'+
+  '<div class="ap-outcome ap-lose"><div class="ap-outcome-heading"><b>✕ SEM RECOMPENSA</b><small>Investimento perdido</small></div>'+
+  '<strong>'+safe(money(p.loss))+'</strong><p>Perda do kit caso os equipamentos sejam recolhidos.</p></div>';
  el('apCurrentMetrics').innerHTML=[
-  kpi('Prêmio mínimo após lavagem',money(p.min===null?null:p.min*(1-p.tax))),
-  kpi('Prêmio máximo após lavagem',money(p.max===null?null:p.max*(1-p.tax))),
-  kpi('Armas mantidas',money(p.kit.weapons),'good'),
-  kpi('Reposição de munição',money(p.kit.ammoReplacement)),
+  kpi('Mínimo após lavagem',money(p.min===null?null:p.min*(1-p.tax))),
+  kpi('Máximo após lavagem',money(p.max===null?null:p.max*(1-p.tax))),
+  kpi('Capital do kit',money(p.kit.total)),
+  kpi('Armas reutilizáveis na vitória',money(p.kit.weapons)),
+  kpi('Munição consumida',money(p.kit.ammoReplacement)),
   kpi('Coletes consumidos',money(p.kit.armors)),
-  kpi('Pendrives/acesso',money(p.kit.access)),
-  kpi('Lucro mínimo por jogador ao vencer',money(p.perPlayer),cs(p.perPlayer)),
-  kpi('Saldo no caixa após comprar o kit e vencer pela primeira vez',money(p.firstRunNetMin),cs(p.firstRunNetMin))
+  kpi('Pendrives e acesso',money(p.kit.access)),
+  kpi('Lucro mínimo por invasor',money(p.perPlayer),cs(p.perPlayer)),
+  kpi('Saldo após primeira compra e vitória',money(p.firstRunNetMin),cs(p.firstRunNetMin))
  ].join('');
  el('apGoals').innerHTML=[
-  kpi('Meta de lucro total na vitória',money(p.targetProfit),'gold','Meta individual ou ROI sobre kit completo'),
-  kpi('Prêmio mínimo recomendado (sujo)',money(d.recommendedMin),'gold'),
-  kpi('Prêmio máximo recomendado (estimado)',money(d.recommendedMax)),
-  kpi('Diferença recomendada',d.recommendedDelta===null?'A confirmar':
-   (d.recommendedDelta>=0?'+':'−')+money(Math.abs(d.recommendedDelta)),
-   d.recommendedDelta===null?'':d.recommendedDelta>0?'good':d.recommendedDelta<0?'bad':''),
-  kpi('Lucro na vitória com proposta',money(d.recommendedProfit),cs(d.recommendedProfit)),
-  kpi('Lucro por jogador com proposta',money(d.recommendedPerMember),cs(d.recommendedPerMember)),
-  kpi('ROI alvo sobre kit inteiro',percent(p.targetROI)),
-  kpi('ROI atual na vitória',percent(p.roi))
+  kpi('Mínimo oficial vigente (sujo)',money(p.min),'gold'),
+  kpi('Máximo oficial vigente (sujo)',money(p.max),'gold'),
+  kpi('Mínimo após impacto de preços',money(d.recommendedMin)),
+  kpi('Máximo após impacto de preços (estimado)',money(d.recommendedMax)),
+  kpi('Variação do investimento',money(d.deltaCapital)),
+  kpi('Variação dos itens consumidos',money(d.deltaReplacement)),
+  kpi('Ajuste líquido a compensar',d.deltaReplacement===null?'Sem referência':money(d.deltaReplacement))
  ].join('');
- const risk=el('apIntelligenceResult');
- risk.innerHTML=[
-  kpi('Decisão sugerida',d.direction,'gold'),
-  kpi('Prêmio recomendado',money(d.recommendedMin),'gold'),
-  kpi('Lucro se vencer (atual)',money(p.netMin),cs(p.netMin)),
-  kpi('Prejuízo se perder (atual)',money(p.loss),'bad'),
-  kpi('Taxa mínima de vitória para empatar',percent(d.breakEven)),
-  kpi('Prêmio teórico para empatar com risco (NÃO é sugestão)',money(d.riskBreakEvenMin)),
-  kpi('Resultado esperado atual',money(d.expected),cs(d.expected)),
-  kpi('Resultado esperado após sugestão',money(d.recommendedExpected),cs(d.recommendedExpected)),
-  kpi('Lucro mínimo/jogador/hora',money(d.hourly),d.hourly===null?'':d.hourly>=0?'good':'bad'),
-  kpi('Tempo total estimado',d.totalMinutes===null?'Não informado':d.totalMinutes+' min')
+ el('apIntelligenceResult').innerHTML=[
+  kpi('Situação',d.direction,'gold'),
+  kpi('Investimento no kit atual',money(p.kit.total)),
+  kpi('Custo de reposição após vitória',money(p.kit.winCost)),
+  kpi('Variação na reposição',d.deltaReplacement===null?'Sem referência':money(d.deltaReplacement)),
+  kpi('Lucro atual com prêmio mínimo',money(p.netMin),cs(p.netMin)),
+  kpi('Cooldown',cooldown)
  ].join('')+'<p class="ap-row-muted">'+d.remarks.map(safe).join(' ')+'</p>';
  const out=el('apResult');out.className='ap-result'+(d.direction==='CONSIDERAR BUFF'?' warning':'');
  out.innerHTML='<strong>'+safe(d.direction)+'</strong><span>'+safe(
-  'Lucro ao vencer: '+money(p.netMin)+' • prejuízo ao perder: '+money(p.loss)+
-  ' • resultado esperado atual: '+money(d.expected)+' • com proposta: '+money(d.recommendedExpected)+
-  '. Sugestão moderada: não garante eliminar todo o risco. A decisão final é da gestão.')+'</span>';
- el('apProposal').textContent='Cenário: '+p.team+' jogadores • prêmio '+(d.modeled?'HIPOTÉTICO proporcional':'publicado')+
-  ' • lavado '+percent(p.tax)+' • capital '+money(p.kit.total)+
-  ' • reposição '+money(p.kit.winCost)+' • perda total ao ser derrotado '+money(p.kit.lossCost)+
-  '. Chance de vitória configurada: '+(d.winChance===null?'não informada':percent(d.winChance))+'; é premissa de gestão, não estatística real.';
+  'Mínimo atual: '+money(p.min)+' • máximo atual: '+money(p.max)+
+  ' • custo para começar: '+money(p.kit.total)+' • custo consumido: '+money(p.kit.winCost)+
+  ' • variação do custo consumido: '+money(d.deltaReplacement)+'. Sem alteração automática no jogo.')+'</span>';
+ el('apProposal').textContent='Regras cadastradas: '+p.team+' invasor(es), '+(p.rule?.policiais??'a confirmar')+
+  ' policiais • cooldown '+cooldown+' • kit editável no cadastro • lavagem '+percent(p.tax)+
+  '. Valores mínimo e máximo devem ser inseridos no Suricato Roubos pela gestão.';
  const alternative=el('apManualOutcome');
- if(state.manualPayout!=null&&Number.isFinite(state.manualPayout))renderApprovalPayoutRange(d);
- alternative.textContent=state.manualPayout===null?'Insira outro prêmio para estimar a vitória.':
-  p.kit.winCost===null?'Algum preço está pendente.':
-  'Com mínimo '+money(state.manualPayout)+' e máximo estimado '+money(recommendedMaximum(p.min,p.max,state.manualPayout))+
-  ' sujo, lucro na vitória de '+
-  money(state.manualPayout*(1-p.tax)-p.kit.winCost)+' ('+
-  money((state.manualPayout*(1-p.tax)-p.kit.winCost)/p.team)+' por jogador). Prejuízo na derrota: '+money(p.loss)+'.';
+ const manualMin=Number.isFinite(state.manualPayout)&&state.manualPayout>0?state.manualPayout:null;
+ const manualMax=Number.isFinite(state.manualMaxPayout)&&state.manualMaxPayout>0?state.manualMaxPayout:
+  manualMin===null?null:recommendedMaximum(p.min,p.max,manualMin);
+ if(manualMin!==null)renderApprovalPayoutRange(d);
+ alternative.textContent=manualMin===null?
+  'Informe mínimo e máximo para simular a faixa que será cadastrada no Suricato.':
+  manualMax!==null&&manualMax<manualMin?'Máximo manual não pode ser menor que o mínimo.':
+  p.kit.winCost===null?'Há itens sem preço; não é possível calcular o resultado.':
+  'Mínimo '+money(manualMin)+' / máximo '+money(manualMax)+
+  ' sujo. Após lavagem, lucro com mínimo '+money(manualMin*(1-p.tax)-p.kit.winCost)+
+  ' e com máximo '+money(manualMax*(1-p.tax)-p.kit.winCost)+'.';
  el('apCopy').disabled=!d.valid;
  const saveAllowed=!!approveHandler&&d.eligibleForSheet&&!approvedThisSession.has(a.nome);
  for(const [id,available] of [
   ['apApprove',saveAllowed&&Number.isFinite(d.recommendedMin)&&Math.abs(d.recommendedMin-p.min)>1],
-  ['apApproveManual',saveAllowed&&Number.isFinite(state.manualPayout)&&state.manualPayout>0&&Math.abs(state.manualPayout-p.min)>1],
+  ['apApproveManual',saveAllowed&&Number.isFinite(manualMin)&&manualMin>0&&Math.abs(manualMin-p.min)>1&&(!Number.isFinite(manualMax)||manualMax>=manualMin)],
   ['apReject',!!onRejectAction&&d.valid]
  ]){
   const button=el(id);if(button){
    button.hidden=(id==='apReject'?!onRejectAction:!approveHandler);
    button.disabled=!available;
-   button.title=!d.eligibleForSheet?'Só é possível aprovar o prêmio publicado, sem ajustes hipotéticos no kit ou nos insumos.':
-    'A alteração na planilha exige confirmação específica.';
+   button.title=!d.eligibleForSheet?'Aprovação da planilha bloqueada em simulações e cadastros internos.':
+    'A planilha antiga calcula o máximo por fórmula. Exportar para o Suricato é uma ação separada.';
   }
  }
  scenarios();
