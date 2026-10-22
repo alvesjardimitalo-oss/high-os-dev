@@ -32,9 +32,9 @@ function first(...vs){return vs.map(plain).find(Boolean)||"";}
 function pair(x){
  if(!x)return "";
  if(typeof x==="string")return plain(x);
- return [plain(x.blip||x.cds),plain(x.spawn)].filter(Boolean).join(" / ");
+ return [plain(x.blip||x.cds)?"BLIP: "+plain(x.blip||x.cds):"",plain(x.spawn)?"SPAWN: "+plain(x.spawn):""].filter(Boolean).join("\n");
 }
-function joinPairs(items){return (items||[]).map(pair).filter(Boolean).join(" / ");}
+function joinPairs(items){return (items||[]).map(pair).filter(Boolean).join("\n\n");}
 function valuesFor(f){
  const b=f.beneficios||{};
  const t=f.perfilTecnico||{};
@@ -55,16 +55,15 @@ function valuesFor(f){
   LOJADEROUPAS:first(op.roupas?.cds,b.lojaRoupas,f.perfilFonte?.["LOJA DE ROUPAS"]),
   GARAGEMVIPFAC:first(joinPairs(garage("FACCAO")),pair({blip:b.garagemVipBlip,spawn:b.garagemVipSpawn})),
   GARAGEMPUBLICA:first(joinPairs(garage("PUBLICA").concat(garage("PUBLICA2"))),pair({blip:b.garagemPublicaBlip,spawn:b.garagemPublicaSpawn})),
-  GARAGEMDELUXE:first(joinPairs(garage("SERVICO")),b.garagemDeluxeBlip,b.garagemDeluxe,f.perfilFonte?.["GARAGEM DELUXE"]),
+  GARAGEMDELUXE:first(joinPairs(garage("SERVICO").concat(garage("DELUXE"))),pair({blip:b.garagemDeluxeBlip,spawn:b.garagemDeluxeSpawn}),b.garagemDeluxe,f.perfilFonte?.["GARAGEM DELUXE"]),
   SHOPDELUXE:first(op.lojaFac?.cds,b.shopDeluxe,f.perfilFonte?.["SHOP DELUXE"]),
   SHOPEXCLUSIVO:first(op.lojaFac?.cds,b.shopExclusivo,b.shopDeluxe),
   ACADEMIA:first(b.academia),
   BAR:first(op.bar?.cds,fromExtra.bar),
   HELIPONTO:first(joinPairs(hei),pair({blip:b.helipontoBlip,spawn:b.helipontoSpawn})),
-  BLINDADOS:first(pair(op.blindados),b.blindados),
-  FARM:first(t.farm?.cds,b.farm),
-  ROTAEXCLUSIVA:b.rotaExclusiva?"SIM":"",
-  CDSROTAEXCLUSIVA:first(t.rota?.pontos,b.rotaBlips),
+  BLINDADOS:first(joinPairs(Array.isArray(op.blindados)?op.blindados:[op.blindados]),b.blindados),
+  FARM:first(t.farm?.cds,b.farm,b.iniciarFarm),
+  INICIARFARM:first(t.farm?.cds,b.farm,b.iniciarFarm),
   GARAGEMPUBLICA2:first(joinPairs(garage("PUBLICA2")),pair({blip:b.garagemPublica2Blip,spawn:b.garagemPublica2Spawn})),
   TATUAGEM:first(op.tatuagem?.cds,b.tatuagem),
   ATM:first(b.atm),
@@ -76,15 +75,8 @@ function valuesFor(f){
   TELAOCAIXA2:first(op.telao?.sons?.[1],b.telaoCaixa2),
   TELAOCAIXA3:first(op.telao?.sons?.[2],b.telaoCaixa3),
   TELAOCAIXA4:first(op.telao?.sons?.[3],b.telaoCaixa4),
-  SINUCA:first(b.sinuca),
   RADIO:first(b.radio),
-  SALARIO:first(b.salario),
-  INTERVALOSALARIO:first(b.salarioMinutos),
-  VIPORG:b.vipOrg?plain(b.vipOrg===true?"SIM":b.vipOrg):"",
-  CHATFACCAO:b.chatFaccao?"SIM":"",
-  UNIFORME:b.roupasFaccao?"SIM":"",
-  CAPACIDADEBAU:first(b.bauCapacidade),
-  VEICULOSVIP:first(b.garagemVipVeiculos)
+  /* Benefícios e rota exclusiva NÃO pertencem à aba de coordenadas. */
  };
 }
 async function sheets(url,token,method="GET",body){
@@ -143,6 +135,7 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
  if(!sections.length)throw new Error("Quadros da planilha não reconhecidos. Nenhuma alteração feita.");
  const requests=[];
  let created=0,updated=0,skipped=0;
+ const categoryMismatches=[],duplicates=[];
  let nextStart=Math.max(rows.length+3,150),capacity=Number(tab.gridProperties?.rowCount||1006);
  const sectionBlocks=new Map();
  const findSector=key=>sections.filter(s=>s.sector===key);
@@ -194,8 +187,10 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
   // Se já existe em uma seção histórica diferente, atualiza-a sem criar duplicata.
   if(!selected)for(const s of sections){
    const entry=s.entries.find(e=>fold(e.name)===key);
-   if(entry){selected={s,entry};break;}
+   if(entry){selected={s,entry};categoryMismatches.push({group:f.group,actual:s.sector,expected:sectorKey});break;}
   }
+  const matches=sections.flatMap(sec=>sec.entries.filter(e=>fold(e.name)===key).map(e=>sec.sector));
+  if(matches.length>1)duplicates.push({group:f.group,sectors:matches});
   if(selected&&onlyMissing){skipped++;continue;}
   if(!selected){
    for(const s of correct){
@@ -233,5 +228,5 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
   // Limite defensivo: uma falha não deve apagar a planilha preexistente.
   await sheets(root+":batchUpdate",token,"POST",{requests});
  }
- return {created,updated,skipped,groups:list.length,sectionsAdded:[...sectionBlocks.keys()]};
+ return {created,updated,skipped,groups:list.length,sectionsAdded:[...sectionBlocks.keys()],categoryMismatches,duplicates};
 }
