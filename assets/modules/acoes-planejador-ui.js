@@ -1,5 +1,5 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm,priceOf} from './acoes-core.js?v=3';
-import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
+import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=2';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=4';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=2';
 import {createActionWorkspace} from './acoes-workspace.js?v=2';
