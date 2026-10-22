@@ -2,7 +2,7 @@ name: High OS • Integridade
 
 on:
   push:
-    branches: [main, 'improvement/**']
+    branches: [main, 'improvement/**', 'fix/**']
   pull_request:
 
 permissions:
