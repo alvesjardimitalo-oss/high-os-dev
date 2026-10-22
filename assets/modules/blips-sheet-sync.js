@@ -230,6 +230,10 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
    selected={s,entry};isNew=true;
   }
   const {s,entry}=selected;
+  // A ficha recém-reservada precisa gravar o GROUP no cabeçalho.
+  // Antes a sincronização copiava o quadro mas deixava a célula do nome vazia,
+  // criando um cadastro invisível na leitura seguinte.
+  if(isNew)put(requests,TAB_GID,s.headerRow,entry.col,f.group);
   const fields=valuesFor(f),col=entry.col,header=s.headerRow;
   const forceFields=new Set((overwriteFieldsByGroup[key]||overwriteFieldsByGroup[f.group]||[]).map(fold));
   // Campos por rótulo, não por posição fixa: há diferenças entre os segmentos.
