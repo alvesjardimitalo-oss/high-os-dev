@@ -104,7 +104,7 @@ test('Painel, navegação para os detalhes e imagens integradas estão presentes
  for(const id of ['apRankingHeading','apRankingTabs','apRankingHighlights','apRankingLimit','apRankingResults','apRankingMethod'])
   assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(ui,/data-ap-ranked/);
- assert.match(ui,/rankBoard\(\);teamOptions\(\)/);
+ assert.match(ui,/rankBoard\(\);refreshPriceAlerts\(\);teamOptions\(\)/);
  assert.match(ui,/actionPhoto\(a\)/);
  assert.match(ui,/data-ap-rank/);
  assert.match(app,/acoes-planejador-ui\.js\?v=3/);
