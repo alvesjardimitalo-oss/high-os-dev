@@ -11178,35 +11178,6 @@ $('#movementConfirm')?.addEventListener('click', async () => {
 
       data: serverTimestamp()
     });
-    // O histórico de ocupação participa da MESMA gravação atômica dos Groups.
-    if(movementMode === 'TRANSFER_PANEL'){
-        const stamp=Date.now();
-        const moved=[
-          {before:src,after:b,from:src.group,to:dst.group},
-          ...(dst.faccao?[{before:dst,after:a,from:dst.group,to:src.group}]:[])
-        ];
-        moved.forEach((mv,n)=>{
-          const faction=String(mv.before?.faccao||'').trim();
-          if(!faction)return;
-          const oid=(orgKey(faction)+'_'+effectiveDate+'_'+stamp+'_'+n).replace(/[^a-zA-Z0-9_-]/g,'_');
-          batch.set(doc(db,'highos','data','ocupacoes',oid),{
-            organizacaoId:orgKey(faction),
-            faccao:faction,
-            groupOrigem:mv.from,
-            groupDestino:mv.to,
-            segmentoOrigem:mv.before?.segmento||'',
-            segmentoDestino:mv.after?.segmento||'',
-            qgOrigem:mv.before?.qg||'',
-            qgDestino:mv.after?.qg||'',
-            dataEfetiva:effectiveDate,
-            motivo:reason,
-            tipo:'TRANSFERENCIA_GROUP',
-            createdAt:serverTimestamp(),
-            createdBy:currentUser.email
-          });
-        });
-    }
-
     /* V10.31 - sincroniza as organizações movimentadas em uma única
        confirmação. Em troca de duas facções deixa de fazer duas escritas
        sequenciais independentes. */
@@ -11231,6 +11202,43 @@ b]){
 
     await batch.commit();
     committed = true;
+    // Ocupações complementares são gravadas após a transação principal:
+    // mantém compatibilidade enquanto firestore.rules ainda não for publicado.
+    let occupationSynced=true;
+    if(movementMode === 'TRANSFER_PANEL'){
+      try{
+        const occupationBatch=writeBatch(db);
+        const stamp=Date.now();
+        const moved=[
+          {before:src,after:b,from:src.group,to:dst.group},
+          ...(dst.faccao?[{before:dst,after:a,from:dst.group,to:src.group}]:[])
+        ];
+        moved.forEach((mv,n)=>{
+          const faction=String(mv.before?.faccao||'').trim();
+          if(!faction)return;
+          const oid=(orgKey(faction)+'_'+effectiveDate+'_'+stamp+'_'+n).replace(/[^a-zA-Z0-9_-]/g,'_');
+          occupationBatch.set(doc(db,'highos','data','ocupacoes',oid),{
+            organizacaoId:orgKey(faction),
+            faccao:faction,
+            groupOrigem:mv.from,
+            groupDestino:mv.to,
+            segmentoOrigem:mv.before?.segmento||'',
+            segmentoDestino:mv.after?.segmento||'',
+            qgOrigem:mv.before?.qg||'',
+            qgDestino:mv.after?.qg||'',
+            dataEfetiva:effectiveDate,
+            motivo:reason,
+            tipo:'TRANSFERENCIA_GROUP',
+            createdAt:serverTimestamp(),
+            createdBy:currentUser.email
+          });
+        });
+        await occupationBatch.commit();
+      }catch(occError){
+        occupationSynced=false;
+        console.warn('[OCUPAÇÕES] Log principal salvo; registro complementar pendente:',occError);
+      }
+    }
     const sheetOk=await syncGroupsToOfficialSheet([a,b],{quiet:true,previousGroups:[src,dst]});
 
 
@@ -11250,7 +11258,10 @@ b]){
 
     $('#movementModal')?.classList.add('hidden');
     closeGroupProfilePage();
-    alert(sheetOk?'Operação concluída, registrada e planilhas sincronizadas.':'Operação concluída no High OS, mas a planilha está PENDENTE. Reconecte o Google Sheets e execute a sincronização.');
+    const pending=[];
+    if(!sheetOk)pending.push('planilha PENDENTE: reconecte o Google Sheets e sincronize');
+    if(!occupationSynced)pending.push('registro complementar de ocupação PENDENTE: publicar as novas regras do Firestore');
+    alert(pending.length?'Operação concluída e auditada no High OS; '+pending.join('; ')+'.':'Operação concluída, auditada e planilhas sincronizadas.');
   }catch(e){
     alert(committed?'Dados gravados no High OS, mas houve falha após a confirmação. Recarregue a página para conferir o resultado: '+e.message:'Falha na operação; nada foi confirmado: ' + e.message);
   }
