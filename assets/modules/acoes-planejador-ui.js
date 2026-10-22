@@ -2,7 +2,7 @@ import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=4';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=6';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=4';
-import {createActionWorkspace} from './acoes-workspace.js?v=9';
+import {createActionWorkspace} from './acoes-workspace.js?v=10';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -774,13 +774,14 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
   await refreshPriceCatalog();enablePublishedPriceChecks();return;
  }
  ready=true;
+ await workspace.load();
  try{
   const responses=await Promise.all([fetch(ACOES_SOURCE,{cache:'no-store'}),fetch(CATALOGO_SOURCE,{cache:'no-store'})]);
   if(responses.some(r=>!r.ok))throw Error('Falha ao consultar o Mercado Negro. HTTP: '+responses.map(r=>r.status).join(' / '));
   const [data,prices]=await Promise.all(responses.map(r=>r.json()));
   if(!Array.isArray(data.acoes)||!data.acoes.length||!Array.isArray(prices.itens))throw Error('Formato de dados inválido ou incompleto.');
   publishedActions=data.acoes;catalog=prices;meta=data.meta||{};
-  await workspace.load();actions=combinePublished();
+  actions=combinePublished();
   lastPriceRead=new Date().toISOString();
   if(onReadReference){
    try{reference=await onReadReference();}
@@ -795,7 +796,9 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
   listeners();render();enablePublishedPriceChecks();
  }catch(err){
   ready=false;
-  root.innerHTML='<div class="ap-error"><b>Não foi possível carregar os dados do Mercado Negro.</b><p>'+safe(err?.message||err)+'</p><button type="button" class="ap-button" id="apRetry">Tentar novamente</button></div>';
+  const source=el('apSource');
+  if(source)source.innerHTML='<span class="ap-error">Ações e preços do Mercado Negro indisponíveis: '+safe(err?.message||err)+'. Roubo de Casas, Loot de NPC e comerciantes continuam disponíveis.</span> <button type="button" class="ap-button" id="apRetry">Tentar novamente</button>';
+  workspace.paint();
   root.querySelector('#apRetry')?.addEventListener('click',()=>{location.reload();});
  }
 }

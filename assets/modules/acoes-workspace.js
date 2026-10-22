@@ -158,7 +158,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   await load();refresh();
  }
  root.addEventListener('click',ev=>{
-  const area=ev.target.closest('[data-economy-area]');
+  const area=ev.target.closest('button[data-economy-area]');
   if(area){
    if(area.dataset.economyArea==='acoes')navigate('overview');
    else if(area.dataset.economyArea==='roubados')navigate('loot');

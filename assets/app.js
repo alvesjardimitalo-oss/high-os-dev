@@ -1774,7 +1774,7 @@ if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','gr
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='chat')setTimeout(()=>startChat(),0);
 if(page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60);
-if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=19').then(mod=>mod.mountActionPlanner({
+if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=20').then(mod=>mod.mountActionPlanner({
  onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
  onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
  onRejectAction:canEditModule('economia')?actionRejectProposal:null,
