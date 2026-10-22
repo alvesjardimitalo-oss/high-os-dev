@@ -108,7 +108,7 @@ test('Novos controles de decisão, histórico, refência e valores manuais fazem
  assert.match(app,/actionSaveReference/);
  assert.match(app,/actionRejectProposal/);
  assert.match(app,/actionReadSheetPrizes/);
- assert.match(app,/acoes-planejador-ui\.js\?v=9/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=10/);
  assert.match(app,/root\+':batchUpdate'/);
 });
 
