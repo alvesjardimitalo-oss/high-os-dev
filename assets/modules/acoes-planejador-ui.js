@@ -49,7 +49,7 @@ function renderApprovalPayoutRange(d){
  const customMax=Number.isFinite(state.manualMaxPayout)&&state.manualMaxPayout>0;
  const custom=customMin||customMax;
  const min=customMin?state.manualPayout:d.recommendedMin;
- const max=customMax?state.manualMaxPayout:customMin?recommendedMaximum(p.min,p.max,min):d.recommendedMax;
+ const max=customMax?state.manualMaxPayout:customMin?Math.max(min,p.max+(min-p.min)):d.recommendedMax;
  node.innerHTML='<div class="ap-recommend-top"><b>CONFERÊNCIA DOS DOIS PRÊMIOS</b>'+
   '<span>'+safe(d.direction)+'</span></div>'+
   '<div class="ap-recommend-two-columns">'+
@@ -467,7 +467,7 @@ function summary(){
  const alternative=el('apManualOutcome');
  const manualMin=Number.isFinite(state.manualPayout)&&state.manualPayout>0?state.manualPayout:null;
  const manualMax=Number.isFinite(state.manualMaxPayout)&&state.manualMaxPayout>0?state.manualMaxPayout:
-  manualMin===null?null:recommendedMaximum(p.min,p.max,manualMin);
+  manualMin===null?null:Math.max(manualMin,p.max+(manualMin-p.min));
  if(manualMin!==null)renderApprovalPayoutRange(d);
  alternative.textContent=manualMin===null?
   'Informe mínimo e máximo para simular a faixa que será cadastrada no Suricato.':
@@ -530,7 +530,7 @@ async function copySuricato(){
  const minimum=manualMin?state.manualPayout:d.calc.min;
  const maximum=Number.isFinite(state.manualMaxPayout)&&state.manualMaxPayout>0?
   state.manualMaxPayout:manualMin?
-  recommendedMaximum(d.calc.min,d.calc.max,minimum):d.calc.max;
+  Math.max(minimum,d.calc.max+(minimum-d.calc.min)):d.calc.max;
  const status=el('apCopyStatus');
  if(!Number.isFinite(minimum)||!Number.isFinite(maximum)||maximum<minimum){
   status.textContent='Corrija os valores mínimo e máximo antes de copiar para o Suricato.';return;
