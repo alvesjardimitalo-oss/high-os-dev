@@ -1589,6 +1589,12 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
    facSheetFetch(root+'/values/'+range+'?valueRenderOption=FORMULA',{token})
  ]);
  const candidate=planApprovedActionSheetUpdate(first.values||[],name,officialMin,value);
+ // A leitura utiliza o nome da aba, mas a gravação usa o sheetId.
+ // Uma aba recriada com outro ID não pode causar escrita em um lugar errado.
+ const sheetInfo=await facSheetFetch(root+'?fields=sheets.properties(sheetId,title)',{token});
+ const sheetEntry=(sheetInfo.sheets||[]).find(x=>x.properties?.title===candidate.sheetName);
+ if(!sheetEntry||Number(sheetEntry.properties.sheetId)!==candidate.sheetId)
+  throw Error('O identificador da aba VALORES AÇÃO BLIPADA mudou. Nenhuma célula foi alterada; confira o GID.');
  const formulaRows=originalFormulas.values||[];
  for(const cell of [candidate.buff,candidate.nerf]){
   const input=formulaRows[cell.rowIndex]?.[cell.columnIndex];
@@ -1613,6 +1619,13 @@ async function syncApprovedActionPayout({name,officialMin,proposedMin,team,cost,
     checked.oldBuff!==candidate.oldBuff||checked.oldNerf!==candidate.oldNerf||
     Math.abs(checked.previousMin-candidate.previousMin)>.01)
   throw Error('A planilha foi alterada durante a confirmação. Nenhuma alteração aplicada; refaça a análise.');
+ // Reconfere fórmulas após a aprovação do gestor e antes da gravação.
+ const latestFormulas=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=FORMULA',{token});
+ for(const cell of [checked.buff,checked.nerf]){
+  const input=latestFormulas.values?.[cell.rowIndex]?.[cell.columnIndex];
+  if(typeof input==='string'&&input.startsWith('='))
+   throw Error('BUFF/NERF recebeu uma fórmula durante a confirmação. Nenhuma célula foi alterada.');
+ }
  const updates=[['buff',checked.nextBuff],['nerf',checked.nextNerf]].map(([key,num])=>({
    updateCells:{start:{sheetId:checked.sheetId,rowIndex:checked[key].rowIndex,columnIndex:checked[key].columnIndex},
      rows:[{values:[{userEnteredValue:{numberValue:num}}]}],fields:'userEnteredValue'}
