@@ -1,8 +1,8 @@
-import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm,priceOf} from './acoes-core.js?v=4';
-import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=3';
-import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=5';
-import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=3';
-import {createActionWorkspace} from './acoes-workspace.js?v=3';
+import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm,priceOf} from './acoes-core.js?v=5';
+import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=4';
+import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=6';
+import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=4';
+import {createActionWorkspace} from './acoes-workspace.js?v=4';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
