@@ -2,7 +2,7 @@
  * O catálogo só publica UM prêmio por ação: escala por equipe é HIPÓTESE,
  * jamais um dado oficial. O risco requer estimativa explícita do gestor.
  */
-import {calculateAction,defaultTeam,availableTeams,norm,numeric} from './acoes-core.js?v=2';
+import {calculateAction,defaultTeam,availableTeams,norm,numeric} from './acoes-core.js?v=3';
 const round=v=>Math.round(v*100)/100;
 export const DEFAULT_MANAGER_WIN_CHANCE=.4;
 export function recommendedMaximum(currentMin,currentMax,recommendedMin){
@@ -79,7 +79,7 @@ export function analyzeDecision(action,catalog,{
  const deltaReplacement=hasComparison?round(p.kit.winCost-previous.kit.winCost):null;
  // Somente a despesa de insumos usados/reposição justifica propor ajuste de
  // prêmio. Alta isolada do preço da arma eleva capital, NÃO custo da vitória.
- const deltaNet=deltaReplacement===null?null:Math.round(deltaReplacement/(1-p.tax));
+ const deltaNet=deltaReplacement===null?null:Math.ceil(deltaReplacement/(1-p.tax));
  const significant=deltaNet!==null&&Math.abs(deltaNet)>1;
  const proposed=valid&&significant?Math.max(1,Math.round(p.min+deltaNet)):p.min;
  const direction=!valid?'PENDENTE':!significant?'MANTER':
