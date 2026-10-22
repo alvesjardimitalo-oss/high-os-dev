@@ -184,29 +184,35 @@ function render(){
 async function copyProposal(){
  const a=action(),p=calculateAction(a,catalog,options());
  if(!p.payoutAdjustable)return;
- const text=['HIGH ROLEPLAY — PROPOSTA DE BUFF / NERF',
+ const text=['HIGH ROLEPLAY — ANÁLISE ECONÔMICA DE AÇÃO',
  'AÇÃO: '+a.nome,'AVALIAÇÃO: '+p.status,
- 'INVASORES: '+p.team+' / POLICIAIS: '+(p.rule?.policiais??'Não informado')+' / REFÉNS: '+(p.rule?.refens??'Não informado'),
- 'CUSTO DO KIT ('+state.kitMode+'): '+money(p.kit.total),
+ 'JOGADORES: '+p.team+' / POLICIAIS: '+(p.rule?.policiais??'Não informado'),
+ 'PREÇOS: '+state.priceMode+' / ALTERAÇÃO HIPOTÉTICA: '+Math.round(state.priceShift*100)+'%',
+ 'CONSUMO DE MUNIÇÃO: '+Math.round(state.ammoUse*100)+'% (reposição em pacotes inteiros)',
+ 'CAPITAL PARA MONTAR O KIT: '+money(p.kit.total),
+ 'ARMA(S) PRESERVADA(S) EM VITÓRIA: '+money(p.kit.weapons),
+ 'REPOSIÇÃO APÓS VITÓRIA: '+money(p.kit.winCost),
+ 'PERDA DO KIT NA DERROTA: '+money(p.kit.lossCost),
+ 'PRÊMIO ATUAL (SUJO): '+money(p.min)+' a '+money(p.max),
  'LAVAGEM: '+percent(p.tax),
- 'PRÊMIOS ATUAIS (SUJO): '+money(p.min)+' a '+money(p.max),
- 'LUCRO LÍQUIDO ATUAL: '+money(p.netMin)+' a '+money(p.netMax),
- 'LUCRO ATUAL POR JOGADOR (MÍN): '+money(p.perPlayer),
- 'META POR JOGADOR: '+money(p.targetPerPlayer)+' / META ROI: '+percent(p.targetROI),
- 'NOVO PRÊMIO MÍN SUGERIDO: '+money(p.payoutNeeded),
- 'NOVO PRÊMIO MÁX SUGERIDO: '+money(p.payoutMax),
- 'DIFERENÇA (BUFF/NERF): '+(p.delta>=0?'+':'−')+money(Math.abs(p.delta)),
- 'CUSTOS: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' = '+money(i.total)).join(' / '),
- 'Os buffs históricos já constam dos prêmios atuais; NÃO reaplicar.',
- 'NÃO APLICA AUTOMATICAMENTE AO JOGO NEM À PLANILHA.'].join('\n');
+ 'LUCRO SE VENCER: '+money(p.netMin)+' a '+money(p.netMax),
+ 'LUCRO POR JOGADOR SE VENCER: '+money(p.perPlayer),
+ 'SALDO NO CAIXA AO VENCER NA PRIMEIRA AÇÃO COM KIT NOVO: '+money(p.firstRunNetMin),
+ 'PREJUÍZO SE PERDER: '+money(p.loss)+' (sem prêmio; equipamento perdido)',
+ 'META POR JOGADOR: '+money(p.targetPerPlayer)+' / META ROI DO KIT: '+percent(p.targetROI),
+ 'PRÊMIO MÍNIMO SUGERIDO: '+money(p.payoutNeeded),
+ 'PRÊMIO MÁXIMO SUGERIDO: '+money(p.payoutMax),
+ 'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
+ 'Hipóteses: pendrive consumido, colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
+ 'Premiações atuais já incluem buffs/nerfs existentes. Nenhuma mudança automática no jogo.'].join('\n');
  const status=el('apCopyStatus');
- try{await navigator.clipboard.writeText(text);status.textContent='Proposta copiada. Revisão e aprovação necessárias antes de alterar prêmio oficial.';}
- catch{status.textContent='Clipboard indisponível. Copie esta análise em um navegador seguro com HTTPS.';}
+ try{await navigator.clipboard.writeText(text);status.textContent='Análise copiada. Verifique os cenários antes de qualquer alteração oficial.';}
+ catch{status.textContent='Área de transferência indisponível no navegador.';}
 }
 async function approveProposal(){
  if(!approveHandler)return;
  const a=action(),p=calculateAction(a,catalog,options());
- if(!['BUFF','NERF'].includes(p.status)||approvedThisSession.has(a.nome))return;
+ if(!['BUFF','NERF'].includes(p.status)||approvedThisSession.has(a.nome)||state.priceShift!==0||Object.keys(state.prices).length||Object.keys(state.quantities).length)return;
  const button=el('apApprove'),message=el('apCopyStatus');
  button.disabled=true;message.textContent='Verificando a aba original e aguardando aprovação segura...';
  try{
@@ -223,14 +229,19 @@ async function approveProposal(){
 }
 function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"';}
 function exportAnalysis(){
- const headers=['Ação','Status','Invasores','Policiais mínimos','Custo simulado','Custo oficial','Prêmio atual min','Prêmio atual max','Lucro líquido min','Lucro por invasor','Meta individual','Meta ROI','Sugerido min','Sugerido max','Buff/nerf','Avaliação','Pendências'];
+ const headers=['Ação','Situação','Invasores','Policiais','Preço de compra','Variação dos preços','Consumo de munição',
+  'Capital inicial','Repor após vitória','Armas mantidas','Kit conservado','Prêmio mínimo sujo','Prêmio máximo sujo',
+  'Lucro mínimo na vitória','Lucro máximo na vitória','Lucro por jogador','Saldo em caixa primeira vitória','Prejuízo na derrota',
+  'Prêmio sugerido min','Prêmio sugerido max','Avaliação','Pendências'];
  const rows=actions.map(a=>{
   const p=calculateAction(a,catalog,{...options(),team:defaultTeam(a),location:null,quantities:{},prices:{}});
-  return [a.nome,a.status,p.team,p.rule?.policiais??'',p.kit.total,p.kit.official,p.min,p.max,p.netMin,p.perPlayer,p.targetPerPlayer,p.targetROI,p.payoutNeeded,p.payoutMax,p.delta,p.status,p.kit.missing.join(' / ')];
+  return [a.nome,a.status,p.team,p.rule?.policiais??'',state.priceMode,state.priceShift,state.ammoUse,
+   p.kit.total,p.kit.winCost,p.kit.weapons,p.kit.retained,p.min,p.max,p.netMin,p.netMax,p.perPlayer,
+   p.firstRunNetMin,p.loss,p.payoutNeeded,p.payoutMax,p.status,p.kit.missing.join(' / ')];
  });
  const body='\ufeff'+[headers,...rows].map(row=>row.map(csvCell).join(';')).join('\r\n');
  const url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));
- const a=document.createElement('a');a.href=url;a.download='analise-buff-nerf-high-os.csv';a.click();
+ const a=document.createElement('a');a.href=url;a.download='acoes-high-os-vitoria-derrota.csv';a.click();
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function listeners(){
@@ -241,6 +252,8 @@ function listeners(){
   if(l){localIndex=Number(l.dataset.apLocal)||0;state.quantities={};state.prices={};render();return;}
   const team=ev.target.closest('[data-ap-team]');
   if(team){state.team=Number(team.dataset.apTeam);state.quantities={};render();return;}
+  const preset=ev.target.closest('[data-ap-shift]');
+  if(preset){state.priceShift=Number(preset.dataset.apShift)/100;el('apPriceShift').value=Math.round(state.priceShift*100);render();return;}
   if(ev.target.closest('#apCopy'))copyProposal();
   if(ev.target.closest('#apApprove'))approveProposal();
   if(ev.target.closest('#apExport'))exportAnalysis();
@@ -248,27 +261,36 @@ function listeners(){
  root.addEventListener('input',ev=>{
   const target=ev.target;
   if(target.id==='apSearch'){state.search=target.value;actionsList();return;}
-  const indexQty=target.dataset.apQty;
-  const indexPrice=target.dataset.apPrice;
+  const indexQty=target.dataset.apQty,indexPrice=target.dataset.apPrice;
   if(indexQty!==undefined||indexPrice!==undefined){
    const id=Number(indexQty??indexPrice);
    const field=indexQty!==undefined?'quantities':'prices';
    if(target.value===''||!Number.isFinite(Number(target.value)))delete state[field][id];
    else state[field][id]=Math.max(0,Number(target.value));
-   const p=calculateAction(action(),catalog,options());
-   const tr=target.closest('tr');
-   if(tr)tr.lastElementChild.textContent=money(p.kit.lines[id]?.total);
+   const p=calculateAction(action(),catalog,options()),row=target.closest('tr');
+   if(row){
+    row.cells[3].textContent=money(p.kit.lines[id]?.total);
+    row.cells[4].textContent=p.kit.lines[id]?.missing?'A confirmar':p.kit.lines[id]?.winCost===0?'Mantém':money(p.kit.lines[id]?.winCost);
+   }
    el('apTotal').textContent=money(p.kit.total);
-   summary();return;
+   el('apWinCostTotal').textContent=money(p.kit.winCost);
+   actionsList();summary();return;
   }
-  const fields={
-   apReuse:['reuse',.01],apProfitGoal:['targetPerPlayer',1],
-   apRoiGoal:['roi',.01],apTolerance:['tolerance',.01],
-   apTax:['tax',.01],apManual:['manualPayout',1]
-  };
+  if(target.id==='apPriceShift'||target.id==='apAmmoUse'){
+   const v=Number(target.value);
+   if(target.value!==''&&Number.isFinite(v)){
+    if(target.id==='apPriceShift')state.priceShift=Math.max(-.9,Math.min(3,v/100));
+    else state.ammoUse=Math.max(0,Math.min(1,v/100));
+    render();
+   }
+   return;
+  }
+  const fields={apProfitGoal:['targetPerPlayer',1],apRoiGoal:['roi',.01],
+   apTolerance:['tolerance',.01],apTax:['tax',.01],apManual:['manualPayout',1]};
   const f=fields[target.id];if(!f)return;
   if(target.value===''){if(target.id==='apManual')state.manualPayout=null;}
   else state[f[0]]=Math.max(0,Number(target.value)||0)*f[1];
+  if(target.id==='apTax')actionsList();
   summary();
  });
  root.addEventListener('change',ev=>{
