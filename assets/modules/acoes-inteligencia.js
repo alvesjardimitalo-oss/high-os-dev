@@ -4,6 +4,12 @@
  */
 import {calculateAction,defaultTeam,availableTeams,norm,numeric} from './acoes-core.js?v=2';
 const round=v=>Math.round(v*100)/100;
+export const DEFAULT_MANAGER_WIN_CHANCE=.4;
+export function recommendedMaximum(currentMin,currentMax,recommendedMin){
+ const min=numeric(currentMin),max=numeric(currentMax),next=numeric(recommendedMin);
+ return min===null||max===null||next===null||min<=0||max<min||next<0?null:
+  Math.ceil(next*(max/min));
+}
 const clamp=(v,min,max,fallback)=>{const n=numeric(v);return Math.max(min,Math.min(max,n===null?fallback:n));};
 export function makePriceReference(catalog,createdAt=new Date().toISOString()){
  return {version:1,createdAt,items:(catalog?.itens||[]).map(i=>({
@@ -41,7 +47,7 @@ export function assessPriceChanges(actions,catalog,reference,{tax=.3,ammoUse=.25
 }
 export function analyzeDecision(action,catalog,{
  team=defaultTeam(action),teamPayout='publicado',referenceTeam=defaultTeam(action),
- winChance=null,policeWaitMinutes=null,estimatedActionMinutes=null,
+ winChance=.4,policeWaitMinutes=null,estimatedActionMinutes=null,
  targetPerPlayer=20000,targetHourly=0,roi=.25,tolerance=.25,tax=.3,...kitOptions
 }={}){
  const rawMin=numeric(action?.premio_min),rawMax=numeric(action?.premio_max);
@@ -81,21 +87,21 @@ export function analyzeDecision(action,catalog,{
  // Exibe uma faixa recomendada legível, preservando o intervalo percentual
  // original como referência. O máximo continua indicativo: a planilha
  // calcula seus próprios prêmios e somente ela confirma o valor final.
- const spread=p.min>0&&Number.isFinite(p.max)?Math.max(1,p.max/p.min):1;
  const recommendedMin=!valid?null:direction==='MANTER'?p.min:suggested;
- const recommendedMax=recommendedMin===null?null:Math.ceil(recommendedMin*spread);
+ const recommendedMax=recommendedMaximum(p.min,p.max,recommendedMin);
  const recommendedDelta=recommendedMin===null?null:round(recommendedMin-p.min);
  const recommendedPercent=recommendedDelta===null||p.min<=0?null:recommendedDelta/p.min;
  const recommendedProfit=recommendedMin===null||p.kit.winCost===null?null:
    round(recommendedMin*(1-p.tax)-p.kit.winCost);
  const recommendedPerMember=recommendedProfit===null?null:round(recommendedProfit/teamN);
  const remarks=[];
+ if(win===.4)remarks.push('Taxa de vitória de 40%: premissa de gestão em razão da desvantagem numérica diante da polícia; não é medição estatística.');
  if(modeled)remarks.push('Premiação por equipe calculada proporcionalmente; o catálogo NÃO confirma este valor.');
  if(!modeled&&allowed.length>1)remarks.push('O catálogo publica um prêmio único. Faixas diferentes de prêmio por equipe não foram informadas.');
  if(wait===null)remarks.push('A espera real pela polícia não foi informada.');
  if(duration===null)remarks.push('Informe a duração esperada; o tempo limite cadastrado não mede a duração real.');
  if(win===null)remarks.push('A chance de vitória não foi informada; a proposta NÃO considera o risco estatístico de derrota.');
- if(win!==null)remarks.push('Chance de vitória informada manualmente: cenário hipotético, não estatística oficial.');
+ if(win!==null&&win!==.4)remarks.push('Chance de vitória configurada pela gestão: cenário hipotético, não estatística oficial.');
  if(!valid)remarks.push('Dados oficiais insuficientes; proposta de ajuste bloqueada.');
  if(direction==='CONSIDERAR BUFF')remarks.push('A meta configurada está acima do lucro projetado. Revisar aumento.');
  if(direction==='REVISAR NERF')remarks.push('A meta está abaixo do retorno projetado; risco e dificuldade exigem avaliação antes de reduzir.');
