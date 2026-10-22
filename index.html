@@ -297,7 +297,7 @@
             <section class="ap-panel ap-management" aria-labelledby="apManagementTitle">
               <div class="ap-heading">
                 <div><span class="ap-section-kicker">CONTROLE EXECUTIVO • CARTEIRA DE AÇÕES</span><h3 id="apManagementTitle">Central de gestão e prioridades</h3></div>
-                <span class="ap-status" id="apManagementDate">Indicadores calculados com dados oficiais publicados</span>
+                <div class="ap-actions"><span class="ap-status" id="apManagementDate">Indicadores calculados com dados oficiais publicados</span><button type="button" class="ap-button" id="apManagementExport">Exportar carteira CSV</button></div>
               </div>
               <div class="ap-management-kpis" id="apManagementKpis" aria-live="polite"></div>
               <div class="ap-management-toolbar">
@@ -318,15 +318,23 @@
                     <option value="LUCRO_TOTAL">Maior lucro total</option>
                     <option value="CAPITAL">Maior investimento</option>
                     <option value="ROI">Maior retorno sobre capital</option>
+                    <option value="RESULTADO_ESPERADO">Maior resultado esperado *</option>
+                    <option value="LUCRO_HORA">Maior retorno por jogador/hora *</option>
                   </select>
                 </label>
                 <label class="ap-field ap-management-search">Buscar ação
                   <input id="apManagementSearch" type="search" placeholder="Nome da ação" aria-label="Buscar na carteira de ações">
                 </label>
               </div>
+              <div class="ap-management-risk">
+                <label class="ap-field">Chance de vitória simulada (%)<input type="number" id="apPortfolioWinChance" min="0" max="100" step="5" placeholder="Não informada"></label>
+                <label class="ap-field">Espera média da polícia (min)<input type="number" id="apPortfolioPoliceWait" min="0" max="600" placeholder="Não informada"></label>
+                <label class="ap-field">Duração da ação (min)<input type="number" id="apPortfolioDuration" min="0" max="600" placeholder="Não informada"></label>
+                <p>As três entradas são hipóteses da gestão aplicadas igualmente para comparar ações. Sem chance, o sistema não calcula retorno esperado. Sem duração e espera, não calcula lucro por hora. Cooldown não incluído.</p>
+              </div>
               <div class="ap-table-scroll ap-management-scroll">
                 <table class="ap-management-table">
-                  <thead><tr><th>AÇÃO / EQUIPE</th><th>DIAGNÓSTICO</th><th>CAPITAL</th><th>REPÕE NA VITÓRIA</th><th>LUCRO MÍNIMO</th><th>POR MEMBRO</th><th>GESTÃO</th></tr></thead>
+                  <thead><tr><th>AÇÃO / EQUIPE</th><th>DIAGNÓSTICO</th><th>CAPITAL</th><th>REPÕE NA VITÓRIA</th><th>LUCRO MÍNIMO</th><th>POR MEMBRO</th><th>RESULTADO ESPERADO *</th><th>R$/JOGADOR/H *</th><th>GESTÃO</th></tr></thead>
                   <tbody id="apManagementList"></tbody>
                 </table>
               </div>
