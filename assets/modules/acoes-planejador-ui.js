@@ -1,4 +1,4 @@
-import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
+import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm,priceOf} from './acoes-core.js?v=2';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
 import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides,recommendedMaximum,DEFAULT_MANAGER_WIN_CHANCE} from './acoes-inteligencia.js?v=3';
 import {buildManagementBoard,filterManagementEntries} from './acoes-gestao.js?v=1';
@@ -13,18 +13,18 @@ let approveHandler=null,approvedThisSession=new Set();
 let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecisions=null,onReadSheet=null;
 let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null,workspace=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
- targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,listLimit:24,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:DEFAULT_MANAGER_WIN_CHANCE,targetHourly:0};
+ targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,listLimit:24,quantities:{},prices:{},manualPayout:null,manualMaxPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:DEFAULT_MANAGER_WIN_CHANCE,targetHourly:0};
 const management={filter:'TODAS',sort:'PRIORIDADE',search:'',showAll:false,
  winChance:DEFAULT_MANAGER_WIN_CHANCE,policeWaitMinutes:null,estimatedActionMinutes:null};
 const managementOptions=()=>({tax:state.tax,ammoUse:state.ammoUse,
  accessConsumed:state.accessConsumed,roi:state.roi,targetPerPlayer:state.targetPerPlayer,
- reference,winChance:management.winChance,policeWaitMinutes:management.policeWaitMinutes,
+ reference,winChance:null,policeWaitMinutes:null,
  estimatedActionMinutes:management.estimatedActionMinutes});
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
 const decision=()=>{
- const d=analyzeDecision(action(),catalog,{...options(),team:state.team,referenceTeam:defaultTeam(action())});
+ const d=analyzeDecision(action(),catalog,{...options(),team:state.team,referenceTeam:defaultTeam(action()),reference});
  if(action()?.origemCadastro!=='OFICIAL')d.eligibleForSheet=false;
  return d;
 };
@@ -47,23 +47,20 @@ function renderApprovalPayoutRange(d){
  const p=d.calc;
  const custom=Number.isFinite(state.manualPayout)&&state.manualPayout>0;
  const min=custom?state.manualPayout:d.recommendedMin;
- const max=custom?recommendedMaximum(p.min,p.max,min):d.recommendedMax;
+ const max=custom?(Number.isFinite(state.manualMaxPayout)?state.manualMaxPayout:recommendedMaximum(p.min,p.max,min)):d.recommendedMax;
  node.innerHTML='<div class="ap-recommend-top"><b>CONFERÊNCIA DOS DOIS PRÊMIOS</b>'+
   '<span>'+safe(d.direction)+'</span></div>'+
   '<div class="ap-recommend-two-columns">'+
   payoutPair('ATUAIS • SUJO',p.min,p.max)+
   payoutPair(custom?'MANUAL • PROPOSTO':'RECOMENDADOS • SUJO',min,max,'ap-recommend-final')+
-  '</div><p class="ap-row-muted">Chance estimada de vitória: '+
-  safe(d.winChance===null?'não informada':percent(d.winChance))+
-  ' • '+safe(p.team)+' invasores / '+safe(p.rule?.policiais??'?')+
-  ' policiais. O valor máximo proposto é calculado pela proporção atual e é INDICATIVO; só a fórmula da planilha confirma o resultado final.</p>';
+  '</div><p class="ap-row-muted">'+safe(p.team)+' invasor(es) / '+safe(p.rule?.policiais??'?')+' policiais • cooldown '+safe(action()?.cooldown_segundos?Math.ceil(action().cooldown_segundos/60)+' min':'não informado')+'. Mínimo e máximo podem ser definidos no cadastro ou manualmente para o Suricato; a planilha histórica pode calcular o máximo por fórmula.</p>';
 }
 
 const kpi=(label,value,style='',info='')=>'<div class="ap-kpi '+style+'"><small>'+safe(label)+'</small><strong>'+safe(value)+'</strong>'+(info?'<div class="ap-extra">'+safe(info)+'</div>':'')+'</div>';
 const chip=s=>'<span class="ap-tag '+(['BUFF','NERF','REVISAR CUSTO','INSUMO SEM PREÇO','EQUIPE INVÁLIDA'].includes(s)?'warning':s==='MANTER'?'good':'')+'">'+safe(s)+'</span>';
 function choose(name){
- selection=name;localIndex=0;state.prices={};state.quantities={};state.manualPayout=null;
- state.team=defaultTeam(action());el('apManual').value='';render();workspace?.openProfile();
+ selection=name;localIndex=0;state.prices={};state.quantities={};state.manualPayout=null;state.manualMaxPayout=null;
+ state.team=defaultTeam(action());el('apManual').value='';el('apManualMax').value='';render();workspace?.openProfile();
 }
 
 
@@ -91,6 +88,7 @@ function renderManagement(){
    (item.active?'':' • INATIVA')+'</small></span></span></td>'+
    '<td><span class="ap-management-diagnosis '+tone+'">'+safe(item.status)+'</span>'+
    '<small class="ap-management-reason" title="'+safe(item.reason.join(' • '))+'">'+safe(reason)+'</small></td>'+
+   '<td>'+(item.cooldownMinutes===null?'A confirmar':safe(item.cooldownMinutes)+' min')+'</td>'+ 
    '<td>'+safe(money(item.capital))+'</td>'+
    '<td>'+safe(money(item.winCost))+'</td>'+
    '<td class="'+(item.netMin!==null&&item.netMin<0?'ap-negative':'ap-positive')+'">'+safe(money(item.netMin))+'</td>'+
@@ -100,7 +98,7 @@ function renderManagement(){
    '<td class="'+(item.expectedMemberHour!==null&&item.expectedMemberHour<0?'ap-negative':'')+'">'+
    (item.expectedMemberHour===null?'—':safe(money(item.expectedMemberHour)))+'</td>'+
    '<td><button type="button" class="ap-management-open" data-ap-manage="'+safe(item.nome)+'">Analisar →</button></td></tr>';
- }).join(''):'<tr><td colspan="9" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
+ }).join(''):'<tr><td colspan="10" class="ap-row-muted">Nenhuma ação corresponde aos filtros atuais.</td></tr>';
  el('apManagementMethod').textContent=
   results.length+' ações exibidas • '+k.valid+' ativas com cenário calculável • '+k.emPrejuizo+
   ' com prejuízo na vitória • capital mediano '+money(k.capitalMediano)+
@@ -258,41 +256,27 @@ function showMainRecommendation(d){
  const panel=el('apSuggestedMain');if(!panel)return;
  const p=d.calc;
  if(!d.valid||!Number.isFinite(d.recommendedMin)){
-  const cause=p.kit.missing.length?'Preços pendentes: '+p.kit.missing.join(', '):
-   !p.teamValid?'Quantidade de jogadores não prevista nas regras':
-   action()?.status==='inativo'?'Ação inativa':
-   p.min===null?'Prêmio mínimo oficial não informado':'Dados insuficientes no catálogo';
   panel.className='ap-recommend-main ap-recommend-pending';
-  panel.innerHTML='<div class="ap-recommend-top"><span>RECOMENDAÇÃO DE PRÊMIO</span>'+
-   '<strong>PENDENTE</strong></div><p>'+safe(cause)+
-   '. Informe ou corrija os dados para obter uma recomendação segura.</p>';
+  panel.innerHTML='<div class="ap-recommend-top"><span>GESTÃO ECONÔMICA</span><strong>DADOS PENDENTES</strong></div><p>Conferir preço dos insumos, kit, regras de invasores e prêmios cadastrados.</p>';
   return;
  }
  panel.className='ap-recommend-main '+(d.direction==='CONSIDERAR BUFF'?'ap-recommend-buff':
-   d.direction==='REVISAR NERF'?'ap-recommend-nerf':'ap-recommend-maintain');
- const change=d.recommendedDelta;
- const changeLabel=change===0?'Sem alteração recomendada':
-  (change>0?'+':'−')+money(Math.abs(change))+
-  (d.recommendedPercent===null?'':' ('+(change>0?'+':'')+percent(d.recommendedPercent)+')');
- panel.innerHTML='<div class="ap-recommend-top"><span>PRÊMIO RECOMENDADO • SUJO</span>'+
-  chip(d.direction)+'</div>'+
+  d.direction==='CONSIDERAR REDUÇÃO'?'ap-recommend-nerf':'ap-recommend-maintain');
+ panel.innerHTML='<div class="ap-recommend-top"><span>FAIXA DE PAGAMENTO • SURICATO ROUBOS</span>'+chip(d.direction)+'</div>'+
   '<div class="ap-recommend-compare">'+
-   payoutPair('ATUAL • SUJO',p.min,p.max)+
-   '<span class="ap-recommend-arrow" aria-hidden="true">→</span>'+
-   payoutPair('RECOMENDADO • SUJO',d.recommendedMin,d.recommendedMax,'ap-recommend-final')+
-   '</div>'+
-  '<div class="ap-recommend-band"><span><b>Diferença:</b> '+safe(changeLabel)+'</span>'+
-   '<span><b>Chance de vitória (premissa):</b> '+safe(d.winChance===null?'Não informada':percent(d.winChance))+'</span>'+
-   '<span><b>Lucro ao vencer (atual):</b> '+safe(money(p.netMin))+'</span>'+
-   '<span><b>Prejuízo na derrota:</b> '+safe(money(p.loss))+'</span>'+
-   '<span><b>Resultado esperado atual:</b> '+safe(money(d.expected))+'</span>'+
-   '<span><b>Resultado esperado com proposta:</b> '+safe(money(d.recommendedExpected))+'</span>'+
-   '<span><b>Lucro por membro com o prêmio recomendado:</b> '+safe(money(d.recommendedPerMember))+'</span></div>'+
-  '<div class="ap-recommend-foot"><small>'+safe(p.team)+' invasores • custo de reposição '+
-   safe(money(p.kit.winCost))+' • capital em risco '+safe(money(p.kit.total))+
-   (d.modeled?' • PREMIAÇÃO PROPORCIONAL HIPOTÉTICA':' • referência: prêmio publicado')+
-   '. A faixa recomendada é estimada; somente a fórmula da planilha confirma o máximo final.</small>'+
-   '<button type="button" class="ap-button ap-recommend-details" id="apOpenStrategy">Analisar / aprovar / recusar</button></div>';
+  payoutPair('ATUAL APROVADO • SUJO',p.min,p.max)+
+  '<span class="ap-recommend-arrow" aria-hidden="true">→</span>'+
+  payoutPair('APÓS IMPACTO DE PREÇOS • SUJO',d.recommendedMin,d.recommendedMax,'ap-recommend-final')+'</div>'+
+  '<div class="ap-recommend-band">'+
+  '<span><b>Capital para iniciar:</b> '+safe(money(p.kit.total))+'</span>'+
+  '<span><b>Custo consumido/reposto:</b> '+safe(money(p.kit.winCost))+'</span>'+
+  '<span><b>Variação no capital:</b> '+safe(money(d.deltaCapital))+'</span>'+
+  '<span><b>Variação na reposição:</b> '+safe(money(d.deltaReplacement))+'</span>'+
+  '<span><b>Lucro mínimo na vitória:</b> '+safe(money(p.netMin))+'</span>'+
+  '<span><b>Cooldown:</b> '+safe(action()?.cooldown_segundos?Math.ceil(action().cooldown_segundos/60)+' min':'não informado')+'</span></div>'+
+  '<div class="ap-recommend-foot"><small>'+safe(d.hasComparison?(d.isSimulation?'Simulação; não publicar valores até confirmar o preço.':'Comparação com preços de referência.'):'Sem referência salva: preservar mínimo e máximo atuais.')+
+  ' A gestão decide se o impacto justifica ajuste. Nenhum prêmio muda automaticamente.</small>'+
+  '<button type="button" class="ap-button ap-recommend-details" id="apOpenStrategy">Analisar custos e configurar Suricato</button></div>';
 }
 
 function actionsList(){
@@ -317,11 +301,10 @@ function actionsList(){
    kitMode:'oficial',priceMode:'pista',tax:state.tax,
    ammoUse:state.ammoUse,accessConsumed:state.accessConsumed,
    targetPerPlayer:state.targetPerPlayer,roi:state.roi,tolerance:state.tolerance,
-   winChance:state.winChance,policeWaitMinutes:state.policeWaitMinutes,
-   estimatedActionMinutes:state.estimatedActionMinutes,targetHourly:state.targetHourly});
+   reference});
   const p=d.calc;
   const match=d.valid&&Number.isFinite(d.recommendedMin)?
-   'SUGESTÃO '+money(d.recommendedMin)+' · '+(d.recommendedDelta===0?'MANTER':
+   'MÍNIMO '+money(d.recommendedMin)+' · '+(d.recommendedDelta===0?'MANTER':
      (d.recommendedDelta>0?'+':'−')+money(Math.abs(d.recommendedDelta)))+
    ' · '+d.direction:
    'SUGESTÃO PENDENTE · '+(p.kit.missing.length?'insumos sem preço':'dados incompletos');
