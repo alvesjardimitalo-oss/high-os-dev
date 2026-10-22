@@ -53,7 +53,8 @@ test('dados inválidos e nomes duplicados nunca entram na gestão',()=>{
  assert.throws(()=>cleanActionEntry({...created,nome:'BANCO MODELO'},{published:official}),/Já existe/);
  assert.throws(()=>cleanActionEntry({...created,regras_confronto:[{invasores:2,policiais:4},{invasores:2,policiais:5}]}),/repetir/);
  assert.deepEqual(cleanActionEntry({...created,tipo_acao:'registradora',itens:[]}).itens,[]);
- assert.deepEqual(cleanRegistry(null),{revision:0,entries:{},hidden:{}});
+ assert.deepEqual(cleanRegistry(null).npcMarkets.CASAS.items,[]);
+ assert.deepEqual(cleanRegistry(null).npcMarkets.ARMAS_QUEBRADAS.items,[]);
 });
 test('planejador usa subpáginas e formulário com controles reais',()=>{
  const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
