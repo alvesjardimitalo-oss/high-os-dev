@@ -633,9 +633,9 @@ function listeners(){
  root.addEventListener('click',ev=>{
   if(ev.target.closest('#apOpenStrategy')){workspace?.openSuggestion();return;}
   const manage=ev.target.closest('[data-ap-manage]');
-  if(manage){choose(manage.dataset.apManage);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
+  if(manage){choose(manage.dataset.apManage);return;}
   const ranked=ev.target.closest('[data-ap-ranked]');
-  if(ranked){choose(ranked.dataset.apRanked);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
+  if(ranked){choose(ranked.dataset.apRanked);return;}
   const rank=ev.target.closest('[data-ap-rank]');
   if(rank){state.rankMode=rank.dataset.apRank;rankBoard();return;}
   const a=ev.target.closest('[data-ap-action]');
