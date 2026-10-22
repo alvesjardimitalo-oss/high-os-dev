@@ -52,7 +52,7 @@ test('dados inválidos e nomes duplicados nunca entram na gestão',()=>{
  assert.throws(()=>cleanActionEntry({...created,premio_min:600000,premio_max:400000}),/prêmios/);
  assert.throws(()=>cleanActionEntry({...created,nome:'BANCO MODELO'},{published:official}),/Já existe/);
  assert.throws(()=>cleanActionEntry({...created,regras_confronto:[{invasores:2,policiais:4},{invasores:2,policiais:5}]}),/repetir/);
- assert.throws(()=>cleanActionEntry({...created,itens:[]}),/Cadastre/);
+ assert.deepEqual(cleanActionEntry({...created,tipo_acao:'registradora',itens:[]}).itens,[]);
  assert.deepEqual(cleanRegistry(null),{revision:0,entries:{},hidden:{}});
 });
 test('planejador usa subpáginas e formulário com controles reais',()=>{
@@ -65,7 +65,7 @@ test('planejador usa subpáginas e formulário com controles reais',()=>{
   assert.match(html,new RegExp('data-ap-nav="'+tab+'"'));
  for(const tab of ['resumo','custos','cenario','sugestao'])
   assert.match(html,new RegExp('data-ap-profile="'+tab+'"'));
- for(const id of ['apNewAction','apActionForm','apSaveEntry','apDeleteAction','apArchiveBox','apCatalogMore','apManageShowAll'])
+ for(const id of ['apNewAction','apActionForm','apSaveEntry','apDeleteAction','apArchiveBox','apCatalogMore','apManageShowAll','apEntryType'])
   assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(html,/acoes-planejador\.css\?v=10/);
  assert.match(app,/acoes-planejador-ui\.js\?v=10/);
@@ -74,4 +74,23 @@ test('planejador usa subpáginas e formulário com controles reais',()=>{
  assert.match(workspace,/showModal\(\)/);
  assert.match(css,/data-ap-section="profile"/);
  assert.match(css,/data-ap-profile-tab="sugestao"/);
+});
+
+test('ATM aceita explosivo consumível com preço do mercado ou customizado',()=>{
+ const d=cleanActionEntry({...created,tipo_acao:'atm',
+  itens:[{nome:'C4 ++',quantidade:2,categoria_item:'consumivel',preco_unitario:16000}],
+  cooldown_segundos:1800,
+  regras_confronto:[{invasores:1,policiais:2,refens:0}]});
+ assert.equal(d.tipo_acao,'atm');
+ assert.equal(d.itens[0].preco_unitario,16000);
+ assert.equal(d.itens[0].categoria_item,'consumivel');
+ assert.equal(d.cooldown_segundos,1800);
+ assert.equal(d.regras_confronto[0].policiais,2);
+});
+test('registradora sem kit permite mínimo e máximo independentes',()=>{
+ const d=cleanActionEntry({...created,nome:'FURTO REGISTRADORA',tipo_acao:'registradora',
+  premio_min:5000,premio_max:9000,itens:[]});
+ assert.equal(d.premio_min,5000);
+ assert.equal(d.premio_max,9000);
+ assert.deepEqual(d.itens,[]);
 });
