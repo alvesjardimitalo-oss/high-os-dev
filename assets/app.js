@@ -293,6 +293,8 @@ data:serverTimestamp()});
 upsertDashboardAlertLocal(id,{tipo:'VAGO_COM_METRICA',group,status:'LIMPO',metricAt,updatedBy:currentUser.email});
 renderCommandDashboard()}catch(e){alert('Erro ao limpar o alerta: '+e.message)}}
 const DEFAULT_SEGMENTS=[
+ {nome:'MECÂNICA ILEGAL', icone:'🛠️', descricao:'Mecânicas Ilegais'},
+ {nome:'HOSPITAL ILEGAL', icone:'🏥', descricao:'Hospitais Ilegais'},
  {nome:'ARMAS',
 icone:'🔫',
 descricao:'Arsenal'},
@@ -1894,7 +1896,15 @@ async function discordFactionPatch(id,patch={}){
  // O backend faz merge atômico com o registro atual. Evita um GET extra
  // em cada alteração feita pelo painel Web.
  const p=discordPlain(patch);
- for(const [pt,nat] of FACTION_PT_NATIVE)if(Object.prototype.hasOwnProperty.call(p,pt))delete p[nat];
+ // V15.6.6 — segmentação customizada: o backend e o painel podem carregar
+ // tanto segmento (PT) quanto segment (campo nativo). Não é seguro eliminar
+ // o nativo ao reatribuir uma categoria: o valor antigo (APOIO) pode vencer
+ // ao recarregar o cadastro. Atualizar ambos para o MESMO nome de segmento.
+ for(const [pt,nat] of FACTION_PT_NATIVE){
+  if(!Object.prototype.hasOwnProperty.call(p,pt))continue;
+  if(pt==='segmento'){p.segment=String(p.segmento||'').trim();continue;}
+  delete p[nat];
+ }
  return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify({...p,group:id})});
 }
 const setDoc=async(ref,data,opts={})=>{
