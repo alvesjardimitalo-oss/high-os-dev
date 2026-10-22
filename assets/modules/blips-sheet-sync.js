@@ -19,7 +19,11 @@ function sector(f){
  // O identificador canônico do Group prevalece sobre o segmento editável.
  // Um cadastro com segmento desatualizado não deve colocar a ficha na aba errada.
  if(g==="MANICOMIO")return ["DROGAS","Drogas"];
- if(g.startsWith("ILEGALMECHANIC")||g.startsWith("ILEGALMEDIC"))return ["APOIO","Apoio"];
+ // Segmentos criados pela gestão prevalecem sobre o agrupamento legado APOIO.
+ if(s==="MECANICAILEGAL"||s==="MECANICAILLEGAL")return ["MECANICAILEGAL","Mecânica Ilegal"];
+ if(s==="HOSPITALILEGAL")return ["HOSPITALILEGAL","Hospital Ilegal"];
+ if(g.startsWith("ILEGALMECHANIC"))return ["MECANICAILEGAL","Mecânica Ilegal"];
+ if(g.startsWith("ILEGALMEDIC"))return ["HOSPITALILEGAL","Hospital Ilegal"];
  const byGroup=[
   ["ARMAS","ARMAS","Armas"],["MUNICAO","MUNICAO","Munição"],
   ["DROGAS","DROGAS","Drogas"],["LAVAGEM","LAVAGEM","Lavagem"],
@@ -38,7 +42,9 @@ function sector(f){
  if(s.includes("ESTELION"))return ["ESTELIONATARIOS","Estelionatários"];
  if(s.includes("GALPAO"))return ["GALPOES","Galpões"];
  if(s.includes("CONTRABANDO"))return ["CONTRABANDO","Contrabando"];
- if(s.includes("APOIO")||s.includes("MECAN")||s.includes("HOSPITAL"))return ["APOIO","Apoio"];
+ if(s.includes("MECAN"))return ["MECANICAILEGAL","Mecânica Ilegal"];
+ if(s.includes("HOSPITAL"))return ["HOSPITALILEGAL","Hospital Ilegal"];
+ if(s.includes("APOIO"))return ["APOIO","Apoio"];
  return [s||"OUTROS",plain(f.segmento)||"Outros"];
 }
 function cell(rows,r,c){return plain(rows[r]?.[c]);}
@@ -107,7 +113,7 @@ function sectionsIn(rows){
  const sections=[];
  for(let i=0;i<rows.length;i++){
   const name=cell(rows,i,4),key=fold(name);
-  if(!["ARMAS","MUNICAO","DROGAS","LAVAGEM","DESMANCHE","EXTRA1","APOIO","ESTELIONATARIOS","GALPOES","CONTRABANDO","OUTROS"].includes(key))continue;
+  if(!["ARMAS","MUNICAO","DROGAS","LAVAGEM","DESMANCHE","EXTRA1","APOIO","ESTELIONATARIOS","GALPOES","CONTRABANDO","OUTROS","MECANICAILEGAL","HOSPITALILEGAL"].includes(key))continue;
   const header=Array.from({length:Math.min(20,rows.length-i)},(_,d)=>i+d).find(r=>GROUP_COLS.some(c=>fold(cell(rows,r,c-1))==="GROUP"));
   if(header===undefined)continue;
   const footer=Array.from({length:Math.min(MAX_FIELDS_SCAN,rows.length-header)},(_,d)=>header+d)
