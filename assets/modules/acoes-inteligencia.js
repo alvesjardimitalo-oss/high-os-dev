@@ -89,6 +89,7 @@ export function analyzeDecision(action,catalog,{
  const maxBuffStep=valid?Math.max(1,Math.floor(Math.min(p.min*.10,p.kit.total*.25))):null;
  const maxNerfStep=valid?Math.max(1,Math.floor(Math.min(p.min*.05,p.kit.total*.12))):null;
  const threshold=valid?Math.max(500,p.min*.02):null;
+ const nerfThreshold=valid?Math.max(500,p.min*.01):null;
  const winTargetGap=payoutForWinTarget===null||p.min===null?null:payoutForWinTarget-p.min;
  const riskGap=riskBreakEvenMin===null||p.min===null?null:riskBreakEvenMin-p.min;
  // Corrige insuficiência real de lucro na vitória e examina risco negativo.
@@ -105,7 +106,7 @@ export function analyzeDecision(action,catalog,{
  if(direction==='MANTER'&&surplus){
   const safeFloor=Math.max(payoutForWinTarget??0,riskBreakEvenMin??0);
   const candidate=Math.floor(Math.max(safeFloor,p.min-maxNerfStep));
-  if(p.min-candidate>threshold){suggested=candidate;direction='REVISAR NERF';}
+  if(p.min-candidate>nerfThreshold){suggested=candidate;direction='REVISAR NERF';}
  }
  const delta=suggested===null||p.min===null?null:suggested-p.min;
  const recommendedMin=suggested;
