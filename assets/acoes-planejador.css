@@ -550,7 +550,8 @@
 #page-planejador-acoes .ap-root [data-ap-subpage]{display:none!important}
 #page-planejador-acoes .ap-root[data-ap-section="overview"] [data-ap-subpage="overview"],
 #page-planejador-acoes .ap-root[data-ap-section="prices"] [data-ap-subpage="prices"],
-#page-planejador-acoes .ap-root[data-ap-section="ranking"] [data-ap-subpage="ranking"]{display:block!important}
+#page-planejador-acoes .ap-root[data-ap-section="ranking"] [data-ap-subpage="ranking"],
+#page-planejador-acoes .ap-root[data-ap-section="npc"] [data-ap-subpage="npc"]{display:block!important}
 #page-planejador-acoes .ap-root[data-ap-section="catalog"] .ap-shell[data-ap-subpage="workspace"]{
  display:block!important
 }
@@ -722,3 +723,14 @@
 #page-planejador-acoes .ap-root .ap-load-more[hidden]{display:none!important}
 #page-planejador-acoes .ap-root .ap-management .ap-actions{align-items:center}
 #page-planejador-acoes .ap-root .ap-management-kpis{margin-bottom:14px}
+
+/* Módulo de compradores NPC: tipografia, superfícies e botões herdados do planejador. */
+#page-planejador-acoes .ap-npc{display:block}
+#page-planejador-acoes .ap-npc .ap-npc-stats,
+#page-planejador-acoes .ap-npc .ap-npc-scenario{margin-top:20px}
+#page-planejador-acoes .ap-npc .ap-table-input{min-width:100px;width:100%;max-width:220px}
+#page-planejador-acoes .ap-npc .ap-management-kpis{margin-block:14px}
+#page-planejador-acoes .ap-npc .ap-filter-row{align-items:flex-end;gap:12px;flex-wrap:wrap}
+#page-planejador-acoes .ap-npc .ap-filter-row>.ap-actions{margin-left:auto;flex-wrap:wrap}
+#page-planejador-acoes .ap-npc table{min-width:810px}
+#page-planejador-acoes .ap-npc-scenario[hidden]{display:none!important}
