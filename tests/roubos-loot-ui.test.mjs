@@ -28,10 +28,10 @@ test('fluxo da casa calcula, bloqueia preço ausente, registra e mantém resulta
  host.input('hl-locations','5');assert.match(host.querySelector('#hlProjection').innerHTML,/Casa simulada: 5/);assert.match(host.querySelector('#hlProjection').innerHTML,/Comparação por número de locais/);
  await host.click('hlStageNav=registro');assert.equal(host.dataset.hlStage,'registro');
  const qty=host.nodes.find(x=>x.dataset.hlQuantity==='ssddrive');qty.value='2';host.events.input({target:qty});host.input('hl-direct','200');
- assert.match(host.querySelector('#hlActual').innerHTML,/600/);
+ assert.match(host.querySelector('#hlActual').innerHTML,/683/);
  const price=host.nodes.find(x=>x.dataset.hlPrice==='ssddrive');price.value='';host.events.input({target:price});await host.click('#hlSave');assert.equal(registry.houseRuns.length,0);assert.match(host.querySelector('#hlMessage').textContent,/preço/);
- price.value='400';host.events.input({target:price});await host.click('#hlSave');assert.equal(registry.houseRuns.length,1);assert.equal(registry.houseRuns[0].profit,600);assert.equal(host.dataset.hlStage,'historico');
+ price.value='400';host.events.input({target:price});await host.click('#hlSave');assert.equal(registry.houseRuns.length,1);assert.ok(Math.abs(registry.houseRuns[0].profit-(700-100/6))<1e-9);assert.equal(host.dataset.hlStage,'historico');
  await host.click('hlMode=npc');assert.equal(host.dataset.hlStage,'projecao');assert.match(host.querySelector('#hlTables').innerHTML,/1.528|1528/);
  await host.click('hlMode=portamalas');assert.match(host.querySelector('#hlProjection').innerHTML,/Itens físicos por invasão/);
- await host.click('hlMode=casas');assert.match(host.querySelector('#hlHistory').innerHTML,/600/);
+ await host.click('hlMode=casas');assert.match(host.querySelector('#hlHistory').innerHTML,/683/);
 });

@@ -1,4 +1,5 @@
-import {createHouseWorkbench} from './roubos-loot-ui.js?v=3';
+import {createEconomyVisual} from './economia-visual.js?v=1';
+import {createHouseWorkbench} from './roubos-loot-ui.js?v=4';
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
 import {createNpcWorkbench} from './acoes-npc-ui.js?v=6';
 
@@ -9,7 +10,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  const $=id=>root.querySelector('#'+id);
  const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
  let registry=cleanRegistry(),ready=false,view='overview',tab='resumo',draft=null,original='',busy=false;
- let lastLoadError='',npc=null,houses=null;
+ let lastLoadError='',npc=null,houses=null,visual=null;
  const published=()=>getPublished()||[];
  const current=()=>getActions().find(x=>x.nome===getSelected())||null;
  const writable=()=>Boolean(onMutateRegistry&&ready);
@@ -25,6 +26,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   }catch(e){ready=false;lastLoadError=String(e?.message||e);message('Cadastro interno indisponível: '+lastLoadError);}
  }
  function paint(){
+  visual?.refresh();
   root.dataset.apSection=view;root.dataset.apProfileTab=tab;
   const area=view==='loot'?'roubados':view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'roubados'):'acoes';
   root.dataset.economyArea=area;
@@ -225,6 +227,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   registry=cleanRegistry(await onMutateRegistry({kind:'house-run-save',entry,expectedRevision:registry.revision}));
   return registry;
  }});
+ visual=createEconomyVisual({root,getRegistry:()=>registry,getCatalog,getActions});
  paint();
  return {load,merged,paint,openProfile,openSuggestion,navigate,reload};
 
