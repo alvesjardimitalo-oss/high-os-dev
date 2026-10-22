@@ -32,7 +32,7 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave})
    '<td><input class="ap-table-input" data-npc-field="codigo" maxlength="100" value="'+safe(it.codigo||'')+'" placeholder="Código (opcional)"></td>'+
    '<td><input class="ap-table-input" type="number" min="0" step="1" data-npc-field="precoSujo" value="'+safe(it.precoSujo??'')+'" placeholder="R$ sujo"></td>'+
    '<td><input class="ap-table-input" type="number" min="0" step="1" data-npc-field="quantidadeNpc" value="'+safe(it.quantidadeNpc??'')+'" placeholder="Desconhecido"></td>'+
-   (market==='CASAS'?'<td><input class="ap-table-input" type="number" min="0" max="100000" step="1" data-npc-loot value="'+safe(loot[i]||0)+'" aria-label="Quantidade desse item encontrada na casa"></td>':'')+
+   (market==='CASAS'?'<td><input class="ap-table-input" type="number" min="0" max="100000" step="1" data-npc-loot value="'+safe(loot[i]||0)+'" aria-label="Quantidade desse item encontrada na casa"></td>':'<td>—</td>')+
    '<td><button type="button" class="ap-button ap-danger" data-npc-remove="'+i+'" '+(canEdit()?'':'disabled')+' title="Remover item do cadastro">✕</button></td></tr>'
   ).join('');
  }
@@ -44,7 +44,7 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave})
   if($('apNpcSave'))$('apNpcSave').disabled=!canEdit()||saving;
   if($('apNpcAdd'))$('apNpcAdd').disabled=!canEdit();
   table.innerHTML=rowsHtml()||
-   '<tr><td colspan="'+(market==='CASAS'?6:5)+'" class="ap-row-muted">Nenhum item cadastrado neste NPC. As fotos com os preços poderão ser transcritas para esta tabela.</td></tr>';
+   '<tr><td colspan="6" class="ap-row-muted">Nenhum item cadastrado neste NPC. As fotos com os preços poderão ser transcritas para esta tabela.</td></tr>';
   if(status)status.textContent='Última atualização registrada: '+(persisted().updatedAt?
    new Date(persisted().updatedAt).toLocaleString('pt-BR'):'sem dados compartilhados')+
    ' • Os números informados representam o estoque/contador exibido pelo NPC no momento da leitura.';
