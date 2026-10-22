@@ -34,8 +34,13 @@ export function priceOf(name,catalog,mode='pista'){
   return {name,unit:mode==='pista'?975:null,source:'Planilha VALORES AÇÃO BLIPADA • preço de pista',missing:mode!=='pista'};
  const item=(catalog?.itens||[]).find(x=>norm(x.item)===norm(lookup)&&x.status==='ativo')
  ||(catalog?.itens||[]).find(x=>norm(x.item)===norm(lookup));
- const unit=numeric(item?.[mode]);
- return {name:item?.item||lookup,unit,source:item?'Mercado Negro':'Não encontrado no catálogo',missing:unit===null,listedInactive:!!item&&item.status!=='ativo'};
+ // Itens desativados não podem subsidiar propostas de alteração de prêmios.
+ // Mostrar seu último preço como atual ocultaria um insumo indisponível.
+ const listedInactive=!!item&&item.status!=='ativo';
+ const unit=listedInactive?null:numeric(item?.[mode]);
+ return {name:item?.item||lookup,unit,
+  source:listedInactive?'Item inativo no Mercado Negro':item?'Mercado Negro':'Não encontrado no catálogo',
+  missing:unit===null,listedInactive};
 }
 function qtyFor(item,team,mode){
  const official=Math.max(0,Number(item?.quantidade)||0);
