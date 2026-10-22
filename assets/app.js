@@ -26,6 +26,7 @@ import { getFirestore,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
 import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
+import {planLegacyCategoryRecovery,segmentKeyFor} from './modules/segmentos-reparo.js?v=1';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.1';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
@@ -9997,7 +9998,7 @@ let base=[];
 
  else if(k==='hospitalilegal'||k==='ilegalmedic')base=MEDIC_STANDARD_RECIPES;
 
- else if(k==='mecanicaillegal'||k==='ilegalmechanic')base=MECHANIC_STANDARD_RECIPES;
+ else if(k==='mecanicailegal'||k==='ilegalmechanic')base=MECHANIC_STANDARD_RECIPES;
 
  else if(k==='contrabando')base=CONTRABANDO_STANDARD_RECIPES;
 
@@ -10173,7 +10174,7 @@ desmanche:'Desmanche',
 drogas:'Drogas',
 hospitalilegal:'Hospital Ilegal',
 ilegalmedic:'Hospital Ilegal',
-mecanicaillegal:'Mecânica Ilegal',
+mecanicailegal:'Mecânica Ilegal',
 ilegalmechanic:'Mecânica Ilegal',
 contrabando:'Contrabando'};
 
@@ -12789,37 +12790,54 @@ if(replacement){
 }
 renderFaccoes();renderOrganizations();renderSegmentAdmin()}catch(e){alert('Erro ao apagar segmento: '+e.message)}
 }
-let coreSegmentCheckSignature='';
-async function applyCoreSegmentMap(){
- const signature=faccoes.map(f=>`${f.group}:${f.segmento||''}:${f.faccao||''}`).sort().join('|');
- if(signature===coreSegmentCheckSignature)return;
- coreSegmentCheckSignature=signature;
- const rules={Manicomio:'DROGAS',
-Contrabando01:'CONTRABANDO',
-Contrabando02:'CONTRABANDO',
-IlegalMedic01:'APOIO',
-IlegalMedic1:'APOIO',
-IlegalMedic2:'APOIO',
-IlegalMechanic01:'APOIO',
-IlegalMechanic02:'APOIO',
-IlegalMecanic01:'APOIO'};
-const needs=faccoes.filter(f=>rules[f.group]&&segmentKey(f.segmento)!==segmentKey(rules[f.group]));
-if(!needs.length)return;
-try{const batch=writeBatch(db);
-needs.forEach(f=>{const seg=rules[f.group];batch.set(doc(db,'highos','data','faccoes',f.group),{segmento:seg,
-updatedAt:serverTimestamp(),
-updatedBy:currentUser.email},{merge:true});if(f.faccao)batch.set(doc(db,'highos','data','organizacoes',orgKey(f.faccao)),{segmentoAtual:seg,
-segmentoVinculado:seg,
-updatedAt:serverTimestamp(),
-updatedBy:currentUser.email},{merge:true})});
-await batch.commit();
-faccoes=faccoes.map(f=>rules[f.group]?{...f,
-segmento:rules[f.group]}:f);
-await addDoc(histCol,{sessionId:currentSessionId||'',
-tipo:'SEGMENTOS_PADRAO_V813',
-descricao:'Correção estrutural: Manicomio=DROGAS, Contrabando=CONTRABANDO, IlegalMedic/IlegalMechanic=APOIO',
-usuario:currentUser.email,
-data:serverTimestamp()})}catch(e){console.warn('Falha na correção dos segmentos padrão',e)}
+/* V15.6.6 — a categoria escolhida no painel prevalece.
+   A rotina antiga regravava hospital/mecânica como APOIO em TODO login
+   ADMIN, sobrescrevendo inclusive categorias personalizadas do usuário.
+   A recuperação abaixo é pontual: apenas Groups que o bug deixou em
+   APOIO, apenas quando a categoria criada já existe e somente uma vez. */
+async function repairLegacyIllegalCategories(){
+ if(!isAdmin()||!faccoes.length)return;
+ try{
+  const snapshot=await getDoc(segmentConfigDoc);
+  if(!snapshot.exists())return;
+  const saved=snapshot.data()||{};
+  const previous=saved.recuperacaoCategoriasV1566||{};
+  const plan=planLegacyCategoryRecovery(faccoes,saved.items,previous);
+  if(!plan.mark.length)return;
+  const batch=writeBatch(db);
+  const actual=[];
+  for(const change of plan.changes){
+   const ref=doc(db,'highos','data','faccoes',change.group);
+   const fresh=await getDoc(ref);
+   // Nunca reclassificar um Group que foi movido novamente pelo gestor
+   // após a leitura ou que já não está mais marcado como APOIO.
+   if(!fresh.exists()||segmentKeyFor(fresh.data()?.segmento)!=='APOIO')continue;
+   batch.set(ref,{segmento:change.to,updatedAt:serverTimestamp(),
+    updatedBy:currentUser.email},{merge:true});
+   if(change.fac){
+    batch.set(doc(db,'highos','data','organizacoes',orgKey(change.fac)),
+     {segmentoAtual:change.to,segmentoVinculado:change.to,
+      updatedAt:serverTimestamp(),updatedBy:currentUser.email},{merge:true});
+   }
+   actual.push(change);
+  }
+  // Uma recuperação por categoria. Mudanças futuras são SEMPRE manuais.
+  const done={...previous};
+  for(const type of plan.mark)done[type]=true;
+  batch.set(segmentConfigDoc,{recuperacaoCategoriasV1566:done},{merge:true});
+  await batch.commit();
+  if(actual.length){
+   const byGroup=new Map(actual.map(x=>[x.group,x.to]));
+   faccoes=faccoes.map(f=>byGroup.has(f.group)?{...f,segmento:byGroup.get(f.group)}:f);
+   organizacoes=organizacoes.map(o=>{
+    const target=actual.find(x=>x.fac&&orgKey(x.fac)===(o.id||orgKey(o.nome)));
+    return target?{...o,segmentoAtual:target.to,segmentoVinculado:target.to}:o;
+   });
+   queryFreshAt.set('faccoes',Date.now());
+   queryFreshAt.set('organizacoes',Date.now());
+   console.info('[SEGMENTOS] Recuperados '+actual.length+' Group(s) do mapeamento antigo de APOIO.');
+  }
+ }catch(e){console.warn('[SEGMENTOS] Recuperação de categorias pendente; sem alterações locais:',e)}
 }
 $('#segmentCreateBtn')?.addEventListener('click',createSegment);
 $('#segmentAssignType')?.addEventListener('change',refreshSegmentAssignEntities);
@@ -12827,7 +12845,7 @@ $('#segmentAssignBtn')?.addEventListener('click',assignSegment);
 
 const _loadFaccoesV813=loadFaccoes;
 loadFaccoes=async function(){await _loadFaccoesV813();
-if(String(currentProfile?.role||'').toUpperCase()==='ADMIN'){await applyCoreSegmentMap();
+if(String(currentProfile?.role||'').toUpperCase()==='ADMIN'){await repairLegacyIllegalCategories();
 renderFaccoes();
 renderOrganizations();
 renderAvailableFaccoes();
