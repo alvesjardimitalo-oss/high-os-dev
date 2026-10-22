@@ -713,3 +713,12 @@
  #page-planejador-acoes .ap-root .ap-editor-footer{padding:13px}
  #page-planejador-acoes .ap-root .ap-editor-row{padding:8px}
 }
+
+/* Controles progressivos do cockpit e catálogo */
+#page-planejador-acoes .ap-root .ap-load-more{
+ display:block;width:min(100%,360px);margin:16px auto 0;text-align:center;
+ border-style:dashed;min-height:42px
+}
+#page-planejador-acoes .ap-root .ap-load-more[hidden]{display:none!important}
+#page-planejador-acoes .ap-root .ap-management .ap-actions{align-items:center}
+#page-planejador-acoes .ap-root .ap-management-kpis{margin-bottom:14px}
