@@ -2,7 +2,7 @@ name: High OS • Integridade
 
 on:
   push:
-    branches: [main, 'improvement/**']
+    branches: [main, 'improvement/**', 'fix/**']
   pull_request:
 
 permissions:
@@ -31,3 +31,5 @@ jobs:
         run: node tools/verificar-integridade.mjs
       - name: Chamadas e funções ausentes
         run: node tools/verificar-chamadas.mjs
+      - name: Cobertura das regras do Firestore
+        run: node tools/verificar-regras.mjs

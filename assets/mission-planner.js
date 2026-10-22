@@ -1533,7 +1533,34 @@ iconAnchor:[12,
   function formatDuration(sec){sec=Math.max(0,Math.round(Number(sec)||0));const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return ((h?h+'h ':'')+(m?m+'min ':'')+(s||(!h&&!m)?s+'s':'')).trim();}
   function setSafeConfigView(on){state.safeConfigView=!!on;state.layerVisibility.spawns=!on;qsa('[data-mplayer="spawns"]').forEach(c=>c.checked=!on);const b=qs('#mpSafeFocus');if(b){b.textContent=on?'Mostrar spawns':'Ocultar spawns';b.title=on?'Voltar a exibir os spawns no mapa':'Esconder os spawns para enxergar só as safes';}renderMap();} // V12.8.1 - antes escondia e nunca reexibia
   
-  function safeRouteAudit(m){return [];}
+  function safeRouteAudit(m){
+    const issues=[];
+    if(!m||(m.category||'dominacao')!=='gas')return issues;
+    const mandatory=/sobreviv[eê]ncia|battle\s*royal(?:e)?|batalha\s*real/i.test(String(m.event||''));
+    const r=ensureSafeRoute(m);
+    if(!r||!Array.isArray(r.stages)||!r.stages.length){
+      if(mandatory)issues.push('A SAFE dinâmica deste evento ainda não foi configurada.');
+      return issues;
+    }
+    const valid=r.stages.filter(safeStageValid);
+    if(mandatory&&valid.length<3)issues.push('A SAFE precisa de pelo menos 3 etapas válidas.');
+    if(valid.length!==r.stages.length)issues.push('Há SAFE(s) sem posição ou raio válido.');
+    if(mandatory&&safeTotalSeconds(m)<1200)issues.push('O fechamento completo da SAFE deve durar pelo menos 1200 segundos.');
+    const initial=safeInitialStage(m),chain=[initial,...r.stages];
+    for(let i=1;i<chain.length;i++){
+      const prev=chain[i-1],cur=chain[i];
+      if(!safeStageValid(prev)||!safeStageValid(cur))continue;
+      const displacement=Math.hypot(Number(cur.x)-Number(prev.x),Number(cur.y)-Number(prev.y));
+      if(Number(cur.radius)>=Number(prev.radius))issues.push('S'+i+': o raio deve diminuir em relação à etapa anterior.');
+      if(displacement+Number(cur.radius)>Number(prev.radius)+.01)
+        issues.push('S'+i+': a SAFE está fora dos limites da etapa anterior.');
+    }
+    safeWalkAnalysis(m).forEach(a=>{
+      if(!a.canEscape||a.physicalMargin<0)issues.push(a.from+' → '+a.to+': fechamento rápido demais para fugir a pé.');
+      else if(a.pvpExtraNeeded>0)issues.push(a.from+' → '+a.to+': aumentar o deslocamento em '+a.pvpExtraNeeded+'s para margem de fuga.');
+    });
+    return issues;
+  }
   
   
 
@@ -2183,7 +2210,15 @@ j+1];}if(d<(Number(m.spawnRadius)||100)*2)over++;}
     const st=r.stages[i];if(safeStageValid(st)&&state.map)state.map.panTo(ll(st.x,st.y));
   }
   function requireSafePreflight(m,action='gerar a solicitação'){
-    const check=safePreflight(m);if(check.warnings.length)setSaveState('SAFE com '+check.warnings.length+' aviso(s) técnico(s) • '+action+' permitido');return true;
+    const issues=safeRouteAudit(m),check=safePreflight(m);
+    if(issues.length){
+      state.lastRequestError=issues.join(' • ');
+      alert('Não é seguro '+action+':\n\n- '+issues.join('\n- ')+'\n\nAjuste a SAFE ou utilize AUTO.');
+      setSaveState('SAFE precisa de reparos antes da solicitação');
+      return false;
+    }
+    if(check.warnings.length)setSaveState('SAFE com '+check.warnings.length+' aviso(s) técnico(s) • '+action+' permitido');
+    return true;
   }
   function highRequestExport(){
     const m=active();if(!m)return '';const a=plannerAudit(m),pts=(m.points||[]).filter(isValidated),r=(m.category||'dominacao')==='gas'?ensureSafeRoute(m):null,isSurvival=/sobreviv[eê]ncia/i.test(m.event||''),change=requestChangeScope(m),polyRaw=(m.category||'dominacao')==='dominacao'&&Array.isArray(m.zonePolygon)?m.zonePolygon:[],polyAudit=(m.category||'dominacao')==='dominacao'?dominationPolygonAudit(m):null,polyPending=polyRaw.filter(v=>validCoord(v?.x)&&validCoord(v?.y)&&(!validCoord(v?.z)||v?.status!=='validated')).length,polyInvalid=polyRaw.filter(v=>!validCoord(v?.x)||!validCoord(v?.y)).length;

@@ -26,7 +26,7 @@ import { getFirestore,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
 import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
-import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.0';
+import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.1';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
@@ -3732,12 +3732,13 @@ nextT.rota.atualizadoEm=new Date().toISOString();
  syncFarmWithCraft(nextT);
 
  try{
-  await setDoc(doc(db,'highos','data','faccoes',group),{perfilTecnico:nextT,
-beneficios,
+  const routeBatch=writeBatch(db);
+  routeBatch.set(doc(db,'highos','data','faccoes',group),{perfilTecnico:nextT,
+beneficios:benefits,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true});
 
-  await addDoc(histCol,{sessionId:currentSessionId||'',
+  routeBatch.set(doc(histCol),{sessionId:currentSessionId||'',
 tipo:'ROTA_EXCLUSIVA_SOLICITADA',
 group,
 descricao:`Solicitação de rota exclusiva criada e Perfil Técnico alimentado automaticamente • ${pts.length} CDS do takefarm`,
@@ -3746,6 +3747,7 @@ solicitacaoTexto:buildRequestText(),
 origem:'SOLICITACAO_TAKEFARM',
 usuario:currentUser.email,
 data:serverTimestamp()});
+  await routeBatch.commit();
 
   const ix=faccoes.findIndex(x=>x.group===group);
   if(ix>=0){
@@ -3832,84 +3834,83 @@ renderRequests();
 }
 function manualRequestMutation(tipo,d,f={}){
  const t=mergedTechProfile(f),
-o=clonePlain(t.operacional||opBlank()),
-b={...(f.beneficios||{})};
-let changed=false,
-desc='';
+ o=clonePlain(t.operacional||opBlank()),
+ b={...(f.beneficios||{})};
+ let changed=false,desc='';
 
- const upGarage=(kind,obj)=>{o.garagens=o.garagens||[];
-let i=o.garagens.findIndex(x=>x.tipo===kind);
-const old=i>=0?o.garagens[i]:{};
-if(!samePlain(old,obj)){if(i>=0)o.garagens[i]=obj;
-else o.garagens.push(obj);
-changed=true}};
+ // Uma cópia de modelo com "{x,y,z,h}" não deve cadastrar blips fictícios.
+ const cds=(label)=>getDetailValue(label,d).trim();
+ const coordenada=(v)=>{
+  const raw=String(v||'').trim();
+  return /^\{?\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?)?\s*\}?$/.test(raw)?raw:'';
+ };
+ const newPair=(blip,spawn)=>({blip:coordenada(blip),spawn:coordenada(spawn)});
+ const upGarage=(kind,obj)=>{
+  if(!obj.blip||!obj.spawn)return false;
+  o.garagens=Array.isArray(o.garagens)?o.garagens:[];
+  const i=o.garagens.findIndex(x=>x.tipo===kind&&(x.blip===obj.blip||x.spawn===obj.spawn));
+  const old=i>=0?o.garagens[i]:{};
+  const next={...old,...obj,veiculos:obj.veiculos||old.veiculos||'',tipo:kind};
+  if(samePlain(old,next))return false;
+  if(i>=0)o.garagens[i]=next;
+  else o.garagens.push(next);
+  changed=true;
+  return true;
+ };
 
- if(tipo==='TELAO'){const next={...(o.telao||{}),
-ativo:true,
-modelo:getDetailValue('Modelo do Telão',d)||getDetailValue('Telão usado',d)||o.telao?.modelo||'',
-postit:getDetailValue('CDS/postit',d)||o.telao?.postit||'',
-cds:getDetailValue('CDS',d)||o.telao?.cds||'',
-permissao:f.group||''};
-if(!samePlain(o.telao,next)){o.telao=next;
-b.telao=true;
-b.telaoNome=next.modelo;
-b.telaoPostit=next.postit;
-b.telaoCds=next.cds;
-changed=true;
-desc='Telão'}}
- else if(tipo==='GARAGEM'){const obj={tipo:'PUBLICA',
-blip:getDetailValue('Blip',d),
-spawn:getDetailValue('Spawn',d),
-veiculos:'',
-vagas:''};
-upGarage('PUBLICA',obj);
-b.garagemPublica=true;
-b.garagemPublicaBlip=obj.blip;
-b.garagemPublicaSpawn=obj.spawn;
-desc='Garagem Pública'}
- else if(tipo==='GARAGEM_VIP'){const obj={tipo:'FACCAO',
-blip:getDetailValue('Blip',d),
-spawn:getDetailValue('Spawn',d),
-veiculos:getDetailValue('Veículos?',d),
-vagas:''};
-upGarage('FACCAO',obj);
-b.garagemVipBlip=obj.blip;
-b.garagemVipSpawn=obj.spawn;
-b.garagemVipVeiculos=obj.veiculos;
-desc='Garagem VIP'}
- else if(tipo==='GARAGEM_SERVICO'){const obj={tipo:'SERVICO',
-blip:getDetailValue('Blip',d),
-spawn:getDetailValue('Spawn',d),
-veiculos:getDetailValue('Veículos?',d),
-vagas:''};
-upGarage('SERVICO',obj);
-desc='Garagem de Serviço'}
- else if(tipo==='GARAGEM_BLINDADOS'){const next={vagas:getDetailValue('Quantidade de vagas',d),
-blip:getDetailValue('Blip',d),
-spawn:getDetailValue('Spawn da garagem',d)||getDetailValue('Spawn',d),
-veiculos:getDetailValue('Spawn do veículo blindado',d)||getDetailValue('Veículos?',d)};
-if(!samePlain(o.blindados,next)){o.blindados=next;
-changed=true;
-desc='Garagem de Blindados'}}
- else if(tipo==='HELIPONTO'){const next=[{blip:getDetailValue('Blip',d)||getDetailValue('CDS',d),
-spawn:getDetailValue('Spawn',d)}];
-if(!samePlain(o.helipontos,next)){o.helipontos=next;
-b.heliponto=true;
-b.helipontoBlip=next[0].blip;
-b.helipontoSpawn=next[0].spawn;
-changed=true;
-desc='Heliponto'}}
- else if(tipo==='LOJA_FACCAO'){const next={cds:getDetailValue('CDS',d)||getDetailValue('Blip',d)};
-if(!samePlain(o.lojaFac,next)){o.lojaFac=next;
-b.shopExclusivo=next.cds;
-changed=true;
-desc='Loja da Facção'}}
+ if(tipo==='TELAO'){
+  const next={...(o.telao||{}),ativo:true,
+   modelo:cds('Modelo do Telão')||cds('Telão usado')||o.telao?.modelo||'',
+   postit:coordenada(cds('CDS/postit'))||o.telao?.postit||'',
+   cds:coordenada(cds('CDS'))||o.telao?.cds||'',permissao:f.group||''};
+  if(!samePlain(o.telao,next)){
+   o.telao=next;b.telao=true;b.telaoNome=next.modelo;
+   b.telaoPostit=next.postit;b.telaoCds=next.cds;
+   changed=true;desc='Telão';
+  }
+ }else if(tipo==='GARAGEM'||tipo==='GARAGEM_VIP'||tipo==='GARAGEM_SERVICO'){
+  const kind=tipo==='GARAGEM'?'PUBLICA':tipo==='GARAGEM_VIP'?'FACCAO':'SERVICO';
+  const obj={tipo:kind,...newPair(cds('Blip'),cds('Spawn')),veiculos:cds('Veículos')||cds('Veiculo')};
+  if(upGarage(kind,obj)){
+   desc=tipo==='GARAGEM'?'Garagem Pública':tipo==='GARAGEM_VIP'?'Garagem VIP':'Garagem de Serviço';
+   if(kind==='PUBLICA'){b.garagemPublica=true;b.garagemPublicaBlip=obj.blip;b.garagemPublicaSpawn=obj.spawn;}
+   if(kind==='FACCAO'){b.garagemVip=true;b.garagemVipBlip=obj.blip;b.garagemVipSpawn=obj.spawn;
+    if(obj.veiculos)b.garagemVipVeiculos=obj.veiculos;}
+  }
+ }else if(tipo==='GARAGEM_BLINDADOS'){
+  const old=o.blindados||{};
+  const coords=newPair(cds('Blip'),cds('Spawn da garagem')||cds('Spawn'));
+  if(coords.blip&&coords.spawn){
+   const next={...old,...coords,
+    vagas:cds('Quantidade de vagas')||old.vagas||'',
+    veiculos:cds('Spawn do veículo blindado')||cds('Veículos')||old.veiculos||''};
+   if(!samePlain(old,next)){o.blindados=next;changed=true;desc='Garagem de Blindados';}
+  }
+ }else if(tipo==='HELIPONTO'){
+  const obj=newPair(cds('Blip')||cds('Heliponto')||cds('CDS'),cds('Spawn'));
+  if(obj.blip&&obj.spawn){
+   const items=Array.isArray(o.helipontos)?o.helipontos:[];
+   const i=items.findIndex(x=>x.blip===obj.blip||x.spawn===obj.spawn);
+   const old=i>=0?items[i]:{};
+   const next={...old,...obj};
+   if(!samePlain(old,next)){
+    if(i>=0)items[i]=next;else items.push(next);
+    o.helipontos=items;b.heliponto=true;
+    b.helipontoBlip=obj.blip;b.helipontoSpawn=obj.spawn;
+    changed=true;desc='Heliponto';
+   }
+  }
+ }else if(tipo==='LOJA_FACCAO'){
+  const position=coordenada(cds('CDS')||cds('Blip'));
+  if(position){
+   const next={...(o.lojaFac||{}),cds:position};
+   if(!samePlain(o.lojaFac,next)){
+    o.lojaFac=next;b.shopExclusivo=position;changed=true;desc='Loja da Facção';
+   }
+  }
+ }
  t.operacional=o;
-return {changed,
-perfilTecnico:t,
-beneficios:b,
-descricao:desc};
-
+ return {changed,perfilTecnico:t,beneficios:b,descricao:desc};
 }
 async function copyRequestText(){
  const text=$('#reqPreview').value,
@@ -3921,7 +3922,8 @@ f=faccoes.find(x=>x.group===group);
  try{
   if(group&&f){const mut=manualRequestMutation(tipo,d,f);
 if(mut.changed){const yes=confirm(`Essa solicitação vai gerar modificações no Group ${group}.\n\nAlteração detectada: ${mut.descricao||requestTypeName(tipo)}.\n\nDeseja que as mesmas sejam cadastradas no Group?`);
-if(yes){await setDoc(doc(db,'highos','data','faccoes',group),{perfilTecnico:mut.perfilTecnico,
+if(yes){const previousGroup=clonePlain(f);
+await setDoc(doc(db,'highos','data','faccoes',group),{perfilTecnico:mut.perfilTecnico,
 beneficios:mut.beneficios,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser?.email||''},{merge:true});
@@ -3934,6 +3936,9 @@ descricao:`${mut.descricao||requestTypeName(tipo)} cadastrada no Group a partir 
 solicitacaoTexto:text,
 usuario:currentUser?.email||'',
 data:serverTimestamp()});
+const currentGroup={...previousGroup,perfilTecnico:mut.perfilTecnico,beneficios:mut.beneficios};
+const synced=await syncBlipsGroups([currentGroup],{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup([previousGroup],[currentGroup])});
+if(!synced)facSheetRenderStatus('warn','Solicitação aplicada ao Group; BLIPS COORDENADAS pendente de sincronização.');
 }}
    await archiveTechnicalRequest({tipo,
 titulo:$('#reqAssunto')?.value||requestTypeName(tipo),

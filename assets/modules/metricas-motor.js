@@ -38,14 +38,31 @@ export function msDe(v) {
   /* dd/mm/aaaa (+ hora opcional, com segundos, vírgula ou "às") — sempre dia/mês.
      Date.parse leria "10/05/2026, 14:00:00" como 5 de outubro (formato americano). */
   const br = txt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[^\d]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (br) { let y = +br[3]; if (y < 100) y += 2000; return new Date(y, +br[2] - 1, +br[1], +(br[4] || 0), +(br[5] || 0), +(br[6] || 0)).getTime(); }
+  if (br) {
+    let y = +br[3]; if (y < 100) y += 2000;
+    const d = new Date(y, +br[2] - 1, +br[1], +(br[4] || 0), +(br[5] || 0), +(br[6] || 0));
+    return d.getFullYear() === y && d.getMonth() === +br[2] - 1 && d.getDate() === +br[1] ? d.getTime() : NaN;
+  }
   /* aaaa-mm-dd sem hora = meia-noite LOCAL (Date.parse usaria UTC → 21h do dia anterior) */
   const iso = txt.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]).getTime();
+  if (iso) {
+    const d = new Date(+iso[1], +iso[2] - 1, +iso[3]);
+    return d.getFullYear() === +iso[1] && d.getMonth() === +iso[2] - 1 && d.getDate() === +iso[3] ? d.getTime() : NaN;
+  }
   if (/^\d{1,2}\/\d{1,2}/.test(txt)) return NaN;
   return Date.parse(txt);
 }
-const slotMin = h => { const m = String(h).toUpperCase().match(/^(\d{1,2})(?::(\d{2}))?H?$/); return m ? (+m[1]) * 60 + (+(m[2] || 0)) : 0; };
+const slotMin = h => {
+  const m = String(h).trim().toUpperCase().match(/^(\d{1,2})(?::(\d{2}))?H?$/);
+  if (!m || +m[1] > 23 || +(m[2] || 0) > 59) return NaN;
+  return +m[1] * 60 + +(m[2] || 0);
+};
+const slotNormal = h => {
+  const minutos = slotMin(h);
+  return Number.isFinite(minutos) ? (minutos % 60 ? `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}` : `${String(Math.floor(minutos / 60)).padStart(2, '0')}H`) : '';
+};
+const valorColeta = v => v !== null && v !== undefined && typeof v !== 'boolean'
+  && String(v).trim() !== '' && Number.isFinite(Number(v));
 
 /* ---------- linha do tempo ---------- */
 export function montarLinhaDoTempo({ faccoes = [], entregas = [], transferencias = [] } = {}) {
@@ -66,7 +83,8 @@ export function montarLinhaDoTempo({ faccoes = [], entregas = [], transferencias
     }
   });
   transferencias.forEach(h => {
-    const t = [msDe(h.data), msDe(h.createdAtText)].find(Number.isFinite); if (!Number.isFinite(t)) return;
+    // A data efetiva define a atribuição da facção; a gravação pode ocorrer depois.
+    const t = [msDe(h.dataEfetiva), msDe(h.data), msDe(h.createdAtText)].find(Number.isFinite); if (!Number.isFinite(t)) return;
     push(h.group, t, h.depois?.origem?.faccao || null, 'transferencia');
     push(h.groupDestino, t, h.depois?.destino?.faccao || null, 'transferencia');
   });
@@ -139,7 +157,9 @@ export function atribuirLinhas(rows = [], tl, { faccoes = [], dataDe, slotsDe })
     const base = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
     const slots = slotsDe(r), porOcup = new Map();
     Object.entries(slots).forEach(([h, v]) => {
-      const occ = tl.ocupanteEm(g, base + slotMin(h) * 60000);
+      const minutos = slotMin(h);
+      if (!Number.isFinite(minutos) || !valorColeta(v)) return;
+      const occ = tl.ocupanteEm(g, base + minutos * 60000);
       if (occ === undefined) return; /* antes do primeiro registro: não conta para ninguém */
       const k = occ ? chave(occ) : '';
       if (!porOcup.has(k)) porOcup.set(k, { occ, slots: {} });
@@ -171,10 +191,15 @@ export function atribuirLinhas(rows = [], tl, { faccoes = [], dataDe, slotsDe })
  */
 export function coletaDoDia(slots = {}, dia, agora = new Date(), esperados = SLOTS_PADRAO) {
   const base = new Date(dia.getFullYear(), dia.getMonth(), dia.getDate()).getTime();
-  const tem = new Set(Object.keys(slots).filter(k => Number.isFinite(Number(slots[k]))));
+  const tem = new Set(Object.keys(slots).filter(k => valorColeta(slots[k])).map(slotNormal).filter(Boolean));
   let faltam = 0, aguardando = 0;
-  esperados.forEach(h => { if (tem.has(h)) return; if (base + slotMin(h) * 60000 > agora.getTime()) aguardando++; else faltam++; });
-  return { feitas: esperados.filter(h => tem.has(h)).length, esperadas: esperados.length, faltam, aguardando, parcial: faltam + aguardando > 0 && tem.size > 0 };
+  esperados.forEach(h => {
+    const normal = slotNormal(h), minutos = slotMin(h);
+    if (!Number.isFinite(minutos) || tem.has(normal)) return;
+    if (base + minutos * 60000 > agora.getTime()) aguardando++; else faltam++;
+  });
+  const validos = esperados.filter(h => Number.isFinite(slotMin(h)));
+  return { feitas: validos.filter(h => tem.has(slotNormal(h))).length, esperadas: validos.length, faltam, aguardando, parcial: faltam + aguardando > 0 && validos.some(h => tem.has(slotNormal(h))) };
 }
 export function rotuloColeta(c) {
   if (!c || !c.parcial) return '';
