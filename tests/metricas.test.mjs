@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
 async function browserModule(name){
- const src=readFileSync(new URL('../assets/modules/'+name,import.meta.url),'utf8');
+ let src=readFileSync(new URL('../assets/modules/'+name,import.meta.url),'utf8');
+ if(name==='metricas-motor.js'){
+  const dep=readFileSync(new URL('../assets/modules/ocupacao.js',import.meta.url),'utf8');
+  src=src.replace("from './ocupacao.js'","from 'data:text/javascript,"+encodeURIComponent(dep)+"'");
+ }
  return import('data:text/javascript,'+encodeURIComponent(src));
 }
 const parser=await browserModule('metricas-parser.js');
