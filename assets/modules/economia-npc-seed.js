@@ -169,3 +169,97 @@ export const BROKEN_ITEMS_SNAPSHOT = [
     "quantidadeNpc": 0
   }
 ];
+
+/** Leitura das duas imagens do comerciante de itens roubados, 22/10/2026. */
+export const STOLEN_ITEMS_SNAPSHOT = [
+  {
+    "nome": "Cola",
+    "codigo": "",
+    "precoSujo": 250,
+    "quantidadeNpc": 13607
+  },
+  {
+    "nome": "Estatueta de Cavalo",
+    "codigo": "",
+    "precoSujo": 750,
+    "quantidadeNpc": 497
+  },
+  {
+    "nome": "Bateria AA+",
+    "codigo": "",
+    "precoSujo": 275,
+    "quantidadeNpc": 7043
+  },
+  {
+    "nome": "Cabo de Alimentação",
+    "codigo": "",
+    "precoSujo": 300,
+    "quantidadeNpc": 5276
+  },
+  {
+    "nome": "Unidade SSD",
+    "codigo": "",
+    "precoSujo": 400,
+    "quantidadeNpc": 10586
+  },
+  {
+    "nome": "Placa de Vídeo",
+    "codigo": "",
+    "precoSujo": 900,
+    "quantidadeNpc": 927
+  },
+  {
+    "nome": "Processador",
+    "codigo": "",
+    "precoSujo": 600,
+    "quantidadeNpc": 3206
+  },
+  {
+    "nome": "Ventoinha do Processador",
+    "codigo": "",
+    "precoSujo": 350,
+    "quantidadeNpc": 1231
+  },
+  {
+    "nome": "Fonte de Alimentação",
+    "codigo": "",
+    "precoSujo": 300,
+    "quantidadeNpc": 3608
+  },
+  {
+    "nome": "Fita Isolante",
+    "codigo": "",
+    "precoSujo": 250,
+    "quantidadeNpc": 9176
+  },
+  {
+    "nome": "Fita Adesiva",
+    "codigo": "",
+    "precoSujo": 250,
+    "quantidadeNpc": 3702
+  },
+  {
+    "nome": "Aliança",
+    "codigo": "",
+    "precoSujo": 300,
+    "quantidadeNpc": 7257
+  },
+  {
+    "nome": "Televisão",
+    "codigo": "",
+    "precoSujo": 600,
+    "quantidadeNpc": 0
+  },
+  {
+    "nome": "Sabonete",
+    "codigo": "",
+    "precoSujo": 250,
+    "quantidadeNpc": 7003
+  },
+  {
+    "nome": "Memória RAM",
+    "codigo": "",
+    "precoSujo": 450,
+    "quantidadeNpc": 99
+  }
+];

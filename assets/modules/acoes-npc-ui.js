@@ -1,4 +1,4 @@
-import {BROKEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=1';
+import {BROKEN_ITEMS_SNAPSHOT,STOLEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=2';
 import {npcStats,houseLootScenario} from './acoes-npc-core.js?v=2';
 import {priceOf} from './acoes-core.js?v=5';
 
@@ -13,7 +13,7 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave,o
  const persisted=()=>getRegistry()?.npcMarkets?.[market]||{items:[],history:[]};
  function hydrate(){
   const saved=persisted();
-  draft=(drafts.get(market) || (saved.updatedAt||saved.items?.length?saved.items:market==='ARMAS_QUEBRADAS'?BROKEN_ITEMS_SNAPSHOT:[])).map(x=>({...x}));
+  draft=(drafts.get(market) || (saved.updatedAt||saved.items?.length?saved.items:market==='ARMAS_QUEBRADAS'?BROKEN_ITEMS_SNAPSHOT:STOLEN_ITEMS_SNAPSHOT)).map(x=>({...x}));
   loot=draft.map(()=>0);
   render();
  }
@@ -51,8 +51,8 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave,o
   table.innerHTML=rowsHtml()||
    '<tr><td colspan="7" class="ap-row-muted">Nenhum item cadastrado neste NPC. As fotos com os preços poderão ser transcritas para esta tabela.</td></tr>';
   if(status)status.textContent='Última atualização registrada: '+(persisted().updatedAt?
-   new Date(persisted().updatedAt).toLocaleString('pt-BR'):market==='ARMAS_QUEBRADAS'?'imagens de 22/10/2026':'sem dados compartilhados')+
-   (market==='ARMAS_QUEBRADAS'&&!persisted().updatedAt?' • Base: 28 itens transcritos das imagens de 22/10/2026. Sem sincronização ao vivo.':' • Contador acumulado de itens já comprados. Atualização manual.');
+   new Date(persisted().updatedAt).toLocaleString('pt-BR'):'imagens de 22/10/2026')+
+   (!persisted().updatedAt?' • Base: '+(market==='ARMAS_QUEBRADAS'?28:15)+' itens transcritos das imagens de 22/10/2026. Atualização manual.':' • Contador acumulado de itens já comprados. Atualização manual.');
   const count=persisted().history?.length||0;
   if($('apNpcHistory'))$('apNpcHistory').textContent='Snapshots anteriores salvos: '+count+
    '. Cada registro preserva preços e quantidades. Se o contador diminuir, começa uma nova base de comparação; o dinheiro anteriormente pago não é apagado da cidade.';
