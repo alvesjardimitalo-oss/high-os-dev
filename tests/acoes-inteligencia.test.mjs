@@ -105,5 +105,5 @@ test('tela oferece mínimo e máximo editáveis para Suricato e comparação ATM
  }
  assert.match(ui,/copySuricato/);
  assert.match(ui,/renderExplosiveComparison/);
- assert.match(app,/acoes-planejador-ui\.js\?v=13/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=14/);
 });
