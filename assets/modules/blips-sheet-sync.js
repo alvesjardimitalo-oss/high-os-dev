@@ -16,15 +16,29 @@ function fold(v){
 function sector(f){
  const s=fold(f.segmento);
  const g=fold(f.group);
- if(s.includes("ARMA")||g.startsWith("ARMAS"))return ["ARMAS","Armas"];
- if(s.includes("MUNIC")||g.startsWith("MUNICAO"))return ["MUNICAO","Munição"];
- if(s.includes("DROG")||g.startsWith("DROGAS")||g==="MANICOMIO")return ["DROGAS","Drogas"];
- if(s.includes("LAVAG")||g.startsWith("LAVAGEM"))return ["LAVAGEM","Lavagem"];
- if(s.includes("DESMANC")||g.startsWith("DESMANCHE"))return ["DESMANCHE","Desmanche"];
- if(s.includes("ESTELION")||g.startsWith("ESTELIONATARIOS"))return ["ESTELIONATARIOS","Estelionatários"];
- if(s.includes("GALPAO")||g.startsWith("GALPAO"))return ["GALPOES","Galpões"];
- if(s.includes("CONTRABANDO")||g.startsWith("CONTRABANDO"))return ["CONTRABANDO","Contrabando"];
- if(s.includes("APOIO")||s.includes("MECAN")||s.includes("HOSPITAL")||g.startsWith("ILEGALMECHANIC")||g.startsWith("ILEGALMEDIC"))return ["APOIO","Apoio"];
+ // O identificador canônico do Group prevalece sobre o segmento editável.
+ // Um cadastro com segmento desatualizado não deve colocar a ficha na aba errada.
+ if(g==="MANICOMIO")return ["DROGAS","Drogas"];
+ if(g.startsWith("ILEGALMECHANIC")||g.startsWith("ILEGALMEDIC"))return ["APOIO","Apoio"];
+ const byGroup=[
+  ["ARMAS","ARMAS","Armas"],["MUNICAO","MUNICAO","Munição"],
+  ["DROGAS","DROGAS","Drogas"],["LAVAGEM","LAVAGEM","Lavagem"],
+  ["DESMANCHE","DESMANCHE","Desmanche"],
+  ["ESTELIONATARIOS","ESTELIONATARIOS","Estelionatários"],
+  ["GALPAO","GALPOES","Galpões"],["CONTRABANDO","CONTRABANDO","Contrabando"]
+ ];
+ for(const [prefix,key,title] of byGroup){
+  if(g.startsWith(prefix))return [key,title];
+ }
+ if(s.includes("ARMA"))return ["ARMAS","Armas"];
+ if(s.includes("MUNIC"))return ["MUNICAO","Munição"];
+ if(s.includes("DROG"))return ["DROGAS","Drogas"];
+ if(s.includes("LAVAG"))return ["LAVAGEM","Lavagem"];
+ if(s.includes("DESMANC"))return ["DESMANCHE","Desmanche"];
+ if(s.includes("ESTELION"))return ["ESTELIONATARIOS","Estelionatários"];
+ if(s.includes("GALPAO"))return ["GALPOES","Galpões"];
+ if(s.includes("CONTRABANDO"))return ["CONTRABANDO","Contrabando"];
+ if(s.includes("APOIO")||s.includes("MECAN")||s.includes("HOSPITAL"))return ["APOIO","Apoio"];
  return [s||"OUTROS",plain(f.segmento)||"Outros"];
 }
 function cell(rows,r,c){return plain(rows[r]?.[c]);}
@@ -219,8 +233,16 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
    if(!isNew&&value===found)continue;
    if(!isNew&&onlyMissing)continue;
    if(!isNew&&preserveExisting&&found&&!explicitChange)continue; // entrega não altera instalações preexistentes
-   const existingAnchor=!s.newBlock&&found
-    ? Array.from({length:6},(_,i)=>col+i).find(c=>cell(rows,r,c))??col :col;
+   const occupiedColumns=s.newBlock?[]:Array.from({length:6},(_,i)=>col+i)
+    .filter(c=>Boolean(cell(rows,r,c)));
+   // Há planilhas históricas com dados técnicos repartidos entre colunas.
+   // Substituir só a primeira esconderia as demais CDS e criaria estado misto.
+   if(explicitChange&&occupiedColumns.length>1){
+    throw new Error("BLIPS COORDENADAS: "+f.group+" / "+label+
+     " possui "+occupiedColumns.length+" células preenchidas. "+
+     "Revise/consolide este campo na planilha antes de alterar; nada foi gravado.");
+   }
+   const existingAnchor=occupiedColumns[0]??col;
    put(requests,TAB_GID,r,existingAnchor,value);
   }
   if(s.newBlock)put(requests,TAB_GID,s.sectionRow,8,String(s.reserved.size));
