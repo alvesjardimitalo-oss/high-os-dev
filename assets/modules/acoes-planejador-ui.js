@@ -5,6 +5,7 @@ const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'
 const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(x):'A confirmar';
 const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(x):'—';
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
+let approveHandler=null,approvedThisSession=new Set();
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'por-jogador',reuse:0,roi:.25,
  targetPerPlayer:20000,tolerance:.25,tax:.3,quantities:{},prices:{},manualPayout:null};
 const action=()=>actions.find(a=>a.nome===selection);
@@ -139,6 +140,7 @@ function summary(){
   'Com '+money(state.manualPayout)+' sujo, lucro líquido total de '+
    money(state.manualPayout*(1-p.tax)-p.kit.effectiveCost)+' ('+money((state.manualPayout*(1-p.tax)-p.kit.effectiveCost)/p.team)+' por invasor).';
  el('apCopy').disabled=!p.payoutAdjustable;
+ const sync=el('apApprove');if(sync){sync.hidden=!approveHandler;sync.disabled=!approveHandler||!['BUFF','NERF'].includes(p.status)||approvedThisSession.has(a.nome);}
  scenarios();
 }
 function render(){
@@ -167,6 +169,24 @@ async function copyProposal(){
  try{await navigator.clipboard.writeText(text);status.textContent='Proposta copiada. Revisão e aprovação necessárias antes de alterar prêmio oficial.';}
  catch{status.textContent='Clipboard indisponível. Copie esta análise em um navegador seguro com HTTPS.';}
 }
+async function approveProposal(){
+ if(!approveHandler)return;
+ const a=action(),p=calculateAction(a,catalog,options());
+ if(!['BUFF','NERF'].includes(p.status)||approvedThisSession.has(a.nome))return;
+ const button=el('apApprove'),message=el('apCopyStatus');
+ button.disabled=true;message.textContent='Verificando a aba original e aguardando aprovação segura...';
+ try{
+  const result=await approveHandler({name:a.nome,officialMin:p.min,proposedMin:p.payoutNeeded,
+    team:p.team,cost:p.kit.total,tax:p.tax});
+  if(result?.cancelled){message.textContent='Aprovação cancelada. Nenhuma célula foi alterada.';return;}
+  if(!result?.updated)throw Error('A sincronização não confirmou a alteração.');
+  approvedThisSession.add(a.nome);
+  message.textContent='BUFF/NERF atualizado na aba original. '+(result.verified?'Prêmio conferido.':'Confira o resultado da fórmula no Google Sheets.')+
+    (result.audited?' Auditoria registrada no High OS.':' Histórico do High OS pendente.');
+ }catch(error){
+  message.textContent='NÃO SINCRONIZADO: '+(error?.message||String(error));
+ }finally{button.disabled=approvedThisSession.has(a.nome)||!['BUFF','NERF'].includes(p.status);}
+}
 function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"';}
 function exportAnalysis(){
  const headers=['Ação','Status','Invasores','Policiais mínimos','Custo simulado','Custo oficial','Prêmio atual min','Prêmio atual max','Lucro líquido min','Lucro por invasor','Meta individual','Meta ROI','Sugerido min','Sugerido max','Buff/nerf','Avaliação','Pendências'];
@@ -188,6 +208,7 @@ function listeners(){
   const team=ev.target.closest('[data-ap-team]');
   if(team){state.team=Number(team.dataset.apTeam);state.quantities={};render();return;}
   if(ev.target.closest('#apCopy'))copyProposal();
+  if(ev.target.closest('#apApprove'))approveProposal();
   if(ev.target.closest('#apExport'))exportAnalysis();
  });
  root.addEventListener('input',ev=>{
@@ -224,7 +245,8 @@ function listeners(){
   else if(e.id==='apTeam'){state.team=Number(e.value);state.quantities={};render();}
  });
 }
-export async function mountActionPlanner(){
+export async function mountActionPlanner({onApproveAction=null}={}){
+ approveHandler=onApproveAction;
  root=el('actionEconomyPlanner');if(!root||ready)return;
  ready=true;
  try{
