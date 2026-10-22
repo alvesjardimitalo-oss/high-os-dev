@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 const coreText=readFileSync(new URL('../assets/modules/acoes-core.js',import.meta.url),'utf8');
 const coreUrl='data:text/javascript,'+encodeURIComponent(coreText);
 const rankingsText=readFileSync(new URL('../assets/modules/acoes-ranking.js',import.meta.url),'utf8')
- .replace("from './acoes-core.js?v=2'",'from '+JSON.stringify(coreUrl));
+ .replace("from './acoes-core.js?v=5'",'from '+JSON.stringify(coreUrl));
 const {RANKING_MODES,rankingMetrics,buildActionRankings}=
  await import('data:text/javascript,'+encodeURIComponent(rankingsText));
 
@@ -104,8 +104,9 @@ test('Painel, navegação para os detalhes e imagens integradas estão presentes
  for(const id of ['apRankingHeading','apRankingTabs','apRankingHighlights','apRankingLimit','apRankingResults','apRankingMethod'])
   assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(ui,/data-ap-ranked/);
- assert.match(ui,/rankBoard\(\);refreshPriceAlerts\(\);teamOptions\(\)/);
+ assert.match(ui,/rankBoard\(\);refreshPriceAlerts\(\);[\s\S]*?teamOptions\(\)/);
  assert.match(ui,/actionPhoto\(a\)/);
  assert.match(ui,/data-ap-rank/);
- assert.match(app,/acoes-planejador-ui\.js\?v=10/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=16/);
 });
+

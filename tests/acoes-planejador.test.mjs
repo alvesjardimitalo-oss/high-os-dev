@@ -43,7 +43,7 @@ test('Vitória paga reposição; derrota não recebe prêmio e perde tudo',()=>{
  assert.equal(p.kit.retained,192500);
  assert.equal(p.buffIncluded,55000);
  assert.equal(p.rule.policiais,5);
- assert.equal(p.status,'NERF');
+ assert.equal(p.status,'MANTER'); // Metas isoladas não justificam nerf sem variação de custos.
  assert.equal(p.payoutNeeded,222858);
 });
 test('Com três invasores, três kits e só um pendrive',()=>{
@@ -124,12 +124,12 @@ test('Variações simuladas não são classificadas como divergência do custo o
  assert.equal(k.baselineMismatch,false);
  assert.notEqual(k.comparison,0);
 });
-test('Recomendação usa despesas de reposição e ROI sobre capital exposto',()=>{
+test('Metas simuladas usam reposição e ROI, mas preservam prêmio oficial',()=>{
  const p=calculateAction(store,products,{team:4,roi:.25,targetPerPlayer:20000});
  assert.equal(p.targetProfit,80000);
  assert.equal(p.payoutNeeded,222858);
  const higher=calculateAction(store,products,{team:4,targetPerPlayer:70000,roi:0});
- assert.equal(higher.status,'BUFF');
+ assert.equal(higher.status,'MANTER');
  assert.ok(higher.payoutNeeded>p.payoutNeeded);
 });
 test('Preço ausente bloqueia sugestão e jamais vira zero',()=>{
@@ -169,7 +169,7 @@ test('Nova página mantém permissões, listagem, controles e dois resultados ex
  }
  assert.doesNotMatch(html,/id="apReuse"/);
  assert.match(ui,/kitMode:'oficial'/);
- assert.match(ui,/Kit mantido/);
+ assert.match(ui,/Armas mantidas|Kit conservado/);
  assert.match(ui,/d\.eligibleForSheet/);
  assert.match(ui,/prejuízo|Prejuízo/i);
 });
@@ -182,3 +182,4 @@ test('A aprovação revalida a planilha e protege fórmulas/aba original',()=>{
  assert.match(fn,/BUFF\/NERF recebeu uma fórmula durante a confirmação/);
  assert.ok(fn.indexOf('latestFormulas=await')<fn.indexOf("root+':batchUpdate'"));
 });
+
