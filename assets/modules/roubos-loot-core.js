@@ -59,3 +59,72 @@ export function houseRunMetrics(runs=[]){
   hourly:minutes?timed.reduce((s,x)=>s+x.profit,0)*60/minutes:null,
   grossDirty:runs.reduce((s,x)=>s+x.grossDirty,0)};
 }
+
+/** One search point: render gate -> one weighted entry -> integer quantity. */
+function prepareInvasion(parts,prices){
+ if(!Array.isArray(parts)||!parts.length)throw Error('Informe os locais da invasão.');
+ return parts.map(part=>{
+  const count=number(part.count),chance=number(part.chance??part.table.chance);
+  if(!Number.isInteger(count)||count<0||count>100||chance===null||chance<0||chance>1)throw Error('Locais ou chance inválidos.');
+  const pool=part.table.items.reduce((sum,row)=>sum+row.peso,0);
+  if(!(pool>0))throw Error('Pool inválido.');
+  let cumulative=0;
+  return {count,chance,pool,rows:part.table.items.map(row=>({...row,unit:lootPrice(row,prices),cumulative:cumulative+=row.peso}))};
+ });
+}
+export function invasionExpectation(parts,prices,{lockpickUnit=null,uses=1,tax=.3}={}){
+ const configured=prepareInvasion(parts,prices),unit=number(lockpickUnit),usage=number(uses),wash=number(tax);
+ if(!Number.isInteger(usage)||usage<1||usage>100||wash===null||wash<0||wash>=1||unit!==null&&unit<0)throw Error('Confira usos, custo e lavagem.');
+ let units=0,directDirty=0,pricedDirty=0,unknownUnits=0,emptyChance=1,allPriced=true,rewardedPoints=0;
+ const items=new Map();
+ for(const part of configured){
+  emptyChance*=Math.pow(1-part.chance,part.count);rewardedPoints+=part.count*part.chance;
+  const grouped=new Map();
+  for(const row of part.rows){
+   const conditional=row.peso/part.pool,eventChance=conditional*part.chance,qty=(row.min+row.max)/2;
+   const expectedQty=part.count*eventChance*qty;
+   if(row.codigo==='dirtydollar')directDirty+=expectedQty;
+   else{units+=expectedQty;if(row.unit===null){unknownUnits+=expectedQty;if(expectedQty>0)allPriced=false;}else pricedDirty+=expectedQty*row.unit;}
+   const key=row.codigo||row.nome;
+   const group=grouped.get(key)||{...row,expectedQty:0,probability:0};group.expectedQty+=expectedQty;group.probability+=eventChance;grouped.set(key,group);
+  }
+  for(const [key,row] of grouped){const current=items.get(key)||{nome:row.nome,codigo:row.codigo,unit:row.unit,expectedQty:0,absentProbability:1};current.expectedQty+=row.expectedQty;current.absentProbability*=Math.pow(1-row.probability,part.count);items.set(key,current);}
+ }
+ const knownGrossDirty=directDirty+pricedDirty,investment=unit===null?null:unit*usage;
+ const knownProfit=investment===null?null:knownGrossDirty*(1-wash)-investment;
+ return {locations:configured.reduce((sum,x)=>sum+x.count,0),units,directDirty,pricedDirty,knownGrossDirty,unknownUnits,allPriced,emptyChance,rewardedPoints,investment,knownProfit,
+  profit:allPriced?knownProfit:null,perUseKnownProfit:knownProfit===null?null:knownProfit/usage,
+  perUseProfit:allPriced&&knownProfit!==null?knownProfit/usage:null,
+  items:[...items.values()].map(x=>({...x,probability:1-x.absentProbability})).sort((a,b)=>b.expectedQty-a.expectedQty)};
+}
+export function simulateInvasions(parts,prices,{trials=10000,seed=42,lockpickUnit=null,uses=1,tax=.3}={}){
+ if(!Number.isInteger(trials)||trials<1||trials>50000)throw Error('Quantidade de simulações inválida.');
+ const prepared=prepareInvasion(parts,prices),expected=invasionExpectation(parts,prices,{lockpickUnit,uses,tax});
+ let randomState=Number(seed)>>>0;
+ const random=()=>{randomState=(Math.imul(1664525,randomState)+1013904223)>>>0;return randomState/4294967296;};
+ const quantities=[],revenues=[];let totalUnits=0,totalKnownDirty=0,empty=0;const samples=[];
+ for(let trial=0;trial<trials;trial++){
+  let units=0,knownDirty=0,directDirty=0,rewards=0;const inventory=new Map();let unknown=false;
+  for(const part of prepared)for(let point=0;point<part.count;point++){
+   if(random()>=part.chance)continue;
+   const weight=random()*part.pool,row=part.rows.find(x=>weight<x.cumulative);
+   const quantity=row.min+Math.floor(random()*(row.max-row.min+1));rewards++;
+   if(row.codigo==='dirtydollar'){directDirty+=quantity;knownDirty+=quantity;}
+   else{units+=quantity;if(row.unit===null)unknown=true;else knownDirty+=quantity*row.unit;}
+   const key=row.codigo||row.nome,old=inventory.get(key)||{nome:row.nome,codigo:row.codigo,quantidade:0};old.quantidade+=quantity;inventory.set(key,old);
+  }
+  totalUnits+=units;totalKnownDirty+=knownDirty;if(rewards===0)empty++;
+  quantities.push(units);revenues.push(knownDirty);
+  if(trial<8)samples.push({units,directDirty,knownDirty,unknown,items:[...inventory.values()],profit:expected.investment===null||unknown?null:knownDirty*(1-tax)-expected.investment});
+ }
+ quantities.sort((a,b)=>a-b);revenues.sort((a,b)=>a-b);
+ const quantile=(arr,p)=>arr[Math.floor((arr.length-1)*p)];
+ return {trials,expected,meanUnits:totalUnits/trials,meanKnownDirty:totalKnownDirty/trials,emptyRate:empty/trials,
+  unitsP10:quantile(quantities,.1),unitsP50:quantile(quantities,.5),unitsP90:quantile(quantities,.9),
+  knownDirtyP10:quantile(revenues,.1),knownDirtyP90:quantile(revenues,.9),samples};
+}
+export function houseSearchParts(tables,locations=1,safes=0){
+ const total=number(locations),cofres=number(safes);
+ if(!Number.isInteger(total)||total<1||total>5||!Number.isInteger(cofres)||cofres<0||cofres>total)throw Error('A casa deve ter de 1 a 5 locais, com cofres entre zero e o total de locais.');
+ return [{table:tables.cofre,count:cofres},{table:tables.armario,count:total-cofres}];
+}

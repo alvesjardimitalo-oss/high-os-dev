@@ -24,13 +24,14 @@ class Host extends Element {
 test('fluxo da casa calcula, bloqueia preço ausente, registra e mantém resultado congelado',async()=>{
  const host=new Host();let registry=cleanRegistry();
  createHouseWorkbench({root:{querySelector:()=>host},getRegistry:()=>registry,getCatalog:()=>({itens:[{item:'LOCKPICK ++',status:'ativo',pista:100}]}),canEdit:()=>true,onSave:async entry=>{registry=applyRegistryMutation(registry,{kind:'house-run-save',entry});}});
- assert.equal(host.dataset.hlStage,'projecao');assert.match(host.querySelector('#hlProjection').innerHTML,/Informe os sorteios/);
+ assert.equal(host.dataset.hlStage,'projecao');assert.match(host.querySelector('#hlProjection').innerHTML,/Itens físicos por invasão/);
+ host.input('hl-locations','5');assert.match(host.querySelector('#hlProjection').innerHTML,/Casa simulada: 5/);assert.match(host.querySelector('#hlProjection').innerHTML,/Comparação de casas com 1 a 5 locais/);
  await host.click('hlStageNav=registro');assert.equal(host.dataset.hlStage,'registro');
  const qty=host.nodes.find(x=>x.dataset.hlQuantity==='ssddrive');qty.value='2';host.events.input({target:qty});host.input('hl-direct','200');
  assert.match(host.querySelector('#hlActual').innerHTML,/600/);
  const price=host.nodes.find(x=>x.dataset.hlPrice==='ssddrive');price.value='';host.events.input({target:price});await host.click('#hlSave');assert.equal(registry.houseRuns.length,0);assert.match(host.querySelector('#hlMessage').textContent,/preço/);
  price.value='400';host.events.input({target:price});await host.click('#hlSave');assert.equal(registry.houseRuns.length,1);assert.equal(registry.houseRuns[0].profit,600);assert.equal(host.dataset.hlStage,'historico');
  await host.click('hlMode=npc');assert.equal(host.dataset.hlStage,'projecao');assert.match(host.querySelector('#hlTables').innerHTML,/1.528|1528/);
- await host.click('hlMode=portamalas');assert.match(host.querySelector('#hlProjection').innerHTML,/Informe os sorteios/);
+ await host.click('hlMode=portamalas');assert.match(host.querySelector('#hlProjection').innerHTML,/Itens físicos por invasão/);
  await host.click('hlMode=casas');assert.match(host.querySelector('#hlHistory').innerHTML,/600/);
 });
