@@ -108,6 +108,48 @@ test('Novos controles de decisão, histórico, refência e valores manuais fazem
  assert.match(app,/actionSaveReference/);
  assert.match(app,/actionRejectProposal/);
  assert.match(app,/actionReadSheetPrizes/);
- assert.match(app,/acoes-planejador-ui\.js\?v=4/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=5/);
  assert.match(app,/root\+':batchUpdate'/);
+});
+
+test('Valor sugerido fica visível e combina mínimo, máximo e lucro por participante',()=>{
+ const d=analyzeDecision(action,catalog,{team:2,targetPerPlayer:140000,roi:.25});
+ assert.equal(d.direction,'CONSIDERAR BUFF');
+ assert.equal(d.recommendedMin,471429);
+ assert.equal(d.recommendedMax,565715);
+ assert.equal(d.recommendedDelta,171429);
+ assert.ok(d.recommendedPercent>.57);
+ assert.ok(Math.abs(d.recommendedPerMember-140000)<1);
+ assert.ok(d.eligibleForSheet);
+});
+test('Ação saudável recomenda MANTER prêmio atual e não simula nerf',()=>{
+ const d=analyzeDecision(action,catalog,{team:2,targetPerPlayer:80000,roi:0});
+ assert.equal(d.direction,'MANTER');
+ assert.equal(d.recommendedMin,300000);
+ assert.equal(d.recommendedMax,360000);
+ assert.equal(d.recommendedDelta,0);
+ assert.equal(d.recommendedPercent,0);
+ assert.equal(d.recommendedPerMember,80000);
+});
+test('Faltando preço, recomendação não inventa valor nem lucro',()=>{
+ const unknown={itens:catalog.itens.filter(x=>x.item!=='COLETE')};
+ const d=analyzeDecision(action,unknown,{team:2});
+ assert.equal(d.valid,false);
+ assert.equal(d.direction,'PENDENTE');
+ assert.equal(d.recommendedMin,null);
+ assert.equal(d.recommendedMax,null);
+ assert.equal(d.recommendedPerMember,null);
+});
+test('A sugestão aparece na capa, na lista e possui atalho para a aprovação',()=>{
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ const ui=readFileSync(new URL('../assets/modules/acoes-planejador-ui.js',import.meta.url),'utf8');
+ for(const k of ['apSuggestedMain','apQuickMetrics','apStrategyDetails'])assert.ok(html.includes('id="'+k+'"'),k);
+ assert.match(ui,/function showMainRecommendation/);
+ assert.match(ui,/showMainRecommendation\(d\)/);
+ assert.match(ui,/data-ap-action/);
+ assert.match(ui,/SUGESTÃO/);
+ assert.match(ui,/RECOMENDADO \(MÍNIMO\)/);
+ assert.match(ui,/id="apOpenStrategy"/);
+ assert.match(ui,/details\.open=true/);
+ assert.match(ui,/value=manual\?state\.manualPayout:d\.recommendedMin/);
 });
