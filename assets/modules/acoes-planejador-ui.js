@@ -1,5 +1,6 @@
 import {ACOES_SOURCE,CATALOGO_SOURCE,calculateAction,defaultTeam,availableTeams,getRules,photoUrl,norm} from './acoes-core.js?v=2';
 import {RANKING_MODES,buildActionRankings} from './acoes-ranking.js?v=1';
+import {makePriceReference,assessPriceChanges,analyzeDecision,applySheetPrizeOverrides} from './acoes-inteligencia.js?v=1';
 
 const el=id=>document.getElementById(id);
 const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -7,16 +8,104 @@ const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency
 const percent=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(x):'—';
 let root,ready=false,actions=[],catalog=null,meta=null,selection='',localIndex=0;
 let approveHandler=null,approvedThisSession=new Set();
+let onReadReference=null,onSaveReference=null,onRejectAction=null,onReadDecisions=null,onReadSheet=null;
+let reference=null,sheetOverrides=[],publishedActions=[],lastPriceRead=null;
 const state={team:0,search:'',status:'ATIVAS',priceMode:'pista',kitMode:'oficial',priceShift:0,ammoUse:.25,accessConsumed:true,roi:.25,
- targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null};
+ targetPerPlayer:20000,tolerance:.25,tax:.3,rankMode:'lucro-total',rankLimit:10,quantities:{},prices:{},manualPayout:null,teamPayout:'publicado',policeWaitMinutes:null,estimatedActionMinutes:null,winChance:null,targetHourly:0};
 const action=()=>actions.find(a=>a.nome===selection);
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
+const decision=()=>analyzeDecision(action(),catalog,{...options(),team:state.team,referenceTeam:defaultTeam(action())});
 const kpi=(label,value,style='',info='')=>'<div class="ap-kpi '+style+'"><small>'+safe(label)+'</small><strong>'+safe(value)+'</strong>'+(info?'<div class="ap-extra">'+safe(info)+'</div>':'')+'</div>';
 const chip=s=>'<span class="ap-tag '+(['BUFF','NERF','REVISAR CUSTO','INSUMO SEM PREÇO','EQUIPE INVÁLIDA'].includes(s)?'warning':s==='MANTER'?'good':'')+'">'+safe(s)+'</span>';
 function choose(name){
  selection=name;localIndex=0;state.prices={};state.quantities={};state.manualPayout=null;
  state.team=defaultTeam(action());el('apManual').value='';render();
+}
+
+
+function refreshPriceAlerts(){
+ if(!el('apPriceAlerts')||!catalog)return;
+ const report=assessPriceChanges(actions,catalog,reference,{tax:state.tax,ammoUse:state.ammoUse,
+  accessConsumed:state.accessConsumed});
+ const intro=el('apPriceAlertIntro'),box=el('apPriceAlerts'),save=el('apSaveReference');
+ if(save)save.hidden=!onSaveReference;
+ if(!report.available){
+  intro.textContent='Nenhuma referência anterior salva. Para detectar alterações reais, registre o catálogo atual uma única vez.';
+  box.innerHTML='<p class="ap-hint">Sem referência histórica: nenhuma alta ou queda será inventada. A gestão pode guardar os preços atuais e compará-los nas próximas visitas.</p>';
+ }else{
+  intro.textContent='Comparado à referência da gestão de '+(new Date(report.referenceDate).toLocaleString('pt-BR')||'data não informada')+
+   ' • '+report.up+' ações encareceram • '+report.down+' ficaram mais baratas.';
+  box.innerHTML=report.changes.length?
+   report.changes.slice(0,12).map(c=>
+    '<button type="button" class="ap-price-alert" data-ap-action="'+safe(c.name)+'">'+
+     '<span><b>'+safe(c.name)+'</b><small>'+c.team+' participantes • '+c.items.map(x=>safe(x.name)).slice(0,4).join(' / ')+'</small></span>'+
+     '<span class="'+(c.difference>0?'ap-alert-up':'ap-alert-down')+'"><b>'+
+      (c.difference>0?'+':'')+safe(money(c.difference))+'</b><small>'+
+      (c.percent===null?'Variação não informada':percent(c.percent))+
+      ' • '+(c.difference>0?'considerar revisão de buff':'considerar revisão de nerf')+'</small>'+
+      '<small>Lucro/membro: '+safe(money(c.oldProfitPerMember))+' → '+safe(money(c.newProfitPerMember))+'</small></span></button>'
+   ).join(''):'<p class="ap-hint">Nenhuma alteração de custo encontrada desde a referência salva.</p>';
+ }
+ const pending=actions.filter(a=>a.premioFonte==='Google Sheets').length;
+ const info=el('apPublicationStatus');
+ if(info)info.textContent=pending?
+   pending+' premiação(ões) conferida(s) na planilha. O Mercado Negro público pode estar desatualizado; publicação no GitHub é separada e não é feita automaticamente por esta tela.':
+   'Prêmios carregados do catálogo público. Para conferir alterações recentes da planilha, use “Conferir prêmios na planilha”. Alterações aprovadas não publicam automaticamente no GitHub.';
+ const read=el('apReadSheet');if(read)read.hidden=!onReadSheet;
+}
+async function saveReference(){
+ if(!onSaveReference)return;
+ if(!confirm('Salvar os preços atuais como referência compartilhada? Isso substitui a referência anterior e zera os alertas de variação para novas comparações.'))return;
+ const status=el('apPriceAlertIntro');
+ try{
+  const snapshot=makePriceReference(catalog);
+  const result=await onSaveReference(snapshot);
+  if(!result?.saved)throw Error('O servidor não confirmou a gravação.');
+  reference=snapshot;refreshPriceAlerts();
+  status.textContent='Referência salva. Novas alterações de preço aparecerão aqui quando o módulo consultar o catálogo novamente.';
+ }catch(e){status.textContent='Não foi possível salvar a referência: '+(e.message||String(e));}
+}
+async function refreshPriceCatalog(){
+ const button=el('apRefreshPrices');if(button)button.disabled=true;
+ try{
+  const responses=await Promise.all([fetch(ACOES_SOURCE,{cache:'no-store'}),fetch(CATALOGO_SOURCE,{cache:'no-store'})]);
+  if(responses.some(x=>!x.ok))throw Error('Fonte indisponível.');
+  const data=await responses[0].json(),next=await responses[1].json();
+  if(!Array.isArray(data.acoes)||!Array.isArray(next.itens))throw Error('Formato inválido.');
+  publishedActions=data.acoes;actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+  catalog=next;meta=data.meta||{};
+  if(!action())selection=actions.find(a=>a.status!=='inativo')?.nome||actions[0]?.nome||'';
+  if(action())render();
+  lastPriceRead=new Date().toISOString();
+  el('apSource').textContent='Mercado Negro • catálogo consultado agora • '+catalog.itens.length+
+   ' produtos • '+actions.length+' ações'+(sheetOverrides.length?' • prêmios da planilha sobrepostos':'');
+ }catch(e){el('apPriceAlertIntro').textContent='Não foi possível atualizar o Mercado Negro: '+(e.message||String(e));}
+ finally{if(button)button.disabled=false;}
+}
+async function refreshSheetPrizes(){
+ if(!onReadSheet)return;
+ const button=el('apReadSheet');button.disabled=true;
+ try{
+  const result=await onReadSheet();
+  sheetOverrides=result.prizes||[];
+  actions=applySheetPrizeOverrides(publishedActions,sheetOverrides);
+  if(action())render();
+  el('apCopyStatus').textContent='Prêmios lidos diretamente da planilha às '+new Date(result.readAt).toLocaleTimeString('pt-BR')+
+   '. Se divergirem do Mercado Negro público, a publicação do catálogo permanece pendente.';
+ }catch(e){el('apCopyStatus').textContent='Erro ao conferir planilha: '+(e.message||String(e));}
+ finally{button.disabled=false;}
+}
+async function showDecisionHistory(){
+ if(!onReadDecisions)return;
+ const box=el('apDecisionHistory');box.hidden=false;box.textContent='Consultando histórico...';
+ try{
+  const items=await onReadDecisions();
+  box.innerHTML=items.length?items.map(d=>
+   '<div class="ap-decision-history-line"><b>'+safe(d.decisao||d.tipo)+'</b> • '+safe(d.acao||'Referência de preços')+
+   ' • '+safe(d.usuario)+' • '+safe(d.motivo||'Sem justificativa cadastrada')+'</div>'
+  ).join(''):'<p class="ap-row-muted">Nenhuma decisão anterior encontrada.</p>';
+ }catch(e){box.textContent='Histórico indisponível: '+(e.message||String(e));}
 }
 
 function rankFormat(mode,value){
@@ -237,7 +326,7 @@ function summary(){
 }
 function render(){
  if(!action())return;
- actionsList();rankBoard();teamOptions();photosAndRules();kitTable();summary();
+ actionsList();rankBoard();refreshPriceAlerts();teamOptions();photosAndRules();kitTable();summary();
 }
 async function copyProposal(){
  const a=action(),p=calculateAction(a,catalog,options());
