@@ -2,7 +2,7 @@ import {BROKEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=1';
 import {npcStats,houseLootScenario} from './acoes-npc-core.js?v=2';
 import {priceOf} from './acoes-core.js?v=5';
 
-export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave,onMarketChange=()=>{}}){
+export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave,onMarketChange=null}){
  const $=id=>root.querySelector('#'+id);
  const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
  const money=n=>Number.isFinite(n)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(n):'A informar';
@@ -135,7 +135,7 @@ export function createNpcWorkbench({root,getRegistry,getCatalog,canEdit,onSave,o
  });
  hydrate();
  function selectMarket(next){
-  collect();market=next in keys?next:'CASAS';hydrate();showMessage('');onMarketChange();
+  collect();market=next in keys?next:'CASAS';hydrate();showMessage('');onMarketChange?.();
  }
  return {refresh(){drafts.clear();hydrate();},selectMarket,market:()=>market};
 }

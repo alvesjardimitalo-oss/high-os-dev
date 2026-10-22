@@ -69,7 +69,7 @@ test('planejador usa subpáginas e formulário com controles reais',()=>{
  for(const id of ['apNewAction','apActionForm','apSaveEntry','apDeleteAction','apArchiveBox','apCatalogMore','apManageShowAll','apEntryType'])
   assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(html,/acoes-planejador\.css\?v=12/);
- assert.match(app,/acoes-planejador-ui\.js\?v=16/);
+ assert.match(app,/acoes-planejador-ui\.js\?v=17/);
  assert.match(ui,/createActionWorkspace/);
  assert.match(workspace,/onMutateRegistry/);
  assert.match(workspace,/showModal\(\)/);
