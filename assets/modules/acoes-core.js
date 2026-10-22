@@ -17,7 +17,8 @@ const alias = Object.freeze({
 });
 export const DEFAULT_WASH = .3;
 export const DEFAULT_AMMO_USE = .25;
-export const categoryOf=name=>{
+export const categoryOf=(name,explicit)=>{
+ if(['arma','municao','colete','acesso','consumivel'].includes(explicit))return explicit;
  const n=norm(name);
  if(n.startsWith('MUNICAO '))return 'municao';
  if(n.startsWith('COLETE'))return 'colete';
@@ -67,9 +68,10 @@ export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogad
   const qty=q===null?qtyFor(item,nPlayers,kitMode):Math.max(0,Math.floor(q));
   const p=priceOf(item.nome,catalog,priceMode);
   const override=numeric(prices[i]);
-  const baseUnit=override===null?p.unit:Math.max(0,override);
+  const stored=numeric(item.preco_unitario);
+  const baseUnit=override!==null?Math.max(0,override):stored!==null?Math.max(0,stored):p.unit;
   const unit=baseUnit===null?null:cents(baseUnit*(1+shift));
-  const category=categoryOf(item.nome);
+  const category=categoryOf(item.nome,item.categoria_item);
   const amount=unit===null?null:cents(qty*unit);
   // A munição é reposta em pacotes completos (x100, x200, x250).
   // É uma hipótese de compra; a taxa consumida pode ser ajustada.
@@ -77,7 +79,7 @@ export function kitFor(action,catalog,{team,priceMode='pista',kitMode='por-jogad
   const winCost=unit===null?null:cents(replacementQty*unit);
   return {index:i,name:item.nome,qty,officialQty:Number(item.quantidade)||0,
    category,unit,baseUnit,total:amount,missing:unit===null,
-   source:override!==null?'Preço manual':p.source,
+   source:override!==null?'Preço simulado':stored!==null?'Preço fixo do cadastro':p.source,
    reference:p.name,replacementQty,winCost,
    retainedValue:amount===null||winCost===null?null:cents(amount-winCost)};
  });
@@ -119,7 +121,7 @@ export function calculateAction(action,catalog,opts={}){
  const firstRunNetMax=max===null||kit.total===null?null:cents(max*(1-tax)-kit.total);
  const perPlayer=netMin===null?null:cents(netMin/team);
  // ROI alvo usa o capital que precisa estar em risco, não apenas as reposições.
- const targetProfit=kit.total===null?null:Math.max(targetPerPlayer*team,kit.total*targetROI);
+ const targetProfit=kit.total===null?null:Math.max(targetPerPlayer*team,kit.total*targetROI); // Indicador legada; não dispara buff
  const payoutNeeded=targetProfit===null||cost===null?null:Math.ceil((cost+targetProfit)/(1-tax));
  const currentSpread=min>0&&max!==null?Math.max(0,max/min-1):.15;
  const payoutMax=payoutNeeded===null?null:Math.ceil(payoutNeeded*(1+currentSpread));
@@ -127,8 +129,7 @@ export function calculateAction(action,catalog,opts={}){
  const status=action?.status==='inativo'?'INATIVA':!teamValid?'EQUIPE INVÁLIDA':
    kit.missing.length?'INSUMO SEM PREÇO':kit.baselineMismatch?'REVISAR CUSTO':
    netMin===null?'SEM PREMIAÇÃO':
-   netMin<targetProfit*.95?'BUFF':
-   netMin>targetProfit*(1+tolerance)?'NERF':'MANTER';
+   netMin<0?'PREJUÍZO NA VITÓRIA':'MANTER';
  const proposedNet=payoutNeeded===null||cost===null?null:cents(payoutNeeded*(1-tax)-cost);
  return {name:action?.nome,status,team,teamValid,allowed,rule,kit,tax,targetROI,targetPerPlayer,
   targetProfit,min,max,netMin,netMax,loss,firstRunNetMin,firstRunNetMax,perPlayer,
