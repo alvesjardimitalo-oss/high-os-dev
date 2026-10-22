@@ -215,6 +215,43 @@ function rankBoard(){
  if(source)source.textContent=report.included.length+' ações classificadas · preços consultados ao abrir a página';
 }
 
+function showMainRecommendation(d){
+ const panel=el('apSuggestedMain');if(!panel)return;
+ const p=d.calc;
+ if(!d.valid||!Number.isFinite(d.recommendedMin)){
+  const cause=p.kit.missing.length?'Preços pendentes: '+p.kit.missing.join(', '):
+   !p.teamValid?'Quantidade de jogadores não prevista nas regras':
+   action()?.status==='inativo'?'Ação inativa':
+   p.min===null?'Prêmio mínimo oficial não informado':'Dados insuficientes no catálogo';
+  panel.className='ap-recommend-main ap-recommend-pending';
+  panel.innerHTML='<div class="ap-recommend-top"><span>RECOMENDAÇÃO DE PRÊMIO</span>'+
+   '<strong>PENDENTE</strong></div><p>'+safe(cause)+
+   '. Informe ou corrija os dados para obter uma recomendação segura.</p>';
+  return;
+ }
+ panel.className='ap-recommend-main '+(d.direction==='CONSIDERAR BUFF'?'ap-recommend-buff':
+   d.direction==='REVISAR NERF'?'ap-recommend-nerf':'ap-recommend-maintain');
+ const change=d.recommendedDelta;
+ const changeLabel=change===0?'Sem alteração recomendada':
+  (change>0?'+':'−')+money(Math.abs(change))+
+  (d.recommendedPercent===null?'':' ('+(change>0?'+':'')+percent(d.recommendedPercent)+')');
+ panel.innerHTML='<div class="ap-recommend-top"><span>PRÊMIO RECOMENDADO • SUJO</span>'+
+  chip(d.direction)+'</div>'+
+  '<div class="ap-recommend-compare">'+
+   '<div><small>PRÊMIO ATUAL (MÍNIMO)</small><strong>'+safe(money(p.min))+'</strong></div>'+
+   '<span class="ap-recommend-arrow" aria-hidden="true">→</span>'+
+   '<div class="ap-recommend-final"><small>PRÊMIO RECOMENDADO (MÍNIMO)</small>'+
+   '<strong>'+safe(money(d.recommendedMin))+'</strong></div></div>'+
+  '<div class="ap-recommend-band"><span><b>Diferença:</b> '+safe(changeLabel)+'</span>'+
+   '<span><b>Máximo indicativo:</b> '+safe(money(d.recommendedMax))+'</span>'+
+   '<span><b>Lucro por membro com o prêmio recomendado:</b> '+safe(money(d.recommendedPerMember))+'</span></div>'+
+  '<div class="ap-recommend-foot"><small>'+safe(p.team)+' invasores • custo de reposição '+
+   safe(money(p.kit.winCost))+' • capital em risco '+safe(money(p.kit.total))+
+   (d.modeled?' • PREMIAÇÃO PROPORCIONAL HIPOTÉTICA':' • referência: prêmio publicado')+
+   '. O máximo é uma estimativa com a mesma faixa percentual; só a planilha confirma o valor final.</small>'+
+   '<button type="button" class="ap-button ap-recommend-details" id="apOpenStrategy">Analisar / aprovar / recusar</button></div>';
+}
+
 function actionsList(){
  if(!root)return;
  const q=norm(state.search);
@@ -230,10 +267,18 @@ function actionsList(){
  });
  el('apActionCount').textContent=results.length+' de '+actions.length+' ações';
  el('apActionList').innerHTML=results.map(a=>{
-  const p=calculateAction(a,catalog,{team:defaultTeam(a),kitMode:state.kitMode,priceMode:state.priceMode,
-   priceShift:state.priceShift,ammoUse:state.ammoUse,accessConsumed:state.accessConsumed,tax:state.tax});
-  const match=p.kit.missing.length?'Custos pendentes':
-   'Vitória '+money(p.netMin)+' · Derrota '+money(p.loss);
+  const d=analyzeDecision(a,catalog,{team:defaultTeam(a),referenceTeam:defaultTeam(a),
+   kitMode:'oficial',priceMode:'pista',tax:state.tax,
+   ammoUse:state.ammoUse,accessConsumed:state.accessConsumed,
+   targetPerPlayer:state.targetPerPlayer,roi:state.roi,tolerance:state.tolerance,
+   winChance:state.winChance,policeWaitMinutes:state.policeWaitMinutes,
+   estimatedActionMinutes:state.estimatedActionMinutes,targetHourly:state.targetHourly});
+  const p=d.calc;
+  const match=d.valid&&Number.isFinite(d.recommendedMin)?
+   'SUGESTÃO '+money(d.recommendedMin)+' · '+(d.recommendedDelta===0?'MANTER':
+     (d.recommendedDelta>0?'+':'−')+money(Math.abs(d.recommendedDelta)))+
+   ' · '+d.direction:
+   'SUGESTÃO PENDENTE · '+(p.kit.missing.length?'insumos sem preço':'dados incompletos');
   return '<button type="button" class="ap-choice" data-ap-action="'+safe(a.nome)+'" aria-pressed="'+(a.nome===selection?'true':'false')+'">'+
    '<span class="ap-choice-main"><b>'+safe(a.nome)+'</b><small>'+safe(p.team)+' invasores · '+(a.status==='inativo'?'Inativa': 'Prêmio '+money(p.min)+' a '+money(p.max))+'</small>'+
    '<small class="ap-choice-result">'+safe(match)+'</small></span></button>';
@@ -303,6 +348,7 @@ function scenarios(){
 function summary(){
  const a=action();if(!a)return;
  const d=decision(),p=d.calc;
+ showMainRecommendation(d);
  el('apActionStatus').innerHTML=chip(a.status==='inativo'?'INATIVA':d.direction);
  el('apKitComputed').textContent='Kit cadastrado na fonte: '+money(p.kit.official)+' • Capital simulado: '+money(p.kit.total);
  const warns=[];
@@ -345,18 +391,20 @@ function summary(){
  ].join('');
  el('apGoals').innerHTML=[
   kpi('Meta de lucro total na vitória',money(p.targetProfit),'gold','Meta individual ou ROI sobre kit completo'),
-  kpi('Prêmio mínimo sugerido (sujo)',money(d.suggested),'gold'),
-  kpi('Prêmio máximo publicado (sujo)',money(p.max)),
-  kpi('Diferença sugerida',d.delta===null?'A confirmar':(d.delta>=0?'+':'−')+money(Math.abs(d.delta)),d.delta===null?'':d.delta>=0?'good':'bad'),
-  kpi('Lucro na vitória com proposta',money(d.suggested===null||p.kit.winCost===null?null:d.suggested*(1-p.tax)-p.kit.winCost),cs(p.proposedNet)),
-  kpi('Lucro por jogador com proposta',money(d.suggested===null||p.kit.winCost===null?null:(d.suggested*(1-p.tax)-p.kit.winCost)/p.team),cs(p.proposedPerPlayer)),
+  kpi('Prêmio mínimo recomendado (sujo)',money(d.recommendedMin),'gold'),
+  kpi('Prêmio máximo indicativo após ajuste',money(d.recommendedMax)),
+  kpi('Diferença recomendada',d.recommendedDelta===null?'A confirmar':
+   (d.recommendedDelta>=0?'+':'−')+money(Math.abs(d.recommendedDelta)),
+   d.recommendedDelta===null?'':d.recommendedDelta>0?'good':d.recommendedDelta<0?'bad':''),
+  kpi('Lucro na vitória com proposta',money(d.recommendedProfit),cs(d.recommendedProfit)),
+  kpi('Lucro por jogador com proposta',money(d.recommendedPerMember),cs(d.recommendedPerMember)),
   kpi('ROI alvo sobre kit inteiro',percent(p.targetROI)),
   kpi('ROI atual na vitória',percent(p.roi))
  ].join('');
  const risk=el('apIntelligenceResult');
  risk.innerHTML=[
   kpi('Decisão sugerida',d.direction,'gold'),
-  kpi('Prêmio sugerido',money(d.suggested),'gold'),
+  kpi('Prêmio recomendado',money(d.recommendedMin),'gold'),
   kpi('Taxa mínima para empatar',percent(d.breakEven)),
   kpi('Resultado esperado com chance informada',money(d.expected),d.expected===null?'':d.expected>=0?'good':'bad'),
   kpi('Lucro mínimo/jogador/hora',money(d.hourly),d.hourly===null?'':d.hourly>=0?'good':'bad'),
@@ -379,7 +427,7 @@ function summary(){
  el('apCopy').disabled=!d.valid;
  const saveAllowed=!!approveHandler&&d.eligibleForSheet&&!approvedThisSession.has(a.nome);
  for(const [id,available] of [
-  ['apApprove',saveAllowed&&Number.isFinite(d.suggested)&&Math.abs(d.suggested-p.min)>1],
+  ['apApprove',saveAllowed&&Number.isFinite(d.recommendedMin)&&Math.abs(d.recommendedMin-p.min)>1],
   ['apApproveManual',saveAllowed&&Number.isFinite(state.manualPayout)&&state.manualPayout>0&&Math.abs(state.manualPayout-p.min)>1],
   ['apReject',!!onRejectAction&&d.valid]
  ]){
@@ -415,7 +463,8 @@ async function copyProposal(){
  'SALDO NO CAIXA AO VENCER NA PRIMEIRA AÇÃO COM KIT NOVO: '+money(p.firstRunNetMin),
  'PREJUÍZO SE PERDER: '+money(p.loss)+' (sem prêmio; equipamento perdido)',
  'META POR JOGADOR: '+money(p.targetPerPlayer)+' / META ROI DO KIT: '+percent(p.targetROI),
- 'PRÊMIO MÍNIMO SUGERIDO: '+money(d.suggested),
+ 'PRÊMIO MÍNIMO RECOMENDADO: '+money(d.recommendedMin),
+ 'PRÊMIO MÁXIMO INDICATIVO: '+money(d.recommendedMax),
  'PRÊMIO MÁXIMO PUBLICADO: '+money(p.max),
  'KIT: '+p.kit.lines.map(i=>i.name+' x'+i.qty+' (investimento '+money(i.total)+', repor '+money(i.winCost)+')').join(' / '),
  'Hipóteses: pendrive '+(state.accessConsumed?'consumido':'reutilizável')+', colete de uso único e armas preservadas na vitória. Não há cálculo de chance de derrota.',
@@ -429,7 +478,7 @@ async function copyProposal(){
 async function approveProposal(mode='sugestao'){
  if(!approveHandler)return;
  const a=action(),d=decision(),p=d.calc;
- const manual=mode==='manual',value=manual?state.manualPayout:d.suggested;
+ const manual=mode==='manual',value=manual?state.manualPayout:d.recommendedMin;
  if(!d.eligibleForSheet||approvedThisSession.has(a.nome)||!Number.isFinite(value)||
     value<=0||Math.abs(value-p.min)<=1){
   el('apCopyStatus').textContent='Prêmio inválido ou cenário hipotético. Restaure os preços e o prêmio publicados antes de aprovar.';
@@ -516,6 +565,11 @@ function exportAnalysis(){
 }
 function listeners(){
  root.addEventListener('click',ev=>{
+  if(ev.target.closest('#apOpenStrategy')){
+   const details=el('apStrategyDetails');
+   if(details){details.open=true;details.scrollIntoView({behavior:'smooth',block:'start'});}
+   return;
+  }
   const manage=ev.target.closest('[data-ap-manage]');
   if(manage){choose(manage.dataset.apManage);el('apActionTitle')?.scrollIntoView({behavior:'smooth',block:'start'});return;}
   const ranked=ev.target.closest('[data-ap-ranked]');
