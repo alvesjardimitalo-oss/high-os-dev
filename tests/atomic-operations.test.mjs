@@ -5,17 +5,18 @@ import {readFileSync} from 'node:fs';
 const app=readFileSync(new URL('../assets/app.js',import.meta.url),'utf8');
 const rules=readFileSync(new URL('../firestore.rules',import.meta.url),'utf8');
 
-test('Transferência grava Groups, histórico, organização e ocupações num só batch',()=>{
+test('Transferência grava Groups, histórico e organizações juntos; ocupação auxiliar tem fallback',()=>{
  const from=app.indexOf("$('#movementConfirm')?.addEventListener");
  const to=app.indexOf('\nasync function wipeCollection(',from);
  const src=app.slice(from,to);
  assert.ok(from>=0 && to>from);
  assert.equal((src.match(/await batch\.commit\(\)/g)||[]).length,1);
  assert.match(src,/batch\.set\(doc\(histCol\)/);
- assert.match(src,/batch\.set\(doc\(db,'highos','data','ocupacoes'/);
+ assert.match(src,/occupationBatch\.set\(doc\(db,'highos','data','ocupacoes'/);
  assert.match(src,/batch\.set\(doc\(db,'highos','data','organizacoes'/);
  assert.doesNotMatch(src,/await addDoc\(histCol/);
- assert.doesNotMatch(src,/await occupationBatch\.commit\(\)/);
+ assert.match(src,/await occupationBatch\.commit\(\)/);
+ assert.match(src,/occupationSynced=false/);
  assert.doesNotMatch(src,/await orgMoveBatch\.commit\(\)/);
 });
 test('Recolhimento confirma todos os documentos na mesma transação',()=>{
