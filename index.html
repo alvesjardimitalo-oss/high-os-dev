@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="assets/diario.css?v=15.5.0">
   <link rel="stylesheet" href="assets/planejador-v15.css?v=15.0.0">
   <link rel="stylesheet" href="assets/acoes-planejador.css?v=16">
+  <link rel="stylesheet" href="assets/acoes-gestao-simples.css?v=1">
   <link rel="stylesheet" href="assets/anim-v15.css?v=15.0.0">
   <style>/* V14.5: Spotify e Alvesinho removidos */#spotifyTopDock,.spotify-admin-card,#page-alvesinho,#page-spotify,#page-chat,#teamChatLauncher,#teamChatFloat,#teamMeetingOverlay{display:none!important}</style>
   <link rel="icon" type="image/png" href="assets/high_logo.png?v=10.4.1">
@@ -289,7 +290,7 @@
         <section class="page" id="page-planejador-acoes">
           <div class="page-head">
             <div><div class="eyebrow">HIGH OS • CENTRO DE GESTÃO ECONÔMICA</div><h2>ECONOMIA ILEGAL</h2>
-              <p class="page-subtitle">Gerencie ações blipadas e o rendimento por tentativa dos roubos. Cruze o loot com o preço de venda, desconte os custos e acompanhe lucro, prejuízo e dinheiro sujo gerado.</p>
+              <p class="page-subtitle">Escolha o tipo de roubo, veja quanto custa, quanto sobra e simule buff ou nerf. Nenhuma premiação é alterada automaticamente.</p>
             </div><span class="dev-badge">GESTÃO ECONÔMICA</span>
           </div>
           <div id="actionEconomyPlanner" class="ap-root">
@@ -301,14 +302,21 @@
                 <button type="button" class="ap-button primary" id="apNewAction" hidden>+ Cadastrar ação</button>
               </div>
             </div>
-            <nav class="ap-navigation ap-economy-navigation" aria-label="Economia Ilegal">
-              <button type="button" data-economy-area="acoes" aria-current="page">Planejador de Ações Blipadas</button>
-              <button type="button" data-economy-area="roubados">Roubo de Residências</button>
-              <button type="button" data-economy-area="lootnpc">Loot de NPC</button>
-              <button type="button" data-economy-area="portamalas">Veículos e Porta-malas</button>
-              <button type="button" data-economy-area="comerciante">Comerciante de Itens Roubados</button>
-              <button type="button" data-economy-area="quebrados">Comerciante de Itens Quebrados</button>
+            <nav class="ap-navigation ap-economy-navigation" aria-label="Escolha a atividade para balancear">
+              <button type="button" data-economy-area="roubados">Roubo de casas</button>
+              <button type="button" data-economy-area="atm">Roubo de ATM</button>
+              <button type="button" data-economy-area="registradora">Caixinha / registradora</button>
+              <button type="button" data-economy-area="acoes" aria-current="page">Ações blipadas</button>
             </nav>
+            <details class="ap-economy-more">
+              <summary>Outras atividades e comerciantes</summary>
+              <div class="ap-economy-more-links">
+                <button type="button" data-economy-area="lootnpc">Loot de NPC</button>
+                <button type="button" data-economy-area="portamalas">Veículos e porta-malas</button>
+                <button type="button" data-economy-area="comerciante">NPC de itens roubados</button>
+                <button type="button" data-economy-area="quebrados">NPC de itens quebrados</button>
+              </div>
+            </details>
             <nav class="ap-navigation ap-action-navigation" aria-label="Seções das ações blipadas">
               <button type="button" data-ap-nav="overview" aria-current="page">Visão geral</button>
               <button type="button" data-ap-nav="catalog">Catálogo de ações</button>
