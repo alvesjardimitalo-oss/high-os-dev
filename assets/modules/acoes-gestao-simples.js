@@ -113,7 +113,7 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
   }else{
    const p=record.example;min=p.min;max=p.max;
    cost=p.explosive?priceOf(p.explosive,getCatalog(),'pista').unit:0;
-   source='Exemplo de referência • não confirmado no Suricato';
+   source=p.type==='registradora'?'Exemplo de referência • custo obrigatório não confirmado (R$ 0 apenas nesta simulação)':'Exemplo de referência • não confirmado no Suricato';
   }
   if(!Number.isFinite(min)||!Number.isFinite(max))return {missing:'Faltam valores mínimo e máximo cadastrados.'};
   const proposedMin=Math.max(1,min+state.delta),proposedMax=Math.max(proposedMin,max+state.delta);
