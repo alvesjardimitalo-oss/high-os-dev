@@ -88,8 +88,9 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
    cost=preset.explosive?priceOf(preset.explosive,getCatalog(),'pista').unit:0;
    source='Referência para simular • não publicada no Suricato';
   }
-  const proposedMin=min===null?null:Math.max(0,min+state.delta);
+  const proposedMin=min===null?null:Math.max(1,min+state.delta);
   const proposedMax=max===null?null:Math.max(proposedMin,max+state.delta);
+  state.preview={name:action?.nome||'',min:proposedMin,max:proposedMax,adjusted:state.delta!==0};
   const profit=x=>x===null||cost===null?null:x*(1-state.tax/100)-cost;
   const choices=all.length?selector('Escolha a atividade','name',all.map(a=>[a.nome,a.nome])):
    (type==='atm'?selector('Tipo de ATM','preset',presetRows.filter(x=>x.type==='atm').map(p=>[p.id,p.name])):'');
@@ -112,6 +113,7 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
     '<p class="ap-simple-change">Se o custo do item necessário subir R$ 1.000, manter o lucro após 30% de lavagem exige aproximadamente R$ 1.429 a mais no pagamento sujo (se esse item é consumido a cada tentativa).</p>')+
    (cost===null?'<p class="ap-hint">Preço de insumo ausente. A simulação de lucro fica pendente até o Mercado Negro ou cadastro ser completado.</p>':'')+
    (recommendation?.valid?'<p class="ap-simple-impact">High OS recomenda: <b>'+money(recommendation.recommendedMin)+' a '+money(recommendation.recommendedMax)+'</b> sujos • '+esc(recommendation.direction)+'. '+(recommendation.hasComparison?'Comparação com a referência de preços salva.':'Sem variação de custo comprovada; manter prêmios atuais.')+'</p>':'')+
+   '<p class="ap-row-muted">Ao abrir o perfil, os valores simulados são levados para a proposta sem aprovação automática.</p>'+ 
    '<div class="ap-simple-actions">'+(action?button('action','Abrir perfil e decisões'):button('new','Cadastrar esta atividade'))+
    (type==='blipada'?button('ranking','Ver rankings e alertas'):'')+'</div>';
  }
@@ -142,7 +144,7 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
   const kind=go.dataset.ecoOpen;
   if(kind==='npc')onOpenNpc?.();
   if(kind==='house')onOpenHouse?.();
-  if(kind==='action')onOpenAction?.(state.name);
+  if(kind==='action')onOpenAction?.(state.preview?.name,state.preview?.adjusted?state.preview:null);
   if(kind==='new')onNewAction?.();
   if(kind==='ranking')root.querySelector('[data-ap-nav="ranking"]')?.click();
  });
