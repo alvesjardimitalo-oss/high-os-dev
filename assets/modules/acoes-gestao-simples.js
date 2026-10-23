@@ -57,7 +57,7 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
    input('Locais vasculhados por casa','locations',{min:1,max:100})+input('Desses locais, quantos são cofres?','safes',{min:0,max:100})+
    input('Lavagem (%)','tax',{min:0,max:99})+'</div>'+
    payoutAdjustment()+badge(state.delta)+
-   (selected?'<p class="ap-simple-change">Pagamento do item: <b>'+money(Number(selected.precoSujo))+'</b> → <b>'+money(Math.max(0,Number(selected.precoSujo)+state.delta))+'</b> sujos por unidade.</p>':
+   (selected?'<p class="ap-simple-change">Pagamento do item: <b>'+money(Number(selected.precoSujo))+'</b> → <b>'+money(Math.max(0,Number(selected.precoSujo)+state.delta))+'</b> sujos por unidade. Comprados pelo NPC: '+(number(selected.quantidadeNpc)===null?'sem contador':new Intl.NumberFormat('pt-BR').format(Number(selected.quantidadeNpc)))+'.</p>':
     '<p class="ap-hint">Cadastre os pagamentos do NPC para calcular o retorno por item.</p>')+
    (base&&next?kpis([['Custo por casa • gazua',money(investment)],['Receita média conhecida • sujo',money(base.knownGrossDirty)],
     ['Lucro médio atual • conhecido',money(base.knownProfit)],['Lucro após ajuste • conhecido',money(next.knownProfit)]])+
