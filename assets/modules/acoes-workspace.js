@@ -1,5 +1,5 @@
 import {createEconomyVisual} from './economia-visual.js?v=3';
-import {createSimpleEconomyPanel} from './acoes-gestao-simples.js?v=2';
+import {createSimpleEconomyPanel} from './acoes-gestao-simples.js?v=3';
 import {createHouseWorkbench} from './roubos-loot-ui.js?v=6';
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
 import {createNpcWorkbench} from './acoes-npc-ui.js?v=7';
