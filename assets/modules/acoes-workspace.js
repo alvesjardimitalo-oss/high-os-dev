@@ -1,5 +1,5 @@
 import {createEconomyVisual} from './economia-visual.js?v=3';
-import {createSimpleEconomyPanel} from './acoes-gestao-simples.js?v=1';
+import {createSimpleEconomyPanel} from './acoes-gestao-simples.js?v=2';
 import {createHouseWorkbench} from './roubos-loot-ui.js?v=6';
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
 import {createNpcWorkbench} from './acoes-npc-ui.js?v=7';
@@ -11,7 +11,8 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  const $=id=>root.querySelector('#'+id);
  const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
  let registry=cleanRegistry(),ready=false,view='overview',tab='resumo',draft=null,original='',busy=false;
- let lastLoadError='',npc=null,houses=null,visual=null,simple=null,economyMode='acoes';
+ let lastLoadError='',npc=null,houses=null,visual=null,simple=null,economyMode='atm';
+ root.dataset.apTools='closed';
  const published=()=>getPublished()||[];
  const current=()=>getActions().find(x=>x.nome===getSelected())||null;
  const writable=()=>Boolean(onMutateRegistry&&ready);
@@ -66,10 +67,11 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
    '<button type="button" class="ap-button" data-ap-restore="'+safe(name)+'">Restaurar</button></div>').join('');
   if(view==='profile'&&!a){view='catalog';root.dataset.apSection=view;}
  }
- function navigate(next,subtab=tab){
+ function navigate(next,subtab=tab,{tools=true}={}){
   if(next==='npc'&&subtab==='casas')npc?.selectMarket('CASAS');
   view=['overview','catalog','ranking','prices','npc','profile','loot'].includes(next)?next:'overview';
   tab=['resumo','custos','cenario','sugestao'].includes(subtab)?subtab:'resumo';
+  root.dataset.apTools=tools?'open':'closed';
   paint();
   root.dispatchEvent(new Event('ap-economy-area-changed'));
   root.scrollIntoView({behavior:'smooth',block:'start'});
@@ -170,9 +172,10 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   const area=ev.target.closest('button[data-economy-area]');
   if(area){
    const next=area.dataset.economyArea;
-   if(next==='acoes'){economyMode='acoes';navigate('overview');}
-   else if(next==='atm'||next==='registradora'){economyMode=next;navigate('catalog');}
-   else if(['roubados','lootnpc','portamalas'].includes(next)){economyMode=next;houses?.selectMode({roubados:'casas',lootnpc:'npc',portamalas:'portamalas'}[next]);navigate('loot');}
+   if(next==='acoes'){economyMode='acoes';navigate('overview','resumo',{tools:false});}
+   else if(next==='atm'||next==='registradora'){economyMode=next;navigate('catalog','resumo',{tools:false});}
+   else if(next==='roubados'){economyMode=next;houses?.selectMode('casas');navigate('loot','resumo',{tools:false});}
+   else if(['lootnpc','portamalas'].includes(next)){economyMode=next;houses?.selectMode({lootnpc:'npc',portamalas:'portamalas'}[next]);navigate('loot');}
    else if(next==='comerciante'){economyMode=next;npc?.selectMarket('CASAS');navigate('npc');}
    else{economyMode='quebrados';npc?.selectMarket('ARMAS_QUEBRADAS');navigate('npc');}
    return;
@@ -239,6 +242,11 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  }});
  visual=createEconomyVisual({root,getRegistry:()=>registry,getCatalog,getActions});
  simple=createSimpleEconomyPanel({root,getRegistry:()=>registry,getCatalog,getActions,getReference,
+  onAreaChange:area=>{economyMode=area;
+   if(area==='roubados'){houses?.selectMode('casas');navigate('loot','resumo',{tools:false});}
+   else if(area==='acoes')navigate('overview','resumo',{tools:false});
+   else navigate('catalog','resumo',{tools:false});
+  },
   onOpenNpc:()=>{npc?.selectMarket('CASAS');navigate('npc');},
   onOpenHouse:()=>{houses?.selectMode('casas');navigate('loot');},
   onOpenAction:(name,preview)=>{if(!name)return;select(name);
