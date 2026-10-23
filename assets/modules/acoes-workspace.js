@@ -241,7 +241,12 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  simple=createSimpleEconomyPanel({root,getRegistry:()=>registry,getCatalog,getActions,getReference,
   onOpenNpc:()=>{npc?.selectMarket('CASAS');navigate('npc');},
   onOpenHouse:()=>{houses?.selectMode('casas');navigate('loot');},
-  onOpenAction:name=>{if(name)select(name);},
+  onOpenAction:(name,preview)=>{if(!name)return;select(name);
+   if(!preview||!Number.isFinite(preview.min)||!Number.isFinite(preview.max))return;
+   for(const [id,value] of [['apManual',preview.min],['apManualMax',preview.max]]){
+    const field=$(id);if(field){field.value=Math.max(1,Math.round(value));field.dispatchEvent(new Event('input',{bubbles:true}));}
+   }
+  },
   onNewAction:()=>{openEditor();const type=economyMode==='atm'?'atm':economyMode==='registradora'?'registradora':'blipada';
    const field=$('apEntryType');if(field&&type!=='blipada'){field.value=type;field.dispatchEvent(new Event('change',{bubbles:true}));}}
  });
