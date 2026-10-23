@@ -71,6 +71,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   view=['overview','catalog','ranking','prices','npc','profile','loot'].includes(next)?next:'overview';
   tab=['resumo','custos','cenario','sugestao'].includes(subtab)?subtab:'resumo';
   paint();
+  root.dispatchEvent(new Event('ap-economy-area-changed'));
   root.scrollIntoView({behavior:'smooth',block:'start'});
  }
  function openProfile(){navigate('profile','resumo');}
