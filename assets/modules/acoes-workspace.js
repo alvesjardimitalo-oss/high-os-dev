@@ -238,7 +238,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   return registry;
  }});
  visual=createEconomyVisual({root,getRegistry:()=>registry,getCatalog,getActions});
- simple=createSimpleEconomyPanel({root,getRegistry:()=>registry,getCatalog,getActions,
+ simple=createSimpleEconomyPanel({root,getRegistry:()=>registry,getCatalog,getActions,getReference,
   onOpenNpc:()=>{npc?.selectMarket('CASAS');navigate('npc');},
   onOpenHouse:()=>{houses?.selectMode('casas');navigate('loot');},
   onOpenAction:name=>{if(name)select(name);},
