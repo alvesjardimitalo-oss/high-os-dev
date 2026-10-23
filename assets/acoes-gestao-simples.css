@@ -1,0 +1,50 @@
+/* HIGH OS Dev • Gestao econômica simplificada (estilo nativo do planejador) */
+#page-planejador-acoes .ap-root .ap-economy-navigation{
+ display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:8px;margin:0 0 12px
+}
+#page-planejador-acoes .ap-root .ap-economy-navigation button{width:100%;min-height:56px;text-align:center;font-size:12px;white-space:normal}
+#page-planejador-acoes .ap-economy-more{margin:12px 0 18px;border:1px solid var(--ap-border);border-radius:11px;background:var(--ap-surface);color:var(--ap-muted);font-size:12px}
+#page-planejador-acoes .ap-economy-more summary{cursor:pointer;padding:11px 14px;font-weight:650}
+#page-planejador-acoes .ap-economy-more[open] summary{border-bottom:1px solid var(--ap-border)}
+#page-planejador-acoes .ap-economy-more-links{padding:12px;display:flex;flex-wrap:wrap;gap:8px}
+#page-planejador-acoes .ap-economy-more-links button{background:#271c39;color:#dfd2ef;border:1px solid var(--ap-border);border-radius:9px;padding:9px 12px;font-size:12px;cursor:pointer}
+#page-planejador-acoes .ap-economy-more-links button[aria-current="page"]{border-color:var(--ap-purple);background:#38274d}
+#page-planejador-acoes .ap-simple-control{
+ color:var(--ap-text,#f6efff);background:linear-gradient(135deg,#20182f,#151122);
+ border:1px solid var(--ap-border);border-radius:14px;padding:18px;margin:0 0 16px
+}
+#page-planejador-acoes .ap-simple-control[hidden]{display:none!important}
+#page-planejador-acoes .ap-simple-intro h3{font-size:19px;margin:0 0 7px;font-weight:750}
+#page-planejador-acoes .ap-simple-intro p{font-size:12px;line-height:1.55;color:var(--ap-muted);margin:0 0 16px}
+#page-planejador-acoes .ap-simple-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+#page-planejador-acoes .ap-simple-field{display:flex;flex-direction:column;gap:7px;font-size:11px;font-weight:650;color:var(--ap-muted);min-width:0}
+#page-planejador-acoes .ap-simple-field select,#page-planejador-acoes .ap-simple-field input{
+ width:100%;min-width:0;min-height:42px;border:1px solid #554367;background:#0f0a1b;color:#f5eafa;
+ border-radius:9px;padding:9px 11px;font-size:13px
+}
+#page-planejador-acoes .ap-simple-adjust{max-width:390px;margin-bottom:10px}
+#page-planejador-acoes .ap-simple-presets{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}
+#page-planejador-acoes .ap-simple-presets button{padding:8px 11px;color:#e7d7f8;background:#2b2040;border:1px solid #604777;border-radius:8px;font-size:11px}
+#page-planejador-acoes .ap-simple-presets button:hover{border-color:var(--ap-purple);background:#38274e}
+#page-planejador-acoes .ap-simple-tag{display:inline-block;color:#d5c9e4;font-size:11px;border:1px solid #665777;border-radius:18px;padding:5px 11px;background:#2b223b;margin-bottom:12px}
+#page-planejador-acoes .ap-simple-tag.ap-simple-buff{color:#99eac1;border-color:#47785e;background:#173a2d}
+#page-planejador-acoes .ap-simple-tag.ap-simple-nerf{color:#ffd0ae;border-color:#936d48;background:#3e2d26}
+#page-planejador-acoes .ap-simple-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:10px 0}
+#page-planejador-acoes .ap-simple-stat{border:1px solid #49345b;background:#261a38;padding:13px;border-radius:10px;min-width:0}
+#page-planejador-acoes .ap-simple-stat small{display:block;font-size:10px;color:#c4b1d7;margin-bottom:7px}
+#page-planejador-acoes .ap-simple-stat strong{font-size:clamp(14px,1.4vw,18px);font-weight:750;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+#page-planejador-acoes .ap-simple-impact,#page-planejador-acoes .ap-simple-change{font-size:12px;line-height:1.5;color:#e0d1ed;margin:13px 0}
+#page-planejador-acoes .ap-simple-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+#page-planejador-acoes .ap-simple-actions .ap-button:first-child{background:#3d2957}
+#page-planejador-acoes .ap-root[data-economy-area="atm"] .ap-action-navigation,
+#page-planejador-acoes .ap-root[data-economy-area="registradora"] .ap-action-navigation{display:none!important}
+@media(max-width:900px){
+ #page-planejador-acoes .ap-root .ap-economy-navigation{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ #page-planejador-acoes .ap-simple-fields,#page-planejador-acoes .ap-simple-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:540px){
+ #page-planejador-acoes .ap-root .ap-economy-navigation{grid-template-columns:1fr 1fr!important}
+ #page-planejador-acoes .ap-root .ap-economy-navigation button{font-size:11px;padding:10px 6px}
+ #page-planejador-acoes .ap-simple-control{padding:13px}
+ #page-planejador-acoes .ap-simple-fields,#page-planejador-acoes .ap-simple-stats{grid-template-columns:1fr}
+}
