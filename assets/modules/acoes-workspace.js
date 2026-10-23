@@ -1,4 +1,5 @@
 import {createEconomyVisual} from './economia-visual.js?v=3';
+import {createSimpleEconomyPanel} from './acoes-gestao-simples.js?v=1';
 import {createHouseWorkbench} from './roubos-loot-ui.js?v=6';
 import {blankAction,cleanRegistry,mergeActionRegistry,normalizeActionName} from './acoes-cadastro.js?v=5';
 import {createNpcWorkbench} from './acoes-npc-ui.js?v=7';
@@ -10,7 +11,7 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  const $=id=>root.querySelector('#'+id);
  const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
  let registry=cleanRegistry(),ready=false,view='overview',tab='resumo',draft=null,original='',busy=false;
- let lastLoadError='',npc=null,houses=null,visual=null;
+ let lastLoadError='',npc=null,houses=null,visual=null,simple=null,economyMode='acoes';
  const published=()=>getPublished()||[];
  const current=()=>getActions().find(x=>x.nome===getSelected())||null;
  const writable=()=>Boolean(onMutateRegistry&&ready);
@@ -22,13 +23,14 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  async function load(){
   if(!onReadRegistry){ready=false;return;}
   try{
-   registry=cleanRegistry(await onReadRegistry());ready=true;lastLoadError='';message('');npc?.refresh();houses?.refresh();
+   registry=cleanRegistry(await onReadRegistry());ready=true;lastLoadError='';message('');npc?.refresh();houses?.refresh();simple?.refresh();
   }catch(e){ready=false;lastLoadError=String(e?.message||e);message('Cadastro interno indisponível: '+lastLoadError);}
  }
  function paint(){
   root.dataset.apSection=view;root.dataset.apProfileTab=tab;
-  const area=view==='loot'?({casas:'roubados',npc:'lootnpc',portamalas:'portamalas'}[houses?.mode?.()]||'roubados'):view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'comerciante'):'acoes';
-  visual?.selectArea(area);
+  const area=view==='loot'?({casas:'roubados',npc:'lootnpc',portamalas:'portamalas'}[houses?.mode?.()]||'roubados'):view==='npc'?(npc?.market()==='ARMAS_QUEBRADAS'?'quebrados':'comerciante'):economyMode;
+  visual?.selectArea(['portamalas','quebrados'].includes(area)?area:'');
+  simple?.selectArea(area);
   const lootHeading=$('apLootHeading');if(lootHeading)lootHeading.textContent={roubados:'Roubo de residências',lootnpc:'Loot de NPC',portamalas:'Roubo de veículos e porta-malas'}[area]||'Gestão dos roubos';
   if($('apHouseMerchant'))$('apHouseMerchant').hidden=area!=='roubados';
   if($('apLootDetails')){if(area==='lootnpc')$('apLootDetails').open=true;else $('apLootDetails').open=false;}
@@ -166,10 +168,12 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
  root.addEventListener('click',ev=>{
   const area=ev.target.closest('button[data-economy-area]');
   if(area){
-   if(area.dataset.economyArea==='acoes')navigate('overview');
-   else if(['roubados','lootnpc','portamalas'].includes(area.dataset.economyArea)){houses?.selectMode({roubados:'casas',lootnpc:'npc',portamalas:'portamalas'}[area.dataset.economyArea]);navigate('loot');}
-   else if(area.dataset.economyArea==='comerciante'){npc?.selectMarket('CASAS');navigate('npc');}
-   else{npc?.selectMarket('ARMAS_QUEBRADAS');navigate('npc');}
+   const next=area.dataset.economyArea;
+   if(next==='acoes'){economyMode='acoes';navigate('overview');}
+   else if(next==='atm'||next==='registradora'){economyMode=next;navigate('catalog');}
+   else if(['roubados','lootnpc','portamalas'].includes(next)){economyMode=next;houses?.selectMode({roubados:'casas',lootnpc:'npc',portamalas:'portamalas'}[next]);navigate('loot');}
+   else if(next==='comerciante'){economyMode=next;npc?.selectMarket('CASAS');navigate('npc');}
+   else{economyMode='quebrados';npc?.selectMarket('ARMAS_QUEBRADAS');navigate('npc');}
    return;
   }
   if(ev.target.closest('#apHouseMerchant')){npc?.selectMarket('CASAS');navigate('npc');return;}
@@ -233,6 +237,13 @@ export function createActionWorkspace({root,getActions,getPublished,getCatalog,g
   return registry;
  }});
  visual=createEconomyVisual({root,getRegistry:()=>registry,getCatalog,getActions});
+ simple=createSimpleEconomyPanel({root,getRegistry:()=>registry,getCatalog,getActions,
+  onOpenNpc:()=>{npc?.selectMarket('CASAS');navigate('npc');},
+  onOpenHouse:()=>{houses?.selectMode('casas');navigate('loot');},
+  onOpenAction:name=>{if(name)select(name);},
+  onNewAction:()=>{openEditor();const type=economyMode==='atm'?'atm':economyMode==='registradora'?'registradora':'blipada';
+   const field=$('apEntryType');if(field&&type!=='blipada'){field.value=type;field.dispatchEvent(new Event('change',{bubbles:true}));}}
+ });
  paint();
  return {load,merged,paint,openProfile,openSuggestion,navigate,reload};
 
