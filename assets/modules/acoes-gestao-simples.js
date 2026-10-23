@@ -1,151 +1,255 @@
-/** Painel inicial da Economia Ilegal. Simula, nunca publica ou altera premiações. */
+/** Economia Ilegal • console de balanceamento compacto. Simulacoes nao persistem premiacoes. */
 import {calculateAction,defaultTeam,priceOf} from './acoes-core.js?v=5';
 import {analyzeDecision} from './acoes-inteligencia.js?v=6';
 import {LOOT_TABLES} from './roubos-loot-data.js?v=1';
 import {makeLootPrices,houseSearchParts,invasionExpectation,lootKey} from './roubos-loot-core.js?v=3';
 import {STOLEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=2';
 
-export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry,getReference,onOpenAction,onOpenHouse,onOpenNpc,onNewAction}){
+export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry,getReference,onAreaChange,onOpenAction,onOpenHouse,onOpenNpc,onNewAction}){
  const nav=root.querySelector('.ap-economy-navigation');
  if(!nav)return {selectArea(){},refresh(){}};
- const panel=document.createElement('section');
+ const panel=document.createElement('div');
  panel.className='ap-simple-control';
  panel.id='apSimpleControl';
  nav.after(panel);
- const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(x):'Preço pendente';
- const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
- const number=x=>x===''||x===null||x===undefined?null:Number.isFinite(Number(x))?Number(x):null;
- const isCore=a=>!['atm','registradora','casas'].includes(a?.tipo_acao);
- const state={area:'acoes',name:'',item:'',delta:0,durability:6,locations:15,safes:0,tax:30,preset:'atm-c4'};
- const houseItems=()=>{const saved=getRegistry()?.npcMarkets?.CASAS;return saved?.updatedAt||saved?.items?.length?saved.items:STOLEN_ITEMS_SNAPSHOT;};
- const items=()=>houseItems().filter(x=>number(x.precoSujo)!==null&&number(x.precoSujo)>=0);
- function selector(label,key,options){
-  return '<label class="ap-simple-field"><span>'+esc(label)+'</span><select data-eco-field="'+key+'">'+options.map(([value,title])=>'<option value="'+esc(value)+'"'+(String(state[key])===String(value)?' selected':'')+'>'+esc(title)+'</option>').join('')+'</select></label>';
- }
- function input(label,key,{min=0,max=1000000,step=1}={}){
-  return '<label class="ap-simple-field"><span>'+esc(label)+'</span><input data-eco-field="'+key+'" type="number" min="'+min+'" max="'+max+'" step="'+step+'" value="'+esc(state[key])+'"></label>';
- }
- function kpis(rows){return '<div class="ap-simple-stats">'+rows.map(([title,value])=>
-  '<div class="ap-simple-stat"><small>'+esc(title)+'</small><strong>'+esc(value)+'</strong></div>').join('')+'</div>';}
- function payoutAdjustment(){return '<label class="ap-simple-field ap-simple-adjust"><span>Ajuste da recompensa • dinheiro sujo (R$)</span>'+
-  '<input type="number" data-eco-field="delta" min="-100000000" max="100000000" step="100" value="'+esc(state.delta)+'"></label>'+
-  '<div class="ap-simple-presets"><button type="button" data-eco-delta="-5000">− 5.000</button><button type="button" data-eco-delta="-1000">− 1.000</button><button type="button" data-eco-delta="0">Manter</button><button type="button" data-eco-delta="1000">+ 1.000</button><button type="button" data-eco-delta="5000">+ 5.000</button></div>';}
- function badge(delta){return delta>0?'<span class="ap-simple-tag ap-simple-buff">BUFF • simulação</span>':delta<0?'<span class="ap-simple-tag ap-simple-nerf">NERF • simulação</span>':'<span class="ap-simple-tag">Sem alteração</span>';}
- function button(id,label){return '<button type="button" class="ap-button" data-eco-open="'+id+'">'+esc(label)+'</button>';}
- function pricesForHouse(){
-  const rows=items(),selected=rows.find(x=>(x.codigo||x.nome)===state.item)||rows[0],prices=makeLootPrices(houseItems()),newPrices=new Map(prices);
-  if(selected){
-   const proposed=Math.max(0,Number(selected.precoSujo)+state.delta);
-   if(selected.codigo)newPrices.set(lootKey(selected.codigo),proposed);
-   if(selected.nome)newPrices.set(lootKey(selected.nome),proposed);
-  }
-  return {rows,selected,prices,newPrices};
- }
- function house(){
-  const {rows,selected,prices,newPrices}=pricesForHouse();
-  if(selected&&!state.item)state.item=selected.codigo||selected.nome;
-  const catalog=getCatalog(),unit=priceOf('LOCKPICK ++',catalog,'pista').unit,investment=unit===null?null:unit/state.durability;
-  let base=null,next=null,err='';
-  try{
-   const parts=houseSearchParts(LOOT_TABLES,state.locations,state.safes);
-   base=invasionExpectation(parts,prices,{lockpickUnit:investment,tax:state.tax/100});
-   next=invasionExpectation(parts,newPrices,{lockpickUnit:investment,tax:state.tax/100});
-  }catch(e){err=String(e?.message||e);}
-  const rowsOptions=rows.map(x=>[x.codigo||x.nome,x.nome+' • '+money(Number(x.precoSujo))]);
-  return '<div class="ap-simple-intro"><h3>Roubo de casas</h3><p>O que muda o lucro? O preço pago pelo NPC e os itens encontrados. A gazua ++ entra no custo por invasão.</p></div>'+
-   '<div class="ap-simple-fields">'+selector('Qual item do NPC ajustar?','item',rowsOptions)+input('Quantas invasões rende a gazua ++?','durability',{min:1,max:100})+
-   input('Locais vasculhados por casa','locations',{min:1,max:100})+input('Desses locais, quantos são cofres?','safes',{min:0,max:100})+
-   input('Lavagem (%)','tax',{min:0,max:99})+'</div>'+
-   payoutAdjustment()+badge(state.delta)+
-   (selected?'<p class="ap-simple-change">Pagamento do item: <b>'+money(Number(selected.precoSujo))+'</b> → <b>'+money(Math.max(0,Number(selected.precoSujo)+state.delta))+'</b> sujos por unidade. Comprados pelo NPC: '+(number(selected.quantidadeNpc)===null?'sem contador':new Intl.NumberFormat('pt-BR').format(Number(selected.quantidadeNpc)))+'.</p>':
-    '<p class="ap-hint">Cadastre os pagamentos do NPC para calcular o retorno por item.</p>')+
-   (base&&next?kpis([['Custo por casa • gazua',money(investment)],['Receita média conhecida • sujo',money(base.knownGrossDirty)],
-    ['Lucro médio atual • conhecido',money(base.knownProfit)],['Lucro após ajuste • conhecido',money(next.knownProfit)]])+
-    '<p class="ap-simple-impact">Mudança estimada no lucro por casa: <b>'+money(base.knownProfit===null||next.knownProfit===null?null:next.knownProfit-base.knownProfit)+'</b>.</p>'+
-    (!base.allPriced?'<p class="ap-hint">Existem itens sem preço cadastrado; o lucro exibido é parcial, não o lucro total.</p>':''):'<p class="ap-hint">'+esc(err||'Ainda não há dados suficientes para a projeção.')+'</p>')+
-   '<p class="ap-row-muted">Projeção pela tabela de sorteio dos armários e cofres. O contador de itens já comprados pelo NPC NÃO altera a chance de loot. A mudança de preço é apenas simulada.</p>'+
-   '<div class="ap-simple-actions">'+button('npc','Editar preços reais no NPC')+button('house','Ver loot e registrar uma casa')+'</div>';
- }
- const presetRows=[
-  {id:'atm-c4',type:'atm',name:'ATM com C4',min:28000,max:34000,explosive:'C4'},
-  {id:'atm-c4pp',type:'atm',name:'ATM com C4++',min:40000,max:48000,explosive:'C4 ++'},
-  {id:'registradora',type:'registradora',name:'Caixinha / registradora',min:22500,max:26250,explosive:''}
+
+ const escape=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(x):'A confirmar';
+ const integer=x=>new Intl.NumberFormat('pt-BR').format(x);
+ const num=x=>x===''||x===null||x===undefined?null:Number.isFinite(Number(x))?Number(x):null;
+ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+ const state={area:'atm',activity:'atm:preset-c4',delta:0,tax:30,item:'',durability:6,locations:15,safes:0,view:null};
+ const examples=[
+  {id:'preset-c4',label:'ATM — C4',type:'atm',min:28000,max:34000,explosive:'C4'},
+  {id:'preset-c4pp',label:'ATM — C4++',type:'atm',min:40000,max:48000,explosive:'C4 ++'},
+  {id:'preset-registradora',label:'Caixinha / registradora',type:'registradora',min:22500,max:26250,explosive:''}
  ];
- function actions(type){
-  const all=(getActions()||[]).filter(a=>a.status!=='inativo'&&(type==='blipada'?isCore(a):a.tipo_acao===type));
-  const action=all.find(a=>a.nome===state.name)||all[0]||null;
-  const preset=presetRows.find(p=>p.id===state.preset&&p.type===type)||presetRows.find(p=>p.type===type);
-  if(action&&state.name!==action.nome)state.name=action.nome;
-  let min=null,max=null,calc=null,cost=null,loss=null,source='',recommendation=null;
-  if(action){
-   calc=calculateAction(action,getCatalog(),{team:defaultTeam(action),kitMode:'oficial',priceMode:'pista',tax:state.tax/100});
-   recommendation=analyzeDecision(action,getCatalog(),{team:defaultTeam(action),kitMode:'oficial',priceMode:'pista',tax:state.tax/100,reference:getReference?.()});
-   min=calc.min;max=calc.max;cost=calc.kit.winCost;loss=calc.loss;source='Cadastro da atividade';
-  }else if(preset){
-   min=preset.min;max=preset.max;
-   cost=preset.explosive?priceOf(preset.explosive,getCatalog(),'pista').unit:0;
-   source='Referência para simular • não publicada no Suricato';
+ const areaFor=id=>id.startsWith('casas:')?'roubados':id.startsWith('atm:')?'atm':id.startsWith('registradora:')?'registradora':'acoes';
+ const availableActions=()=>getActions()||[];
+ function activities(){
+  const groups=[
+   {label:'ATM',values:examples.filter(x=>x.type==='atm').map(x=>({id:'atm:'+x.id,label:x.label}))},
+   {label:'Registradora',values:examples.filter(x=>x.type==='registradora').map(x=>({id:'registradora:'+x.id,label:x.label}))},
+   {label:'Casas',values:[{id:'casas:loot',label:'Roubo de casas • itens vendidos ao NPC'}]},
+   {label:'Ações blipadas',values:[]}
+  ];
+  availableActions().filter(a=>a.status!=='inativo').forEach((a,i)=>{
+   const group=a.tipo_acao==='atm'?groups[0]:a.tipo_acao==='registradora'?groups[1]:a.tipo_acao==='casas'?groups[2]:groups[3];
+   if(a.tipo_acao==='casas')return;
+   const prefix=a.tipo_acao==='atm'?'atm':a.tipo_acao==='registradora'?'registradora':'blipada';
+   group.values.push({id:prefix+':'+encodeURIComponent(a.nome),label:a.nome+(prefix==='blipada'?'':' • cadastrado')});
+  });
+  return groups;
+ }
+ function lookup(){
+  const all=availableActions(),p=state.activity.split(':')[0],rest=state.activity.slice(p.length+1);
+  if(p==='casas')return {type:'casas'};
+  const example=examples.find(x=>x.id===rest);
+  if(example)return {type:example.type,example};
+  const a=all.find(x=>x.nome===decodeURIComponent(rest));
+  return a?{type:p,action:a}:null;
+ }
+ function defaultActivity(area){
+  if(area==='roubados')return 'casas:loot';
+  if(area==='atm')return 'atm:preset-c4';
+  if(area==='registradora')return 'registradora:preset-registradora';
+  const first=availableActions().find(a=>a.status!=='inativo'&&!['atm','registradora','casas'].includes(a.tipo_acao));
+  return first?'blipada:'+encodeURIComponent(first.nome):'blipada:none';
+ }
+ function houseItems(){
+  const v=getRegistry()?.npcMarkets?.CASAS;
+  return v?.updatedAt||v?.items?.length?v.items:STOLEN_ITEMS_SNAPSHOT;
+ }
+ function chosenHouseItem(){
+  const items=houseItems().filter(x=>num(x.precoSujo)!==null&&num(x.precoSujo)>=0);
+  const selected=items.find(x=>(x.codigo||x.nome)===state.item)||items[0];
+  if(selected)state.item=selected.codigo||selected.nome;
+  return {items,selected};
+ }
+ function fieldSelect(name,options,value){
+  return '<label class="ap-eco-field"><span>'+escape(name)+'</span><select data-eco-field="'+escape(value)+'">'+options.map(x=>
+   '<option value="'+escape(x[0])+'"'+(String(x[0])===String(state[value])?' selected':'')+'>'+escape(x[1])+'</option>').join('')+'</select></label>';
+ }
+ function otherSettings(){
+  if(state.area!=='roubados')return '<details class="ap-eco-advanced"><summary>Configuração do cálculo</summary><label>Taxa de lavagem (%) <input type="number" data-eco-field="tax" value="'+state.tax+'" min="0" max="99" step="1"></label></details>';
+  const {items}=chosenHouseItem();
+  return '<div class="ap-eco-house-item">'+fieldSelect('Item vendido ao NPC',items.map(x=>[x.codigo||x.nome,x.nome+' • '+money(Number(x.precoSujo))]),'item')+'</div>'+
+   '<details class="ap-eco-advanced"><summary>Configurar gazua, cômodos e lavagem</summary><div class="ap-eco-advanced-grid">'+[
+    ['durability','Invasões por gazua ++',1,100],
+    ['locations','Locais vasculhados',1,100],
+    ['safes','Quantidade de cofres',0,100],
+    ['tax','Taxa de lavagem (%)',0,99]
+   ].map(([key,label,min,max])=>'<label>'+label+'<input type="number" data-eco-field="'+key+'" min="'+min+'" max="'+max+'" value="'+state[key]+'"></label>').join('')+'</div></details>';
+ }
+ function calc(){
+  const record=lookup(),tax=state.tax/100;
+  if(!record)return {missing:'Nenhuma atividade cadastrada para simular.'};
+  if(record.type==='casas'){
+   const {selected}=chosenHouseItem();
+   if(!selected)return {missing:'Cadastre itens e preços no NPC de itens roubados.'};
+   const prices=makeLootPrices(houseItems()),proposed=new Map(prices);
+   const currentPrice=Number(selected.precoSujo),nextPrice=Math.max(0,currentPrice+state.delta);
+   if(selected.codigo)proposed.set(lootKey(selected.codigo),nextPrice);
+   if(selected.nome)proposed.set(lootKey(selected.nome),nextPrice);
+   const unit=priceOf('LOCKPICK ++',getCatalog(),'pista').unit;
+   const cost=unit===null?null:unit/state.durability;
+   try{
+    const parts=houseSearchParts(LOOT_TABLES,state.locations,state.safes);
+    const base=invasionExpectation(parts,prices,{lockpickUnit:cost,tax});
+    const next=invasionExpectation(parts,proposed,{lockpickUnit:cost,tax});
+    return {type:'casas',name:'Roubo de casas',current:base.knownGrossDirty,after:next.knownGrossDirty,
+     profitCurrent:base.knownProfit,profitAfter:next.knownProfit,
+     cost,priceCurrent:currentPrice,priceAfter:nextPrice,units:Number(selected.quantidadeNpc),
+     unitsKnown:num(selected.quantidadeNpc)!==null,allPriced:base.allPriced&&next.allPriced,
+     selectedName:selected.nome,explanation:'Valores médios de loot conhecido, não um pagamento fixo por residência.'};
+   }catch(e){return {missing:String(e?.message||e)};}
   }
-  const proposedMin=min===null?null:Math.max(1,min+state.delta);
-  const proposedMax=max===null?null:Math.max(proposedMin,max+state.delta);
-  state.preview={name:action?.nome||'',min:proposedMin,max:proposedMax,adjusted:state.delta!==0};
-  const profit=x=>x===null||cost===null?null:x*(1-state.tax/100)-cost;
-  const choices=all.length?selector('Escolha a atividade','name',all.map(a=>[a.nome,a.nome])):
-   (type==='atm'?selector('Tipo de ATM','preset',presetRows.filter(x=>x.type==='atm').map(p=>[p.id,p.name])):'');
-  const kind=type==='atm'?'Roubo de ATM':type==='registradora'?'Caixinha / registradora':'Ações blipadas';
-  return '<div class="ap-simple-intro"><h3>'+kind+'</h3><p>'+
-   (type==='blipada'?'Veja investimento, lucro da vitória e prejuízo na derrota. A probabilidade de vitória de 40% fica na análise de risco, não multiplica o buff.':
-    'Para buff ou nerf, altere o pagamento mínimo e máximo. O custo vem do kit cadastrado e dos preços de pista do Mercado Negro.')+'</p></div>'+
-   '<div class="ap-simple-fields">'+choices+input('Lavagem (%)','tax',{min:0,max:99})+'</div>'+
-   payoutAdjustment()+badge(state.delta)+
-   '<p class="ap-row-muted">Fonte: '+esc(source||'Nenhuma ação cadastrada')+'. Nenhuma simulação aplica mudança na cidade.</p>'+
-   (min!==null&&max!==null?kpis([
-    ['Prêmio atual • sujo',money(min)+' a '+money(max)],
-    ['Prêmio simulado • sujo',money(proposedMin)+' a '+money(proposedMax)],
-    [type==='blipada'?'Reposição ao vencer':'Custo por tentativa',money(cost)],
-    ['Lucro mínimo atual',money(profit(min))],
-    ['Lucro mínimo com ajuste',money(profit(proposedMin))],
-    ['Lucro máximo com ajuste',money(profit(proposedMax))]
-   ]):'<p class="ap-hint">Cadastre os prêmios e os itens necessários para calcular o lucro.</p>')+
-   (type==='blipada'?'<p class="ap-simple-change">Investimento para montar o kit: <b>'+money(calc?.kit?.total??null)+'</b>. Prejuízo na derrota: <b>'+money(loss)+'</b>. Na vitória, descontamos apenas o que precisa ser consumido/reposto.</p>':
-    '<p class="ap-simple-change">Se o custo de um item consumido subir R$ 1.000, manter o lucro com lavagem de '+state.tax+'% exige aproximadamente '+money(Math.ceil(1000/(1-state.tax/100)))+' a mais no pagamento sujo.</p>')+
-   (cost===null?'<p class="ap-hint">Preço de insumo ausente. A simulação de lucro fica pendente até o Mercado Negro ou cadastro ser completado.</p>':'')+
-   (recommendation?.valid?'<p class="ap-simple-impact">High OS recomenda: <b>'+money(recommendation.recommendedMin)+' a '+money(recommendation.recommendedMax)+'</b> sujos • '+esc(recommendation.direction)+'. '+(recommendation.hasComparison?'Comparação com a referência de preços salva.':'Sem variação de custo comprovada; manter prêmios atuais.')+'</p>':'')+
-   '<p class="ap-row-muted">Ao abrir o perfil, os valores simulados são levados para a proposta sem aprovação automática.</p>'+ 
-   '<div class="ap-simple-actions">'+(action?button('action','Abrir perfil e decisões'):button('new','Cadastrar esta atividade'))+
-   (type==='blipada'?button('ranking','Ver rankings e alertas'):'')+'</div>';
+  let min,max,cost,loss=null,initial=null,action=null,source='';
+  if(record.action){
+   action=record.action;
+   const r=calculateAction(action,getCatalog(),{team:defaultTeam(action),kitMode:'oficial',priceMode:'pista',tax});
+   min=r.min;max=r.max;cost=r.kit.winCost;loss=r.loss;initial=r.kit.total;
+   source='Cadastro da atividade e Mercado Negro';
+  }else{
+   const p=record.example;min=p.min;max=p.max;
+   cost=p.explosive?priceOf(p.explosive,getCatalog(),'pista').unit:0;
+   source='Exemplo de referência • não confirmado no Suricato';
+  }
+  if(!Number.isFinite(min)||!Number.isFinite(max))return {missing:'Faltam valores mínimo e máximo cadastrados.'};
+  const proposedMin=Math.max(1,min+state.delta),proposedMax=Math.max(proposedMin,max+state.delta);
+  const profit=x=>cost===null?null:x*(1-tax)-cost;
+  let recommendation=null;
+  if(action){
+   const res=analyzeDecision(action,getCatalog(),{team:defaultTeam(action),kitMode:'oficial',priceMode:'pista',tax,reference:getReference?.()});
+   if(res.valid)recommendation=res;
+  }
+  return {type:record.type,name:action?.nome||record.example?.label||'Ação',source,action,
+   min,max,proposedMin,proposedMax,cost,loss,initial,
+   profitMin:profit(min),profitMax:profit(max),profitProposedMin:profit(proposedMin),profitProposedMax:profit(proposedMax),recommendation};
+ }
+ function resultCards(d){
+  if(d.missing)return '<p class="ap-hint">'+escape(d.missing)+'</p>';
+  if(d.type==='casas'){
+   return '<div class="ap-eco-compare"><div class="ap-eco-compare-card"><span>Valores atuais</span><strong>'+money(d.current)+'</strong><small>Lucro médio conhecido: '+money(d.profitCurrent)+'</small></div>'+
+    '<div class="ap-eco-compare-card"><span>Valores simulados</span><strong>'+money(d.after)+'</strong><small>Lucro médio conhecido: '+money(d.profitAfter)+'</small></div></div>'+
+    '<p class="ap-eco-context">Item: '+escape(d.selectedName)+' • Preço atual '+money(d.priceCurrent)+' → '+money(d.priceAfter)+' • Gazua por casa '+money(d.cost)+
+    (d.unitsKnown?' • Itens comprados pelo NPC: '+integer(d.units):'')+'</p>'+
+    (!d.allPriced?'<p class="ap-hint">Existem itens sem preço cadastrado. Este é o lucro parcial conhecido.</p>':'');
+  }
+  const pair=(a,b)=>money(a)+' – '+money(b);
+  return '<div class="ap-eco-compare"><div class="ap-eco-compare-card"><span>Valores atuais</span><strong>'+pair(d.min,d.max)+'</strong><small>Lucro: '+pair(d.profitMin,d.profitMax)+'</small></div>'+
+   '<div class="ap-eco-compare-card"><span>Valores simulados</span><strong>'+pair(d.proposedMin,d.proposedMax)+'</strong><small>Lucro: '+pair(d.profitProposedMin,d.profitProposedMax)+'</small></div></div>'+
+   '<p class="ap-eco-context">Custo '+(d.type==='blipada'?'de reposição na vitória':'da tentativa')+': '+money(d.cost)+
+   (d.initial===null?'':' • Capital para iniciar: '+money(d.initial))+
+   (d.loss===null?'':' • Prejuízo na derrota: '+money(d.loss))+
+   ' • '+escape(d.source)+'.</p>'+
+   (d.recommendation?'<p class="ap-eco-context"><b>Recomendação High OS:</b> '+money(d.recommendation.recommendedMin)+' a '+money(d.recommendation.recommendedMax)+
+    ' sujos ('+escape(d.recommendation.direction)+')'+(!d.recommendation.hasComparison?' • sem referência de custo alterado, manter valores atuais':'')+'.</p>':'');
+ }
+ function caption(d){
+  return d.type==='casas'?'A régua altera o preço pago pelo NPC ao item selecionado.':
+   'A régua altera igualmente o pagamento mínimo e o máximo, em dinheiro sujo.';
+ }
+ function adjustText(){
+  return (state.delta>0?'+':'')+money(state.delta);
+ }
+ function progress(){
+  return ((state.delta+10000)/20000*100).toFixed(2)+'%';
  }
  function render(){
-  if(!['roubados','atm','registradora','acoes'].includes(state.area)){panel.hidden=true;return;}
-  panel.hidden=false;
-  panel.innerHTML=state.area==='roubados'?house():actions(state.area==='acoes'?'blipada':state.area);
+  const groups=activities(),opts=groups.map(g=>'<optgroup label="'+escape(g.label)+'">'+g.values.map(a=>
+   '<option value="'+escape(a.id)+'"'+(a.id===state.activity?' selected':'')+'>'+escape(a.label)+'</option>').join('')+'</optgroup>').join('');
+  const d=calc();
+  state.view=d;
+  panel.hidden=!['roubados','atm','registradora','acoes'].includes(state.area);
+  if(panel.hidden)return;
+  panel.innerHTML='<div class="ap-eco-kicker">CONTROLE DE BUFF E NERF</div>'+
+   '<label class="ap-eco-select"><span>Atividade para simular</span><select data-eco-field="activity">'+opts+'</select></label>'+
+   otherSettings()+
+   '<div class="ap-eco-slider-header"><label for="apEcoSlider">Ajuste do pagamento (dinheiro sujo)</label>'+
+   '<strong id="apEcoAmount" class="'+(state.delta<0?'is-nerf':state.delta>0?'is-buff':'')+'">'+escape(adjustText())+'</strong></div>'+
+   '<input id="apEcoSlider" class="ap-eco-slider" type="range" min="-10000" max="10000" step="500" value="'+state.delta+
+   '" style="--eco-progress:'+progress()+'" aria-label="Régua de buff e nerf">'+
+   '<div class="ap-eco-range-labels"><span>Nerf −R$ 10 mil</span><span>Buff +R$ 10 mil</span></div>'+
+   '<div id="apEcoResults" aria-live="polite">'+resultCards(d)+'</div>'+
+   '<div class="ap-eco-footer"><span>Simulação ilustrativa; não altera o servidor.</span>'+
+   '<button type="button" class="ap-eco-copy" data-eco-open="copy"'+(d.missing?' disabled':'')+'>'+
+   '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>Copiar ajuste</button></div>'+
+   '<p class="ap-eco-info">'+escape(caption(d))+'</p>'+
+   '<div class="ap-eco-secondary">'+(d.type==='casas'?
+     '<button type="button" class="ap-button" data-eco-open="npc">Editar preços do NPC</button>'+
+     '<button type="button" class="ap-button" data-eco-open="house">Consultar loot da casa</button>':
+     '<button type="button" class="ap-button" data-eco-open="'+(d.action?'action':'new')+'">'+(d.action?'Ver perfil e proposta':'Cadastrar valores oficiais')+'</button>'+
+     (d.type==='blipada'?'<button type="button" class="ap-button" data-eco-open="ranking">Rankings e alertas</button>':''))+
+   '</div>';
  }
- panel.addEventListener('input',e=>{
-  const key=e.target.dataset.ecoField;if(!key||e.target.type!=='number')return;
-  if(e.target.type==='number'){
-   if(e.target.value===''||!e.target.validity.valid)return;
-   const val=Number(e.target.value);
-   if(!Number.isFinite(val))return;
-   state[key]=val;
-  }else state[key]=e.target.value;
-  // Atualiza o cálculo; não move o foco enquanto o usuário digita.
-  const focusKey=key,from=e.target,position=from.type==='number'?null:from.selectionStart;
+ function updateSlider(){
+  const label=panel.querySelector('#apEcoAmount'),slider=panel.querySelector('#apEcoSlider');
+  if(label){label.textContent=adjustText();label.className=state.delta<0?'is-nerf':state.delta>0?'is-buff':'';}
+  if(slider){slider.value=state.delta;slider.style.setProperty('--eco-progress',progress());}
+  const d=calc();state.view=d;
+  const target=panel.querySelector('#apEcoResults');if(target)target.innerHTML=resultCards(d);
+  const copy=panel.querySelector('[data-eco-open="copy"]');if(copy)copy.disabled=!!d.missing;
+ }
+ function chooseActivity(next){
+  if(!next)return;
+  state.activity=next;state.delta=0;
+  const area=areaFor(next);
+  state.area=area;
+  onAreaChange?.(area);
   render();
-  const target=panel.querySelector('[data-eco-field="'+focusKey+'"]');
-  if(target){target.focus({preventScroll:true});if(position!==null&&target.setSelectionRange)target.setSelectionRange(position,position);}
+ }
+ function changeField(key,value){
+  if(key==='activity'){chooseActivity(value);return;}
+  if(key==='item'){state.item=value;state.delta=0;render();return;}
+  if(!['tax','durability','locations','safes'].includes(key))return;
+  const max=key==='tax'?99:100,min=key==='safes'?0:1;
+  const n=Number(value);if(!Number.isFinite(n)||value==='')return;
+  state[key]=clamp(Math.floor(n),min,max);
+  if(state.safes>state.locations)state.safes=state.locations;
+  render();
+ }
+ function copyText(d){
+  const lines=['HIGH OS DEV • SIMULAÇÃO DE BUFF / NERF','Atividade: '+d.name,
+   'Alteração em dinheiro sujo: '+adjustText()];
+  if(d.type==='casas')lines.push('Item do NPC: '+d.selectedName,
+   'Preço unitário atual: '+money(d.priceCurrent),'Preço unitário simulado: '+money(d.priceAfter),
+   'Receita média atual: '+money(d.current),'Receita média simulada: '+money(d.after),
+   'Lucro médio conhecido atual: '+money(d.profitCurrent),'Lucro médio conhecido simulado: '+money(d.profitAfter));
+  else lines.push('Pagamento atual: '+money(d.min)+' a '+money(d.max),
+   'Pagamento simulado: '+money(d.proposedMin)+' a '+money(d.proposedMax),
+   'Lucro atual: '+money(d.profitMin)+' a '+money(d.profitMax),
+   'Lucro simulado: '+money(d.profitProposedMin)+' a '+money(d.profitProposedMax));
+  lines.push('Somente simulação. Não altera o servidor.');
+  return lines.join('\n');
+ }
+ panel.addEventListener('input',ev=>{
+  const input=ev.target;
+  if(input.id==='apEcoSlider'){state.delta=clamp(Number(input.value)||0,-10000,10000);updateSlider();return;}
+  const key=input.dataset.ecoField;if(!key||input.tagName==='SELECT')return;
+  if(input.value!==''&&input.validity.valid)changeField(key,input.value);
  });
- panel.addEventListener('change',e=>{const key=e.target.dataset.ecoField;if(!key)return;state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(key==='name'||key==='item'||key==='preset')state.delta=0;render();});
- panel.addEventListener('click',e=>{
-  const delta=e.target.closest('[data-eco-delta]');
-  if(delta){state.delta=Number(delta.dataset.ecoDelta)||0;render();return;}
-  const go=e.target.closest('[data-eco-open]');if(!go)return;
-  const kind=go.dataset.ecoOpen;
+ panel.addEventListener('change',ev=>{
+  const input=ev.target,key=input.dataset.ecoField;
+  if(key==='activity'||key==='item')changeField(key,input.value);
+  else if(key)changeField(key,input.value);
+ });
+ panel.addEventListener('click',async ev=>{
+  const btn=ev.target.closest('[data-eco-open]');if(!btn)return;
+  const kind=btn.dataset.ecoOpen,d=state.view;
+  if(kind==='copy'&&!d?.missing){
+   try{await navigator.clipboard.writeText(copyText(d));btn.textContent='Copiado!';}
+   catch(e){btn.textContent='Não foi possível copiar';}
+   return;
+  }
   if(kind==='npc')onOpenNpc?.();
   if(kind==='house')onOpenHouse?.();
-  if(kind==='action')onOpenAction?.(state.preview?.name,state.preview?.adjusted?state.preview:null);
-  if(kind==='new')onNewAction?.();
+  if(kind==='new')onNewAction?.(state.area);
   if(kind==='ranking')root.querySelector('[data-ap-nav="ranking"]')?.click();
+  if(kind==='action'&&d?.action)onOpenAction?.(d.action.nome,state.delta?{min:d.proposedMin,max:d.proposedMax,adjusted:true}:null);
  });
- return {selectArea(area){if(area!==state.area){state.area=area;state.name='';state.delta=0;state.preset=area==='registradora'?'registradora':'atm-c4';}render();},
-  refresh:render};
+ return {selectArea(area){
+  if(area!==state.area){state.area=area;state.activity=defaultActivity(area);state.delta=0;}
+  render();
+ },refresh:render};
 }
