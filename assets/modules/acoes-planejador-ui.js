@@ -21,6 +21,7 @@ const managementOptions=()=>({tax:state.tax,ammoUse:state.ammoUse,
  reference,winChance:null,policeWaitMinutes:null,
  estimatedActionMinutes:management.estimatedActionMinutes});
 const action=()=>actions.find(a=>a.nome===selection);
+const blippedActions=()=>actions.filter(a=>!['atm','registradora','casas'].includes(a.tipo_acao));
 const place=()=>action()?.locais?.[localIndex]||null;
 const options=()=>({...state,location:place()});
 const decision=()=>{
@@ -68,7 +69,7 @@ function choose(name){
 
 function renderManagement(){
  if(!catalog||!el('apManagementList'))return;
- const report=buildManagementBoard(actions,catalog,managementOptions());
+ const report=buildManagementBoard(blippedActions(),catalog,managementOptions());
  const k=report.stats;
  el('apManagementKpis').innerHTML=[
   kpi('Ações ativas',String(k.active),'gold',k.inactive+' inativas'),
@@ -108,7 +109,7 @@ function renderManagement(){
 
 function refreshPriceAlerts(){
  if(!el('apPriceAlerts')||!catalog)return;
- const report=assessPriceChanges(actions,catalog,reference,{tax:state.tax,ammoUse:state.ammoUse,
+ const report=assessPriceChanges(blippedActions(),catalog,reference,{tax:state.tax,ammoUse:state.ammoUse,
   accessConsumed:state.accessConsumed});
  const intro=el('apPriceAlertIntro'),box=el('apPriceAlerts'),save=el('apSaveReference');
  if(save)save.hidden=!onSaveReference;
@@ -213,7 +214,7 @@ function rankBoard(){
  if(!catalog||!actions.length||!el('apRankingResults'))return;
  // Ranking oficial comparável: os ajustes temporários feitos no formulário
  // de uma ação não modificam a posição dos demais participantes.
- const report=buildActionRankings(actions,catalog,{tax:state.tax,ammoUse:state.ammoUse,
+ const report=buildActionRankings(blippedActions(),catalog,{tax:state.tax,ammoUse:state.ammoUse,
   accessConsumed:state.accessConsumed});
  const mode=RANKING_MODES.find(m=>m.id===state.rankMode)||RANKING_MODES[0];
  const rows=report.rankings[mode.id]||[];
@@ -299,7 +300,11 @@ function showMainRecommendation(d){
 function actionsList(){
  if(!root)return;
  const q=norm(state.search);
+ const area=root.dataset.economyArea||'acoes';
  const results=actions.filter(a=>{
+  if(area==='atm'&&a.tipo_acao!=='atm')return false;
+  if(area==='registradora'&&a.tipo_acao!=='registradora')return false;
+  if(area==='acoes'&&['atm','registradora','casas'].includes(a.tipo_acao))return false;
   const match=!q||norm(a.nome).includes(q)||(a.locais||[]).some(l=>norm(l.descricao||l.nome).includes(q));
   if(!match)return false;
   if(state.status==='ATIVAS'&&a.status==='inativo')return false;
@@ -310,7 +315,7 @@ function actionsList(){
   return true;
  });
  const visible=results.slice(0,state.listLimit);
- el('apActionCount').textContent=visible.length+' exibidas de '+results.length+' resultados ('+actions.length+' cadastradas)';
+ el('apActionCount').textContent=visible.length+' exibidas de '+results.length+' resultados ('+actions.length+' cadastradas no total)';
  const more=el('apCatalogMore');
  if(more){more.hidden=visible.length>=results.length;more.textContent='Carregar mais ('+(results.length-visible.length)+' restantes)';}
  el('apActionList').innerHTML=visible.map(a=>{
@@ -660,6 +665,7 @@ function exportAnalysis(){
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 function listeners(){
+ root.addEventListener('ap-economy-area-changed',()=>{actionsList();});
  root.addEventListener('click',ev=>{
   if(ev.target.closest('#apOpenNpc')){workspace?.navigate('loot');return;}
   if(ev.target.closest('#apOpenStrategy')){workspace?.openSuggestion();return;}
