@@ -13,7 +13,6 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
  panel.id='apSimpleControl';
  nav.after(panel);
  const money=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(x):'Preço pendente';
- const fmt=x=>Number.isFinite(x)?new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}).format(x):'—';
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
  const number=x=>x===''||x===null||x===undefined?null:Number.isFinite(Number(x))?Number(x):null;
  const isCore=a=>!['atm','registradora','casas'].includes(a?.tipo_acao);
@@ -72,7 +71,6 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
   {id:'atm-c4pp',type:'atm',name:'ATM com C4++',min:40000,max:48000,explosive:'C4 ++'},
   {id:'registradora',type:'registradora',name:'Caixinha / registradora',min:22500,max:26250,explosive:''}
  ];
- function filtered(type){return (getActions()||[]).filter(a=>a.tipo_acao===type&&a.status!=='inativo');}
  function actions(type){
   const all=(getActions()||[]).filter(a=>a.status!=='inativo'&&(type==='blipada'?isCore(a):a.tipo_acao===type));
   const action=all.find(a=>a.nome===state.name)||all[0]||null;
@@ -110,7 +108,7 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
     ['Lucro máximo com ajuste',money(profit(proposedMax))]
    ]):'<p class="ap-hint">Cadastre os prêmios e os itens necessários para calcular o lucro.</p>')+
    (type==='blipada'?'<p class="ap-simple-change">Investimento para montar o kit: <b>'+money(calc?.kit?.total??null)+'</b>. Prejuízo na derrota: <b>'+money(loss)+'</b>. Na vitória, descontamos apenas o que precisa ser consumido/reposto.</p>':
-    '<p class="ap-simple-change">Se o custo do item necessário subir R$ 1.000, manter o lucro após 30% de lavagem exige aproximadamente R$ 1.429 a mais no pagamento sujo (se esse item é consumido a cada tentativa).</p>')+
+    '<p class="ap-simple-change">Se o custo de um item consumido subir R$ 1.000, manter o lucro com lavagem de '+state.tax+'% exige aproximadamente '+money(Math.ceil(1000/(1-state.tax/100)))+' a mais no pagamento sujo.</p>')+
    (cost===null?'<p class="ap-hint">Preço de insumo ausente. A simulação de lucro fica pendente até o Mercado Negro ou cadastro ser completado.</p>':'')+
    (recommendation?.valid?'<p class="ap-simple-impact">High OS recomenda: <b>'+money(recommendation.recommendedMin)+' a '+money(recommendation.recommendedMax)+'</b> sujos • '+esc(recommendation.direction)+'. '+(recommendation.hasComparison?'Comparação com a referência de preços salva.':'Sem variação de custo comprovada; manter prêmios atuais.')+'</p>':'')+
    '<p class="ap-row-muted">Ao abrir o perfil, os valores simulados são levados para a proposta sem aprovação automática.</p>'+ 
