@@ -772,7 +772,7 @@ export async function mountActionPlanner({onApproveAction=null,onReadReference:r
  onRejectAction=rejectAction;onReadDecisions=readDecisions;onReadSheet=readSheet;
  root=el('actionEconomyPlanner');if(!root)return;
  if(!workspace)workspace=createActionWorkspace({root,
-  getActions:()=>actions,getPublished:()=>publishedActions,getCatalog:()=>catalog,
+  getActions:()=>actions,getPublished:()=>publishedActions,getCatalog:()=>catalog,getReference:()=>reference,
   getSelected:()=>selection,select:name=>choose(name),refresh:repaintRegistry,
   onReadRegistry:readRegistry,onMutateRegistry:mutateRegistry});
  if(ready){
