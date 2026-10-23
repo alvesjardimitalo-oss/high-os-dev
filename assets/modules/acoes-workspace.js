@@ -7,7 +7,7 @@ import {createNpcWorkbench} from './acoes-npc-ui.js?v=7';
 /** Navigation, profiles and Firestore-backed internal action registration.
  * The official market catalog is always read-only and remains the reference.
  */
-export function createActionWorkspace({root,getActions,getPublished,getCatalog,getSelected,select,refresh,onReadRegistry,onMutateRegistry}){
+export function createActionWorkspace({root,getActions,getPublished,getCatalog,getReference,getSelected,select,refresh,onReadRegistry,onMutateRegistry}){
  const $=id=>root.querySelector('#'+id);
  const safe=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
  let registry=cleanRegistry(),ready=false,view='overview',tab='resumo',draft=null,original='',busy=false;
