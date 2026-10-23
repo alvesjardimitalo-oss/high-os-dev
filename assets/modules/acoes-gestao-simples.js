@@ -1,10 +1,11 @@
 /** Painel inicial da Economia Ilegal. Simula, nunca publica ou altera premiações. */
 import {calculateAction,defaultTeam,priceOf} from './acoes-core.js?v=5';
+import {analyzeDecision} from './acoes-inteligencia.js?v=6';
 import {LOOT_TABLES} from './roubos-loot-data.js?v=1';
 import {makeLootPrices,houseSearchParts,invasionExpectation,lootKey} from './roubos-loot-core.js?v=3';
 import {STOLEN_ITEMS_SNAPSHOT} from './economia-npc-seed.js?v=2';
 
-export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry,onOpenAction,onOpenHouse,onOpenNpc,onNewAction}){
+export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry,getReference,onOpenAction,onOpenHouse,onOpenNpc,onNewAction}){
  const nav=root.querySelector('.ap-economy-navigation');
  if(!nav)return {selectArea(){},refresh(){}};
  const panel=document.createElement('section');
@@ -77,9 +78,10 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
   const action=all.find(a=>a.nome===state.name)||all[0]||null;
   const preset=presetRows.find(p=>p.id===state.preset&&p.type===type)||presetRows.find(p=>p.type===type);
   if(action&&state.name!==action.nome)state.name=action.nome;
-  let min=null,max=null,calc=null,cost=null,loss=null,source='';
+  let min=null,max=null,calc=null,cost=null,loss=null,source='',recommendation=null;
   if(action){
    calc=calculateAction(action,getCatalog(),{team:defaultTeam(action),kitMode:'oficial',priceMode:'pista',tax:state.tax/100});
+   recommendation=analyzeDecision(action,getCatalog(),{team:defaultTeam(action),kitMode:'oficial',priceMode:'pista',tax:state.tax/100,reference:getReference?.()});
    min=calc.min;max=calc.max;cost=calc.kit.winCost;loss=calc.loss;source='Cadastro da atividade';
   }else if(preset){
    min=preset.min;max=preset.max;
@@ -109,6 +111,7 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
    (type==='blipada'?'<p class="ap-simple-change">Investimento para montar o kit: <b>'+money(calc?.kit?.total??null)+'</b>. Prejuízo na derrota: <b>'+money(loss)+'</b>. Na vitória, descontamos apenas o que precisa ser consumido/reposto.</p>':
     '<p class="ap-simple-change">Se o custo do item necessário subir R$ 1.000, manter o lucro após 30% de lavagem exige aproximadamente R$ 1.429 a mais no pagamento sujo (se esse item é consumido a cada tentativa).</p>')+
    (cost===null?'<p class="ap-hint">Preço de insumo ausente. A simulação de lucro fica pendente até o Mercado Negro ou cadastro ser completado.</p>':'')+
+   (recommendation?.valid?'<p class="ap-simple-impact">High OS recomenda: <b>'+money(recommendation.recommendedMin)+' a '+money(recommendation.recommendedMax)+'</b> sujos • '+esc(recommendation.direction)+'. '+(recommendation.hasComparison?'Comparação com a referência de preços salva.':'Sem variação de custo comprovada; manter prêmios atuais.')+'</p>':'')+
    '<div class="ap-simple-actions">'+(action?button('action','Abrir perfil e decisões'):button('new','Cadastrar esta atividade'))+
    (type==='blipada'?button('ranking','Ver rankings e alertas'):'')+'</div>';
  }
@@ -118,7 +121,7 @@ export function createSimpleEconomyPanel({root,getActions,getCatalog,getRegistry
   panel.innerHTML=state.area==='roubados'?house():actions(state.area==='acoes'?'blipada':state.area);
  }
  panel.addEventListener('input',e=>{
-  const key=e.target.dataset.ecoField;if(!key)return;
+  const key=e.target.dataset.ecoField;if(!key||e.target.type!=='number')return;
   if(e.target.type==='number'){
    if(e.target.value===''||!e.target.validity.valid)return;
    const val=Number(e.target.value);
