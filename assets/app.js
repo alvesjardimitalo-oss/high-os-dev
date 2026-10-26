@@ -1418,7 +1418,12 @@ function applyModuleAccess(role='CONSULTA'){
  const perms=effectivePermissions();
 document.body.classList.toggle('metric-only-access',false);
 
- document.querySelectorAll('.nav-item').forEach(btn=>{const page=btn.dataset.page;if(btn.classList.contains('admin-only')){btn.style.display=isAdmin()?'flex':'none';return}btn.style.display=canViewModule(page)?'flex':'none';});
+ document.querySelectorAll('.nav-item').forEach(btn=>{
+  const page=btn.dataset.page;
+  const visivel=btn.classList.contains('admin-only')?isAdmin():canViewModule(page);
+  // O tema Prime aplica display:flex!important. Inline normal não ocultava os módulos.
+  btn.style.setProperty('display',visivel?'flex':'none','important');
+ });
 
  const active=document.querySelector('.page.active')?.id?.replace('page-','')||'dashboard';
 if(!isAdmin()&&!canViewModule(active)){const first=firstAllowedModule();
@@ -1449,7 +1454,7 @@ facSheetDiffModal:'administracao'};
 return map[modal]||pageModule(document.querySelector('.page.active')?.id?.replace('page-','')||'dashboard')}
 function permissionDeniedMessage(module,edit=false){const label=SYSTEM_MODULES.find(m=>m.id===pageModule(module))?.label||module;
 alert(edit?`Seu acesso a ${label} é somente para visualização.\n\nSolicite a um ADMIN permissão de edição.`:`Você não possui acesso ao módulo ${label}.`)}
-document.addEventListener('click',e=>{const nav=e.target.closest?.('.nav-item[data-page]');if(nav&&!nav.classList.contains('admin-only')&&!canViewModule(nav.dataset.page)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(nav.dataset.page,false);return}const b=e.target.closest?.('button');if(!b||isAdmin())return;const mod=moduleForElement(b);if(mutationButton(b)&&!canEditModule(mod)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(mod,true)}},true);
+document.addEventListener('click',e=>{const nav=e.target.closest?.('.nav-item[data-page]');if(nav&&((nav.classList.contains('admin-only')&&!isAdmin())||(!nav.classList.contains('admin-only')&&!canViewModule(nav.dataset.page)))){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(nav.dataset.page,false);return}const b=e.target.closest?.('button');if(!b||isAdmin())return;const mod=moduleForElement(b);if(mutationButton(b)&&!canEditModule(mod)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(mod,true)}},true);
 
 document.addEventListener('submit',e=>{if(isAdmin())return;const mod=moduleForElement(e.target);if(!canEditModule(mod)){e.preventDefault();e.stopImmediatePropagation();permissionDeniedMessage(mod,true)}},true);
 
@@ -1558,7 +1563,7 @@ dashRoleEl=$('#dashRole'),
 userPhotoEl=$('#userPhoto');
   if(userNameEl)userNameEl.textContent=currentProfile.name||user.displayName||email;if(userRoleEl)userRoleEl.textContent=currentProfile.cargo||role;if(userAccessEl)userAccessEl.textContent='ACESSO: '+role;if(dashEmailEl)dashEmailEl.textContent=email;if(dashRoleEl)dashRoleEl.textContent=role;
   if(userPhotoEl){if(user.photoURL){userPhotoEl.src=user.photoURL;userPhotoEl.style.display=''}else userPhotoEl.style.display='none';}
-  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=role==='ADMIN'?'flex':'none');
+  document.querySelectorAll('.admin-only').forEach(el=>el.style.setProperty('display',role==='ADMIN'?'flex':'none','important'));
   applyModuleAccess(role);
   renderSessionClock(email);
   const initialPage=document.querySelector('.page.active')?.id?.replace('page-','')||'';
