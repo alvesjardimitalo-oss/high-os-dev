@@ -1905,7 +1905,7 @@ async function recuperarTelaoIlegalMechanic02(facList=[]){
  return true;
 }
 
-let faccoesLoaded=false,faccoesLoadPromise=null;
+let faccoesLoaded=false,faccoesLoadPromise=null,faccoesEmergencyError='';
 async function loadFaccoes(){
  if(faccoesLoadPromise)return faccoesLoadPromise;
  faccoesLoadPromise=(async()=>{
@@ -1925,6 +1925,7 @@ async function loadFaccoes(){
    faccoes=currentSnapshot.docs.map(d=>({id:d.id,...d.data()}));
    try{await recuperarTelaoIlegalMechanic02(faccoes)}catch(err){console.warn('[TELÃO MECÂNICA 02] Recuperação pendente:',err?.message||err)}
    faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
+   faccoesEmergencyError='';
    faccoesLoaded=true;
    renderFaccoes();
    renderAvailableFaccoes();
@@ -1932,7 +1933,7 @@ async function loadFaccoes(){
    return faccoes;
   }catch(e){
    $('#facList').innerHTML=`<div class="placeholder"><h3>DADOS INDISPONÍVEIS</h3><p>${esc(e.message||String(e))}</p></div>`;
-   if(highOsEmergencyReadOnly)renderCommandDashboard();
+   if(highOsEmergencyReadOnly){faccoesEmergencyError=String(e?.message||e);renderCommandDashboard()}
    throw e;
   }
  })();
@@ -12073,7 +12074,7 @@ function renderCommandDashboard(){
  const box=$('#commandDashboard');
 if(!box)return;
 if(highOsEmergencyReadOnly&&!faccoesLoaded){
- box.innerHTML='<div class="placeholder"><h3>CONSULTANDO CÓPIA HISTÓRICA</h3><p>Discord offline. O High OS tentará recuperar registros antigos do Firestore ou deste navegador.</p></div>';
+ box.innerHTML=faccoesEmergencyError?'<div class="placeholder"><h3>DADOS OPERACIONAIS INDISPONÍVEIS</h3><p>Não foi encontrada uma cópia das facções no navegador ou no Firestore. Os números atuais são desconhecidos; não foram apagados do Discord.</p></div>':'<div class="placeholder"><h3>CONSULTANDO CÓPIA HISTÓRICA</h3><p>Discord offline. O High OS tentará recuperar registros antigos do Firestore ou deste navegador.</p></div>';
  return;
 }
 if(highOsEmergencyReadOnly&&!faccoes.length){
