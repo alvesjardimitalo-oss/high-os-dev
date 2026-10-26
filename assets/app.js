@@ -1928,9 +1928,11 @@ async function loadFaccoes(){
    faccoesLoaded=true;
    renderFaccoes();
    renderAvailableFaccoes();
+   renderCommandDashboard();
    return faccoes;
   }catch(e){
-   $('#facList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${e.message}</p></div>`;
+   $('#facList').innerHTML=`<div class="placeholder"><h3>DADOS INDISPONÍVEIS</h3><p>${esc(e.message||String(e))}</p></div>`;
+   if(highOsEmergencyReadOnly)renderCommandDashboard();
    throw e;
   }
  })();
@@ -2303,6 +2305,22 @@ return comoSnapshot(mem.rows)}
    statBump(nome,'cache');
    return comoSnapshot(local.rows);
   }
+ }
+ // Contingência: consultar cache ou dados históricos do Firestore, sem atualizá-los.
+ if(highOsEmergencyReadOnly){
+  const anterior=mem||cacheLer(nome);
+  if(anterior?.rows?.length)return comoSnapshot(anterior.rows);
+  try{
+   const historico=await getDocs(colRef);
+   if(!historico.empty){
+    const rows=historico.docs.map(d=>({id:d.id,...d.data()}));
+    cacheMemoria.set(nome,{at:0,rows});
+    return comoSnapshot(rows);
+   }
+  }catch(error){
+   console.warn('[HIGH OS] Espelho Firestore não disponível:',nome,error?.code||error?.message||error);
+  }
+  throw new Error('Dados de '+nome+' indisponíveis: Discord offline e sem cópia local/histórica acessível.');
  }
  try{
   const ds=discordStoreRef(colRef);
@@ -12054,6 +12072,14 @@ function painelDepsV14(){return {esc,estado:estadoV14,db,fs:{setDoc,doc,addDoc,s
 function renderCommandDashboard(){
  const box=$('#commandDashboard');
 if(!box)return;
+if(highOsEmergencyReadOnly&&!faccoesLoaded){
+ box.innerHTML='<div class="placeholder"><h3>CONSULTANDO CÓPIA HISTÓRICA</h3><p>Discord offline. O High OS tentará recuperar registros antigos do Firestore ou deste navegador.</p></div>';
+ return;
+}
+if(highOsEmergencyReadOnly&&!faccoes.length){
+ box.innerHTML='<div class="placeholder"><h3>DADOS OPERACIONAIS INDISPONÍVEIS</h3><p>Sem conexão com o Discord e sem cópia histórica. Os números atuais são desconhecidos, não zero.</p></div>';
+ return;
+}
 
  /* V14: regra única de ocupação (modules/ocupacao.js) */
  const active=faccoes.filter(f=>!f.removido&&situacaoGroup(f)==='ASSUMIDA'),
@@ -12100,7 +12126,7 @@ v])=>`<div class="dash-seg-row"><span>${esc(k)}</span><div><i style="width:${v.a
 
  const activity=movements.map(h=>`<div class="dash-activity-row"><i></i><div><b>${esc(historyTitle(h))}</b><span>${esc([h.group,h.faccao].filter(Boolean).join(' • ')||h.descricao||'Operação administrativa')}</span><small>${esc(formatHistoryDate(h))}${h.usuario?' • '+esc(h.usuario):''}</small></div></div>`).join('')||'<div class="dash-empty">Nenhuma movimentação registrada.</div>';
 
- box.innerHTML=`<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>DISPONÍVEIS</span><b>${vacant.length}</b><small>prontas para entrega</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
+ box.innerHTML=`${highOsEmergencyReadOnly?'<div role="status" style="padding:12px;margin-bottom:14px;border:1px solid #8d682a;border-radius:8px;color:#ffe2a0;background:#221c10">DADOS HISTÓRICOS / CACHE • Não representam a situação atual da cidade. Discord offline.</div>':''}<section class="dash-command-hero"><div><span class="dash-hero-kicker">HIGH OS • CENTRAL EXECUTIVA</span><h3>VISÃO GERAL DO ILEGAL</h3><p>Indicadores, alertas e ações prioritárias reunidos em uma leitura rápida da operação.</p></div><div class="dash-hero-actions"><button type="button" data-open-management>ABRIR GESTÃO DO ILEGAL</button><button type="button" class="primary" data-open-general-report>GERAR RELATÓRIO GERAL</button></div></section><div class="dash-kpis"><button data-go="faccoes"><span>FACÇÕES ATIVAS</span><b>${active.length}</b><small>somente ocupadas</small></button><button data-go="faccoes"><span>DISPONÍVEIS</span><b>${vacant.length}</b><small>prontas para entrega</small></button><button data-go="metricas" class="${openAlerts.length?'warn':''}"><span>ALERTAS SEMANAIS</span><b>${openAlerts.length}</b><small>${critical?critical+' crítico(s)':'comparação com semana anterior'}</small></button><article class="health ${health.toLowerCase()}"><span>SAÚDE DO ILEGAL</span><b>${health}</b><small>${openAlerts.length?openAlerts.length+' alerta(s) pendente(s)':'sem alertas pendentes'}</small></article></div>
  <div class="dash-grid">${alertCenter}${painelDisponiveisHtml(painelDepsV14())}${painelOcupacaoHtml(painelDepsV14())}
  <section class="dash-panel"><header><div><span>30 DIAS / HISTÓRICO</span><h3>MOVIMENTAÇÃO DE FACÇÕES</h3></div><button data-go="historico">VER HISTÓRICO →</button></header><div class="dash-move-kpis"><div><b>${ent30}</b><span>ENTREGAS</span></div><div><b>${rec30}</b><span>RECOLHIMENTOS</span></div><div><b>${historico.length}</b><span>EVENTOS</span></div></div></section>
  <section class="dash-panel dash-wide"><header><div><span>AUDITORIA</span><h3>ATIVIDADE RECENTE</h3></div><button data-go="historico">ABRIR HISTÓRICO →</button></header><div class="dash-activity">${activity}</div></section></div>`;
