@@ -1542,9 +1542,11 @@ onAuthStateChanged(auth,async user=>{
    const aviso=document.createElement('div');
    aviso.id='highOsEmergencyReadOnlyNotice';
    aviso.setAttribute('role','status');
-   aviso.style.cssText='padding:12px 16px;margin:8px 0 18px;background:#221c10;border:1px solid #8d682a;border-radius:10px;color:#ffe2a0;line-height:1.5';
+   aviso.style.cssText='padding:10px 14px;margin:0 0 16px;background:#221c10;border:1px solid #8d682a;border-radius:10px;color:#ffe2a0;line-height:1.5;font-size:12px';
    aviso.textContent='CONTINGÊNCIA • SOMENTE LEITURA: cadastro validado no Firebase. Dados do Discord indisponíveis; informações em cache podem estar desatualizadas. Nenhuma alteração será gravada até a API voltar.';
-   appView.prepend(aviso);
+   // .app é uma grid de duas colunas (sidebar + conteúdo).
+   // O aviso precisa ficar DENTRO do conteúdo, não como terceira coluna.
+   appView.querySelector('.content')?.prepend(aviso);
   }else{
    setTimeout(()=>highOsDiscordWriteSelfTest().then(r=>{if(!r.ok)console.warn('[HIGH OS] autoteste Discord falhou sem bloquear o painel',r)}),800);
   }
