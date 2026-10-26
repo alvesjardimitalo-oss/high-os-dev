@@ -52,8 +52,12 @@ const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#d
 
 let currentUser=null,currentProfile=null,faccoes=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
 const HIGH_OS_DISCORD_API='https://high-os-discord-production.up.railway.app';
+// Acesso de contingência: requer cadastro ativo validado no Firestore e é sempre somente leitura.
+// A API Discord continua sendo a fonte operacional canônica, sem simular gravações.
+let highOsEmergencyReadOnly=false;
 async function highOsDiscordRequest(path,options={}){
  if(!currentUser)throw new Error('Sessão expirada. Entre novamente.');
+ if(highOsEmergencyReadOnly)throw new Error('API do Discord offline. Modo de contingência: somente leitura.');
  const token=await currentUser.getIdToken();
  const res=await fetch(HIGH_OS_DISCORD_API+path,{...options,headers:{'content-type':'application/json','authorization':'Bearer '+token,...(options.headers||{})}});
  const data=await res.json().catch(()=>({}));
@@ -1484,13 +1488,40 @@ async function carregarCadastro(user){
   if(dados.active!==true)return {ok:false,explicacao:'<b>'+esc(email)+'</b> está cadastrado, mas o acesso está inativo.'};
   return {ok:true,snap:{data:()=>dados},id:String(dados.id||email)};
  }catch(e){
-  return {ok:false,explicacao:'Falha ao consultar seu cadastro no High OS Discord: <b>'+esc(e.message||String(e))+'</b>'};
+  // NUNCA usar fallback quando o servidor recusou acesso. Apenas falhas reais de rede.
+  const mensagem=String(e?.message||e||'');
+  const erroRede=e instanceof TypeError||/failed to fetch|networkerror|load failed|fetch failed|connection refused|err_connection/i.test(mensagem);
+  if(erroRede){
+   const tentativas=[email,String(user.email||'').trim()].filter((x,i,a)=>x&&a.indexOf(x)===i);
+   for(const id of tentativas){
+    try{
+     const cadastro=await getDoc(doc(db,'users',id));
+     if(!cadastro.exists())continue;
+     const dados=cadastro.data()||{};
+     if(dados.active!==true)continue;
+     // Sem ampliar permissões do cadastro antigo; nenhuma permissão de edição.
+     const padrao=defaultPermissionsForRole(dados.role);
+     const permissoes=Object.fromEntries(SYSTEM_MODULES.map(m=>{
+      const valor=Object.prototype.hasOwnProperty.call(dados.permissions||{},m.id)
+       ? normalizePermission(dados.permissions[m.id]) : normalizePermission(padrao[m.id]);
+      return [m.id,valor==='NONE'?'NONE':'VIEW'];
+     }));
+     highOsEmergencyReadOnly=true;
+     const perfil={...dados,role:'CONSULTA',cargo:'CONTINGÊNCIA • LEITURA',permissions:permissoes};
+     return {ok:true,id,emergency:true,snap:{data:()=>perfil}};
+    }catch(erroFirebase){
+     console.warn('[HIGH OS] Cadastro de contingência não validado:',erroFirebase?.code||erroFirebase);
+    }
+   }
+   return {ok:false,explicacao:'O servidor Discord está offline e não foi possível validar um cadastro ativo no Firebase para contingência. O acesso permanece bloqueado.'};
+  }
+  return {ok:false,explicacao:'Falha ao consultar seu cadastro no High OS Discord: <b>'+esc(mensagem)+'</b>'};
  }
 }
 
 onAuthStateChanged(auth,async user=>{
  currentUser=user;
- if(!user){show(loginView);sessionArea.innerHTML='<button class="btn-google" id="loginTop">G&nbsp; Entrar com Google</button>';$('#loginTop').onclick=login;return}
+ if(!user){highOsEmergencyReadOnly=false;show(loginView);sessionArea.innerHTML='<button class="btn-google" id="loginTop">G&nbsp; Entrar com Google</button>';$('#loginTop').onclick=login;return}
  const email=(user.email||'').toLowerCase();
  try{
   /* V9.8 - o cadastro pode ter sido criado com o e-mail em outra caixa
@@ -1505,7 +1536,18 @@ onAuthStateChanged(auth,async user=>{
    return;
   }
   const snap=perfil.snap;
-  currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);setTimeout(()=>highOsDiscordWriteSelfTest().then(r=>{if(!r.ok)console.warn('[HIGH OS] autoteste Discord falhou sem bloquear o painel',r)}),800);
+  currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);
+  if(highOsEmergencyReadOnly){
+   entrarModoLocal('API do Discord/Railway indisponível');
+   const aviso=document.createElement('div');
+   aviso.id='highOsEmergencyReadOnlyNotice';
+   aviso.setAttribute('role','status');
+   aviso.style.cssText='padding:12px 16px;margin:8px 0 18px;background:#221c10;border:1px solid #8d682a;border-radius:10px;color:#ffe2a0;line-height:1.5';
+   aviso.textContent='CONTINGÊNCIA • SOMENTE LEITURA: cadastro validado no Firebase. Dados do Discord indisponíveis; informações em cache podem estar desatualizadas. Nenhuma alteração será gravada até a API voltar.';
+   appView.prepend(aviso);
+  }else{
+   setTimeout(()=>highOsDiscordWriteSelfTest().then(r=>{if(!r.ok)console.warn('[HIGH OS] autoteste Discord falhou sem bloquear o painel',r)}),800);
+  }
   const userNameEl=$('#userName'),
 userRoleEl=$('#userRole'),
 userAccessEl=$('#userAccessLevel'),
@@ -1521,7 +1563,12 @@ userPhotoEl=$('#userPhoto');
   const needsSegments=['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','group-profile','group-settings','org-profile'].includes(initialPage);
   if(needsSegments)await loadSegmentConfig();
   if(initialPage==='dashboard')await loadDashboardConfig();
-  if(needsSegments)await loadFaccoes();
+  if(needsSegments&&(!highOsEmergencyReadOnly||canViewModule('faccoes'))){
+   try{await loadFaccoes()}catch(e){
+    if(!highOsEmergencyReadOnly)throw e;
+    console.warn('[HIGH OS] Facções indisponíveis na contingência; painel continua aberto:',e?.message||e);
+   }
+  }
   if(['dashboard','metricas'].includes(initialPage)){
    try{await loadMetrics()}catch(e){
     console.warn('[HIGH OS] métricas indisponíveis no boot; painel seguirá carregando:',e?.message||e);
@@ -1980,6 +2027,7 @@ function invalidarCacheRef(ref){
 /* V10.76 - só invalida o espelho depois que o Firestore confirma a escrita.
    Se quota/permissão/rede falhar, a última cópia local válida continua disponível. */
 function assertRemoteWriteAvailable(){
+ if(highOsEmergencyReadOnly)throw new Error('Contingência somente leitura: API Discord indisponível. Nenhuma alteração foi salva.');
  if(!window.HighOSOffline?.ativo)return;
  const e=new Error('Modo local ativo: reconecte ao Firebase antes de gravar alterações.');
  e.code='highos/offline-write-blocked';
@@ -2200,9 +2248,10 @@ motivo:String(motivo||'')};
 
  mostrarFaixaModoLocal();
 
- try{window.highToast?.('Modo local ativo: o Firebase nao respondeu, mostrando a ultima copia salva. Nada sera gravado ate a conexao voltar.','warn',9000)}catch(e){}
+ try{window.highToast?.(highOsEmergencyReadOnly?'Contingência: API Discord offline. O painel está somente leitura.':'Modo local ativo: o Firebase nao respondeu, mostrando a ultima copia salva. Nada sera gravado ate a conexao voltar.','warn',9000)}catch(e){}
 }
 function sairModoLocal(){
+ if(highOsEmergencyReadOnly)return;
  if(!window.HighOSOffline.ativo)return;
 
  window.HighOSOffline={ativo:false,
@@ -2222,7 +2271,7 @@ function mostrarFaixaModoLocal(){
 
  b.id='highLocalBanner';
 
- b.innerHTML='<b>MODO LOCAL</b><span>O Firebase nao respondeu (cota, queda ou permissao). Voce esta vendo a ultima copia salva neste navegador e as alteracoes nao serao gravadas.</span><button type="button" id="highLocalRetry">TENTAR DE NOVO</button>';
+ b.innerHTML=highOsEmergencyReadOnly?'<b>API DISCORD OFFLINE</b><span>Contingência somente leitura. Informações locais podem estar desatualizadas; nenhuma alteração será gravada.</span><button type="button" id="highLocalRetry">TENTAR DE NOVO</button>':'<b>MODO LOCAL</b><span>O Firebase nao respondeu (cota, queda ou permissao). Voce esta vendo a ultima copia salva neste navegador e as alteracoes nao serao gravadas.</span><button type="button" id="highLocalRetry">TENTAR DE NOVO</button>';
 
  document.body.appendChild(b);
 
