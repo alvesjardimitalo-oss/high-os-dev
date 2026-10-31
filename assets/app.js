@@ -1521,6 +1521,8 @@ async function carregarCadastro(user){
    }
    return {ok:false,explicacao:'O servidor Discord está offline e não foi possível validar um cadastro ativo no Firebase para contingência. O acesso permanece bloqueado.'};
   }
+  /* Bot recém-ligado/atualizado: ainda lendo o canal 💾 storage. Não é acesso negado. */
+  if(/storage_loading|discord_not_ready/i.test(mensagem))return {ok:false,carregando:true,explicacao:'O bot do High OS acabou de ligar e ainda está carregando os dados do Discord.'};
   return {ok:false,explicacao:'Falha ao consultar seu cadastro no High OS Discord: <b>'+esc(mensagem)+'</b>'};
  }
 }
@@ -1533,7 +1535,16 @@ onAuthStateChanged(auth,async user=>{
   /* V9.8 - o cadastro pode ter sido criado com o e-mail em outra caixa
      (High@... , HIGH@...). Antes so tentavamos a versao minuscula e o
      usuario ficava trancado para fora sem saber o motivo. */
-  const perfil=await carregarCadastro(user);
+  let perfil=await carregarCadastro(user);
+  /* storage_loading: espera o bot terminar de carregar (até ~3 min) em vez de negar o acesso */
+  const tituloNegado=deniedView.querySelector('h2'),tituloOriginal=tituloNegado?.textContent||'ACESSO NÃO AUTORIZADO';
+  for(let i=1;!perfil.ok&&perfil.carregando&&i<=36;i++){
+   show(deniedView);if(tituloNegado)tituloNegado.textContent='BOT INICIANDO';
+   $('#deniedText').innerHTML=esc(perfil.explicacao)+'<br><small>Tentando de novo automaticamente… ('+i+')</small>';
+   await new Promise(r=>setTimeout(r,5000));if(currentUser!==user)return;
+   perfil=await carregarCadastro(user);
+  }
+  if(tituloNegado)tituloNegado.textContent=tituloOriginal;
   if(!perfil.ok){
    show(deniedView);
    $('#deniedText').innerHTML=perfil.explicacao;
