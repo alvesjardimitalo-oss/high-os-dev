@@ -51,7 +51,8 @@ facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#deniedView'),appView=$('#appView'),sessionArea=$('#sessionArea');
 
 let currentUser=null,currentProfile=null,faccoes=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
-const HIGH_OS_DISCORD_API='https://high-os-discord-production.up.railway.app';
+// Endereço vem de assets/api-config.js (uma linha para trocar de servidor).
+const HIGH_OS_DISCORD_API=String(window.HIGH_OS_API_URL||'https://high-os-discord-production.up.railway.app').replace(/\/+$/,'');
 // Acesso de contingência: requer cadastro ativo validado no Firestore e é sempre somente leitura.
 // A API Discord continua sendo a fonte operacional canônica, sem simular gravações.
 let highOsEmergencyReadOnly=false;
