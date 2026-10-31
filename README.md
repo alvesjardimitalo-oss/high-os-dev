@@ -1,6 +1,6 @@
 # HIGH OS
 
-## V14.1 + Planejador V12.17 (atual — trazido do high-os, mantendo o banco Discord/Railway do dev)
+## V14.1 + Planejador V12.17 (atual — trazido do high-os, mantendo o banco Discord do dev — bot rodando no PC)
 
 **Ocupação dos Groups (V14)** — `assets/modules/ocupacao.js`
 - Regra única de ocupação para todas as telas: ASSUMIDA (status ATIVA + facção), DISPONÍVEL, SEM QG e REVISAR (dados contraditórios).

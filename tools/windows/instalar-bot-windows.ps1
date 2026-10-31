@@ -8,7 +8,7 @@
 #  O que ele faz (pode rodar de novo; não apaga nada):
 #    1. instala Node.js, Git e Tailscale (winget)
 #    2. baixa o bot do GitHub (login pelo navegador na 1ª vez)
-#    3. abre o Bloco de Notas para colar as variáveis do Railway
+#    3. abre o Bloco de Notas para colar as variáveis do bot (.env)
 #    4. liga o bot sozinho quando você entra no Windows e reinicia se cair
 #    5. publica o bot num endereço https fixo (Tailscale Funnel, grátis)
 #    6. cria a pasta "High OS Bot" na Área de Trabalho com Status/Log/Reiniciar/Atualizar
@@ -87,25 +87,25 @@ try {
 Ok ('Bot baixado: ' + (git -C $App log -1 --format='%h %s'))
 
 # ---------------------------------------------------------------------------
-Passo '3/6 Variáveis (as mesmas do Railway)'
+Passo '3/6 Variáveis do bot (.env)'
 $EnvFile = Join-Path $App '.env'
 function Tem-Token { (Test-Path $EnvFile) -and (Select-String -Path $EnvFile -Pattern '^\s*DISCORD_TOKEN\s*=\s*\S' -Quiet) }
 if (-not (Tem-Token)) {
   $modelo = @(
-    '# COLE ABAIXO o conteúdo do Railway: serviço do bot > Variables > "Raw Editor" > copiar tudo.',
+    '# COLE ABAIXO as variáveis do bot (DISCORD_TOKEN, DISCORD_GUILD_ID, HIGH_OS_API_KEY...), uma por linha.',
     '# Depois: Ctrl+S para salvar e FECHE o Bloco de Notas para o instalador continuar.',
     ''
   )
   [IO.File]::WriteAllLines($EnvFile, $modelo, $Utf8)
   for ($i = 1; $i -le 3 -and -not (Tem-Token); $i++) {
-    Write-Host '  Abrindo o Bloco de Notas: cole as variáveis do Railway, salve (Ctrl+S) e feche.' -ForegroundColor Cyan
+    Write-Host '  Abrindo o Bloco de Notas: cole as variáveis do bot, salve (Ctrl+S) e feche.' -ForegroundColor Cyan
     Start-Process notepad.exe -ArgumentList "`"$EnvFile`"" -Wait
     if (-not (Tem-Token)) { Aviso 'Não encontrei DISCORD_TOKEN no arquivo. Vamos abrir de novo.' }
   }
   if (-not (Tem-Token)) { Falha "Variáveis não preenchidas. Edite $EnvFile e rode o instalador de novo." }
   Ok 'Variáveis salvas (ficam só no seu PC).'
 } else { Ok "Variáveis já existem (mantidas). Para editar: notepad `"$EnvFile`"" }
-# Ajustes do PC: porta local fixa, backups na pasta HighOS, sem o túnel do Railway.
+# Ajustes do PC: porta local fixa, backups na pasta HighOS, sem variáveis de túnel antigas.
 $linhas = @(Get-Content -Path $EnvFile -Encoding UTF8) | Where-Object { $_ -notmatch '^\s*(PORT|SNAPSHOT_DIR|CONTROL_PLANE_TUNNEL_ID|CONTROL_PLANE_API_KEY)\s*=' }
 $linhas = @($linhas) + @("PORT=$Port", ('SNAPSHOT_DIR=' + ($Snaps -replace '\\','/')))
 [IO.File]::WriteAllLines($EnvFile, [string[]]$linhas, $Utf8)
@@ -222,6 +222,6 @@ Write-Host ''
 Write-Host "  PRONTO! Endereço do bot:  $Url" -ForegroundColor Green
 Write-Host ''
 Write-Host '  Próximo passo: colocar esse endereço no painel (assets/api-config.js no GitHub)'
-Write-Host "  e no Apps Script 'HIGH OS - Sync Métricas' (HIGH_OS_RAILWAY_URL)."
+Write-Host "  e no Apps Script 'HIGH OS - Sync Métricas' (HIGH_OS_BOT_URL)."
 Set-Clipboard -Value $Url -ErrorAction SilentlyContinue
 Write-Host '  (o endereço já foi copiado para a área de transferência)'

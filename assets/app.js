@@ -26,7 +26,7 @@ import { getFirestore,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
 import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
-import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe } from './modules/metricas-motor.js?v=14.8.1';
+import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
@@ -52,7 +52,7 @@ const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#d
 
 let currentUser=null,currentProfile=null,faccoes=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
 // Endereço vem de assets/api-config.js (uma linha para trocar de servidor).
-const HIGH_OS_DISCORD_API=String(window.HIGH_OS_API_URL||'https://high-os-discord-production.up.railway.app').replace(/\/+$/,'');
+const HIGH_OS_DISCORD_API=String(window.HIGH_OS_API_URL||'https://desktop-a2oor0c.taile5cb57.ts.net').replace(/\/+$/,'');
 // Acesso de contingência: requer cadastro ativo validado no Firestore e é sempre somente leitura.
 // A API Discord continua sendo a fonte operacional canônica, sem simular gravações.
 let highOsEmergencyReadOnly=false;
@@ -1544,7 +1544,7 @@ onAuthStateChanged(auth,async user=>{
   const snap=perfil.snap;
   currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);
   if(highOsEmergencyReadOnly){
-   entrarModoLocal('API do Discord/Railway indisponível');
+   entrarModoLocal('Bot do High OS (PC) indisponível');
    const aviso=document.createElement('div');
    aviso.id='highOsEmergencyReadOnlyNotice';
    aviso.setAttribute('role','status');
@@ -1590,7 +1590,7 @@ userPhotoEl=$('#userPhoto');
  }catch(e){
   show(deniedView);
   $('#deniedText').innerHTML=`Falha ao carregar o painel: <b>${esc(e.code||'')}</b> ${esc(e.message||String(e))}`+
-   `<br><br><span style="font-size:12px;opacity:.85">O login usa Firebase Auth; os dados operacionais são carregados pelo High OS Discord/Railway.</span>`;
+   `<br><br><span style="font-size:12px;opacity:.85">O login usa Firebase Auth; os dados operacionais são carregados pelo bot do High OS (Discord).</span>`;
   console.error('[HIGH OS] falha no login:',e);
  }
 });
@@ -4613,7 +4613,7 @@ function renderSaudeSistema(){
    ${saudeCartao('ÚLTIMA SINCRONIZAÇÃO',syncTexto,'neutro',sync?new Date(sync).toLocaleString('pt-BR'):'')}
    ${saudeCartao('ÚLTIMO BACKUP',backupTexto,estadoBackup,estadoBackup==='ok'?'':'rode tools/backup-firestore.html')}
    ${saudeCartao('SESSÕES ABERTAS',String(sessoesAbertas),sessoesAbertas>4?'alerta':'ok','contas com sessão em andamento')}
-   ${saudeCartao('STORAGE OPERACIONAL','DISCORD','ok','Railway / Discord Storage')}
+   ${saudeCartao('STORAGE OPERACIONAL','DISCORD','ok','Bot no PC / Discord Storage')}
    ${saudeCartao('MISSÕES SALVAS',String((JSON.parse(localStorage.getItem('highos_mission_planner_v832_missions')||'[]')||[]).length),'neutro','neste navegador')}
   </div>`;
  document.getElementById('saudeAtualizar')?.addEventListener('click',renderSaudeSistema);
@@ -6592,7 +6592,7 @@ let metricLiveUnsub=null,
 metricLiveLastAt=0;
 
 // V12.8: métricas não possuem mais referências Firestore no High OS Web.
-// Fonte oficial: Apps Script -> Railway -> Discord -> /v1/metrics.
+// Fonte oficial: Apps Script -> bot High OS (PC) -> Discord -> /v1/metrics.
 
 const MARKET_CATALOG_URL='https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/catalogo.json';
 
@@ -6601,7 +6601,9 @@ const SHEETS_SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
 function metricDateValue(m){
  const raw=String(m?.data||m?.date||'').trim();
 
- const br=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+ const br=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:$|[^\d])/);
+ const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T00:00(?::00(?:\.0+)?)?Z?$)/);
+ if(iso&&!br)return new Date(+iso[1],+iso[2]-1,+iso[3]);
 if(br){let y=+br[3];
 if(y<100)y+=2000;
 return new Date(y,+br[2]-1,+br[1])}
@@ -6629,7 +6631,7 @@ function metricSlots(m){
  const src=m?.slots||{},
 out={};
 Object.entries(src).forEach(([k,
-v])=>{const nk=normalizeMetricSlotKey(k);if(nk&&Number.isFinite(Number(v)))out[nk]=Number(v)});
+v])=>{const nk=normalizeMetricSlotKey(k);if(nk&&v!==null&&v!==undefined&&typeof v!=='boolean'&&String(v).trim()!==''&&Number.isFinite(Number(v)))out[nk]=Number(v)});
 
  [['14H',
 m?.['14H']??m?.h14],
@@ -6665,15 +6667,27 @@ year:'numeric'}).replace(/^./,c=>c.toUpperCase());
 function parseIsoMetricDate(v=''){const m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/);
 return m?new Date(+m[1],+m[2]-1,+m[3]):null}
 function metricGroupOccupied(group){return faccoes.some(f=>!f.removido&&alvesNorm(f.group)===alvesNorm(group)&&ocupadoV14(f))}
+/* Cadastro do Group para as métricas. Pode haver registros duplicados ou
+   removidos com o mesmo Group (Armas07 / ARMAS7 / Armas 07): vale o ASSUMIDO
+   não removido; depois qualquer não removido; removido só em último caso.
+   Antes pegava o primeiro da lista — um removido com outra facção fazia a
+   facção atual sumir da Central de Métricas. */
+function metricFaccaoDoGroup(group){
+ const k=chaveGroup(group);if(!k)return null;
+ const mesmos=(faccoes||[]).filter(f=>f&&chaveGroup(f.group)===k);
+ return mesmos.find(f=>!f.removido&&ocupadoV14(f))||mesmos.find(f=>!f.removido)||mesmos[0]||null;
+}
 /* ===== V14.1 · MÉTRICA POR FACÇÃO (modules/metricas-motor.js) =====
    metricasCache = linhas BRUTAS (Discord/Sheets). metricas = versão ATRIBUÍDA:
    cada coleta vai para a facção que ocupava o Group naquele horário, já no
    Group atual dela. Coleta em Group vago vai para metricSemOcupante. */
-let metricTransferencias=[],metricSemOcupante=[],metricOcupTL=null;
+let metricTransferencias=[],metricSemOcupante=[],metricOcupTL=null,metricColetasVazias=[];
 function metricasAtribuidas(rows=[]){
  try{
   const tl=montarLinhaDoTempo({faccoes,entregas,transferencias:metricTransferencias});metricOcupTL=tl;
-  const r=atribuirLinhas(rows,tl,{faccoes,dataDe:metricDateValue,slotsDe:metricSlots});
+  const limpas=descartarColetasVazias(rows,{dataDe:metricDateValue,slotsDe:metricSlots});metricColetasVazias=limpas.descartados;
+  if(limpas.descartados.length)console.info('[MÉTRICAS] horários zerados pela mensagem vazia da cidade (tratados como sem coleta):',limpas.descartados);
+  const r=atribuirLinhas(limpas.linhas,tl,{faccoes,dataDe:metricDateValue,slotsDe:metricSlots});
   metricSemOcupante=r.semOcupante;return r.linhas;
  }catch(e){console.warn('[MÉTRICAS] atribuição por facção falhou; exibindo por Group',e);metricSemOcupante=[];return rows.slice()}
 }
@@ -6692,7 +6706,10 @@ function activeMetricRows(){
     no dia da coleta. Não descartamos o passado só porque o Group hoje
     está vago ou foi assumido por outra organização. Linhas antigas de
     Group vazio continuam fora porque não possuem faccaoSnapshot. */
- const occupied=m=>metricRowHasHistoricalOccupant(m)||metricGroupOccupied(m.group||m.organizacao||m.faccao);
+ /* V15.6.1: coletas de facções que SAÍRAM (linha "Group • Facção") ficam fora
+    do ranking, totais e gráficos; o chip de registros separados continua
+    mostrando quantas são. */
+ const occupied=m=>!m.__exFaccao&&(metricRowHasHistoricalOccupant(m)||metricGroupOccupied(m.group||m.organizacao||m.faccao));
 
  if(metricDateStart||metricDateEnd){const a=parseIsoMetricDate(metricDateStart),
 b=parseIsoMetricDate(metricDateEnd);
@@ -6721,8 +6738,8 @@ if(!keys.includes(metricPeriodKey))metricPeriodKey=current;
 
 }
 function metricGroupRecords(group){
- const current=faccoes.find(f=>alvesNorm(f.group)===alvesNorm(group));
- const faction=String(current?.faccao||'').trim();
+ const current=metricFaccaoDoGroup(group);
+ const faction=current&&!current.removido&&ocupadoV14(current)?String(current.faccao||'').trim():'';
  const rows=activeMetricRows().filter(m=>{
    const sameGroup=alvesNorm(m.group||m.organizacao||m.faccao)===alvesNorm(group);
    if(!faction)return sameGroup;
@@ -7039,7 +7056,7 @@ function renderMetricSourceStatus(){
  const srv=metricSourceConfig.serverSync||{};
  const localState=String(metricSourceState.status||'');
  const serverState=String(srv.status||'').toUpperCase();
- // V12.8: Discord/Railway é a fonte operacional. Não exigir mais URL local
+ // V12.8: o bot do Discord é a fonte operacional. Não exigir mais URL local
  // da planilha para considerar a Central configurada.
  const discordOnline=/DISCORD|GOOGLE SHEETS|ONLINE|CACHE_LOCAL/.test(localState.toUpperCase())&&metricas.length>0;
  const sheetConfigured=metricSourceConfig.mode==='GOOGLE_APPS_SCRIPT_FREE'||!!extractSpreadsheetId(metricSourceConfig.url);
@@ -7218,7 +7235,7 @@ function renderMetricQuotaPanel(){
  const box=ensureMetricQuotaPanel()||document.getElementById('metricQuotaPanel');if(!box)return;
  const online=metricOrigem==='DISCORD';
  box.className='metric-quota-panel'+(online?'':' bloqueado');
- box.innerHTML=`<div class="mq-head"><b>MÉTRICAS • DISCORD</b><span>${online?'fonte oficial online':'fonte oficial indisponível'}</span></div><div class="mq-foot"><span>${metricas.length.toLocaleString('pt-BR')} registros carregados • Apps Script → Railway → Discord → High OS</span><button type="button" id="metricSyncNow">ATUALIZAR AGORA</button></div>`;
+ box.innerHTML=`<div class="mq-head"><b>MÉTRICAS • DISCORD</b><span>${online?'fonte oficial online':'fonte oficial indisponível'}</span></div><div class="mq-foot"><span>${metricas.length.toLocaleString('pt-BR')} registros carregados • Apps Script → bot (PC) → Discord → High OS</span><button type="button" id="metricSyncNow">ATUALIZAR AGORA</button></div>`;
  document.getElementById('metricSyncNow')?.addEventListener('click',async()=>{const btn=document.getElementById('metricSyncNow');if(btn){btn.disabled=true;btn.textContent='ATUALIZANDO...'}try{await loadMetrics({force:true})}catch(e){alert('Não foi possível atualizar as métricas: '+e.message)}finally{if(btn){btn.disabled=false;btn.textContent='ATUALIZAR AGORA'}}});
 }
 
@@ -7258,7 +7275,7 @@ function startMetricRealtime(){
  const activePage=document.querySelector('.page.active')?.id?.replace('page-','')||'';
  if(!['dashboard','metricas'].includes(activePage))return;
  if(metricQuotaBlocked)return;
- // A API do Discord/Railway serve o cache em RAM e não gera leituras no
+ // A API do bot serve o cache em RAM e não gera leituras no
  // Firestore. Enquanto Dashboard/Métricas estiver visível, atualizamos
  // automaticamente para que 14H/16H/21H/23H apareçam sem recarregar a página.
  refreshMetricRealtimeCheap();
@@ -7418,7 +7435,7 @@ async function loadMetrics({force=false}={}){
  try{return await metricsLoadPromise}finally{metricsLoadPromise=null}
 }
 function metricIdentity(group,row=null){
- const f=faccoes.find(x=>alvesNorm(x.group)===alvesNorm(group))||SEED.find(x=>alvesNorm(x.group)===alvesNorm(group))||{};
+ const f=metricFaccaoDoGroup(group)||SEED.find(x=>alvesNorm(x.group)===alvesNorm(group))||{};
 
  return {group:group||f.group||'',
 faccao:row?.faccaoSnapshot||row?.faccao||f.faccao||'',
@@ -7455,7 +7472,7 @@ function metricSummaryRows(){
  return [...groupMap.values()].map(group=>{
   const first=active.find(m=>alvesNorm(String(m.group||m.organizacao||m.faccao||'')).replace(/\s+/g,'')===alvesNorm(group).replace(/\s+/g,''));
   const ident=metricIdentity(group,first);
-  const f=faccoes.find(x=>alvesNorm(String(x.group||'')).replace(/\s+/g,'')===alvesNorm(group).replace(/\s+/g,''))||ident;
+  const cad=metricFaccaoDoGroup(group),f=cad&&!cad.removido?cad:ident;
   const a=metricAnalysis(group);
   return a?{f:{...f,
 group:String(f.group||group).trim(),
@@ -8254,8 +8271,8 @@ b.regularity.toFixed(0)+'%'],
 '16H',
 '21H',
 '23H'].map(h=>['Média '+h,
-a.hourAvg[h].toFixed(2),
-b.hourAvg[h].toFixed(2)])];
+Number.isFinite(a.hourAvg[h])?a.hourAvg[h].toFixed(2):'—',
+Number.isFinite(b.hourAvg[h])?b.hourAvg[h].toFixed(2):'—'])];
 
  box.innerHTML=`<div class="rh-grid"><div class="rh-card"><span>FACÇÃO A</span><b>${esc(ia.faccao||ga)}</b><small>${esc(ga)}</small></div><div class="rh-card"><span>FACÇÃO B</span><b>${esc(ib.faccao||gb)}</b><small>${esc(gb)}</small></div><div class="rh-card"><span>DIFERENÇA DE MÉDIA</span><b>${Math.abs(a.avg-b.avg).toFixed(2)}</b><small>${a.avg>=b.avg?esc(ia.faccao||ga):esc(ib.faccao||gb)} à frente</small></div><div class="rh-card"><span>COMPETÊNCIA</span><b>${esc(metricActivePeriodLabel())}</b></div></div><table class="rh-compare-table"><thead><tr><th>INDICADOR</th><th>${esc(ia.faccao||ga)}</th><th>${esc(ib.faccao||gb)}</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td><b>${r[2]}</b></td></tr>`).join('')}</tbody></table>`;
 
@@ -8760,7 +8777,7 @@ async function requestServerMetricSync({quiet=false}={}){
 }
 async function saveMetricSource(){
  const cfg={url:$('#metricSourceUrl')?.value?.trim()||metricSourceConfig.url||'',sheet:$('#metricSourceSheet')?.value?.trim()||metricSourceConfig.sheet||'',autoSync:true,mode:'DISCORD_APPS_SCRIPT',schedule:'14:05,16:05,21:05,23:05',timeZone:'America/Sao_Paulo',updatedAt:new Date().toISOString(),updatedBy:currentUser.email};
- try{await highOsStorePut('config','metricas',cfg);metricSourceConfig={...metricSourceConfig,...cfg};metricConfigReadAt=Date.now();$('#metricSourceModal')?.classList.add('hidden');renderMetricSourceStatus();alert('Fonte registrada no Discord. O Apps Script alimenta o Railway/Discord automaticamente.')}catch(e){alert('Erro ao salvar a fonte: '+e.message)}
+ try{await highOsStorePut('config','metricas',cfg);metricSourceConfig={...metricSourceConfig,...cfg};metricConfigReadAt=Date.now();$('#metricSourceModal')?.classList.add('hidden');renderMetricSourceStatus();alert('Fonte registrada no Discord. O Apps Script alimenta o bot/Discord automaticamente.')}catch(e){alert('Erro ao salvar a fonte: '+e.message)}
 }
 $('#metricSourceBtn')?.addEventListener('click',openMetricSource);
 $('#metricSourceClose')?.addEventListener('click',()=>$('#metricSourceModal')?.classList.add('hidden'));
@@ -10069,7 +10086,7 @@ const MECHANIC02_REQUEST_CONFIG_20261019={
 
 // As receitas das mecânicas agora pertencem ao cadastro salvo de cada Group.
 // Migração única da solicitação de 19/10/2026 para o cadastro CANÔNICO
-// no Discord/Railway. Só uma sessão autorizada ADMIN pode realizar a gravação.
+// no bot do Discord. Só uma sessão autorizada ADMIN pode realizar a gravação.
 // Nunca cria Groups ausentes e não reverte edições posteriores à migração.
 async function persistirSolicitacaoMecanicas20261019(docs=[]){
  if(String(currentProfile?.role||'').toUpperCase()!=='ADMIN'||!currentUser)return {updated:false};
@@ -13674,7 +13691,7 @@ function hmDisplayName(){const n=currentProfile?.name||currentUser?.displayName|
 r=currentProfile?.cargo||currentProfile?.role||'MEMBRO';
 return `${n} • ${r}`}
 // ===== HIGH OS V12.8 · HIGH CALL NATIVO (WebRTC + Discord Storage) =====
-// Sem iframe/Jitsi. Railway/Discord faz a sinalização; áudio/vídeo trafegam por WebRTC.
+// Sem iframe/Jitsi. O bot/Discord faz a sinalização; áudio/vídeo trafegam por WebRTC.
 const HIGH_RTC_CONFIG={iceServers:[{urls:['stun:stun.l.google.com:19302',
 'stun:stun1.l.google.com:19302']}]};
 
@@ -16368,8 +16385,9 @@ function rh15Stats(e,dias,slotKeys){
  const media=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;
  const dp=vals.length>1?Math.sqrt(vals.reduce((a,v)=>a+(v-media)**2,0)/vals.length):null;
  const ord=[...vals].sort((a,b)=>a-b),mediana=ord.length?(ord.length%2?ord[(ord.length-1)/2]:(ord[ord.length/2-1]+ord[ord.length/2])/2):null;
- /* dias seguidos sem players até o fim do período */
- let semPlayers=0;for(let i=serie.length-1;i>=0;i--){if(serie[i]>0)break;semPlayers++}
+ /* dias seguidos sem players até o fim do período. Dia SEM COLETA (bot fora,
+    hoje antes das 14h, antes de assumir o Group) não é dia sem players: é pulado. */
+ let semPlayers=0;for(let i=serie.length-1;i>=0;i--){if(serie[i]===null)continue;if(serie[i]>0)break;semPlayers++}
  const presentes=vals.filter(v=>v>0).length,M=rh15Meta(),diasMeta=vals.filter(v=>v>=M.min).length;
  return {serie,total:dias.length,comDados:vals.length,presentes,presenca:dias.length?presentes/dias.length:0,diasMeta,aprov:media===null?null:media/M.max,
   pico:vals.length?Math.max(...vals):null,media,mediana,minimo:vals.length?Math.min(...vals):null,dp,

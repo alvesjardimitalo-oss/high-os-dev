@@ -52,3 +52,17 @@ test('Importador aceita Galpão e variação antiga da Mecânica Ilegal',()=>{
  assert.equal(parser.metricGroupLabel('Galpao02'),'Galpao02');
  assert.equal(parser.metricGroupLabel('IlegalMecanic01'),'IlegalMecanic01');
 });
+
+test('Mensagem zerada da cidade não vira 0 para todas as facções',async()=>{
+ const src=readFileSync(new URL('../assets/modules/metricas-motor.js',import.meta.url),'utf8');
+ const dep=readFileSync(new URL('../assets/modules/ocupacao.js',import.meta.url),'utf8');
+ const motor=await import('data:text/javascript,'+encodeURIComponent(src.replace("from './ocupacao.js'","from 'data:text/javascript,"+encodeURIComponent(dep).replaceAll("'","%27")+"'")));
+ const dataDe=r=>{const [d,m,y]=r.data.split('/').map(Number);return new Date(y,m-1,d)};
+ const slotsDe=r=>r.slots;
+ const rows=['Armas01','Armas02','Drogas09','Lavagem02','Lavagem05','Municao10'].map((g,i)=>({group:g,data:'31/10/2026',slots:{'14H':i+1,'16H':0,'21H':i===0?0:3}}));
+ const r=motor.descartarColetasVazias(rows,{dataDe,slotsDe});
+ assert.equal(r.descartados.length,1);
+ assert.ok(r.linhas.every(x=>!('16H' in x.slots)),'16H todo zerado vira sem coleta');
+ assert.equal(r.linhas[0].slots['21H'],0,'zero de um Group isolado continua valendo');
+ assert.equal(r.linhas[2].slots['14H'],3);
+});

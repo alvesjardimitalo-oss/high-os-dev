@@ -11,14 +11,14 @@ e lê tudo de volta do canal 💾 storage do Discord (nada fica só no PC).
    ```
 3. Ele vai pedir, nesta ordem:
    - **Login no GitHub** (abre o navegador) — entre com a conta dona do repositório do bot.
-   - **Bloco de Notas** — no Railway: serviço do bot → **Variables → Raw Editor** → copie tudo, cole no Bloco de Notas, **Ctrl+S** e **feche**.
+   - **Bloco de Notas** — cole as variáveis do bot (`DISCORD_TOKEN`, `DISCORD_GUILD_ID`, `HIGH_OS_API_KEY`… — guarde uma cópia em lugar seguro), **Ctrl+S** e **feche**. Reinstalando no mesmo PC, as variáveis já salvas são mantidas.
    - **Login no Tailscale** (abre o navegador; pode usar a conta Google) e, se aparecer, o link para **habilitar o Funnel** → *Enable*.
    - Se quer impedir o PC de suspender na tomada (recomendado: **S**).
 4. No final aparece `PRONTO! Endereço do bot: https://seu-pc.xxxx.ts.net` (já copiado).
 
 ## Apontar o painel e a planilha
-1. GitHub → `high-os-dev` → `assets/api-config.js` → ✏️ → troque o endereço do Railway pelo novo → **Commit**.
-2. Apps Script **"HIGH OS - Sync Métricas"** → troque `HIGH_OS_RAILWAY_URL` pelo novo endereço → Salvar.
+1. GitHub → `high-os-dev` → `assets/api-config.js` → ✏️ → troque o endereço antigo pelo novo → **Commit**.
+2. Apps Script **"HIGH OS - Sync Métricas"** → troque `HIGH_OS_BOT_URL` (nos scripts antigos: `HIGH_OS_RAILWAY_URL`) pelo novo endereço → Salvar.
 
 ## Atalhos (pasta "High OS Bot" na Área de Trabalho)
 | Atalho | Para quê |
@@ -37,6 +37,6 @@ Arquivos ficam em `%LOCALAPPDATA%\HighOS` (variáveis em `high-os-discord\.env`,
 - Métricas: a planilha continua coletando; o Apps Script reenvia os últimos 45 dias quando o bot volta.
 
 ## Avisos
-- Não deixe o Railway ligado junto (mesmo token = posts duplicados).
+- Só um bot ligado por vez com o mesmo token (dois = posts duplicados).
 - O OCR de print de evento precisa do Tesseract; sem ele o resto funciona normalmente.
 - Rodar o instalador de novo é seguro: mantém as variáveis e só atualiza.

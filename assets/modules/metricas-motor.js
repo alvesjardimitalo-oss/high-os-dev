@@ -184,6 +184,40 @@ export function atribuirLinhas(rows = [], tl, { faccoes = [], dataDe, slotsDe })
   return { linhas: [...saida.values()], semOcupante };
 }
 
+/* ---------- coleta vazia da cidade ---------- */
+/**
+ * O canal "Registro • Orgs Online" da cidade recebe, a cada hora, a mensagem
+ * real e outra(s) zerada(s) de outra instância do servidor (IlegalMechanic01
+ * 1 setado / Admin 3 setados / tudo 0 online), em ordem variável. Quando a
+ * zerada chega por último ela sobrescreve o horário e TODAS as facções ficam
+ * com 0. Um horário em que todos os Groups do dia estão em 0 não é leitura
+ * real: vira "sem coleta". Zero de um Group isolado continua valendo.
+ */
+export function descartarColetasVazias(rows = [], { dataDe, slotsDe, minimoGroups = 5 } = {}) {
+  const porDiaSlot = new Map();
+  rows.forEach(r => {
+    const d = dataDe(r); if (!d || !d.getTime || !d.getTime()) return;
+    const dia = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    Object.entries(slotsDe(r)).forEach(([h, v]) => {
+      const n = slotNormal(h); if (!n || !valorColeta(v)) return;
+      const k = dia + '|' + n, c = porDiaSlot.get(k) || { groups: 0, positivos: 0 };
+      c.groups++; if (Number(v) > 0) c.positivos++; porDiaSlot.set(k, c);
+    });
+  });
+  const vazios = new Set([...porDiaSlot].filter(([, c]) => c.groups >= minimoGroups && !c.positivos).map(([k]) => k));
+  if (!vazios.size) return { linhas: rows, descartados: [] };
+  const linhas = rows.map(r => {
+    const d = dataDe(r); if (!d || !d.getTime || !d.getTime()) return r;
+    const dia = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`, slots = slotsDe(r), limpo = {};
+    let mudou = false;
+    Object.entries(slots).forEach(([h, v]) => { if (vazios.has(dia + '|' + slotNormal(h))) mudou = true; else limpo[h] = v; });
+    if (!mudou) return r;
+    const out = { ...r, slots: limpo }; SLOT_FIELDS.forEach(k => { delete out[k]; });
+    return out;
+  });
+  return { linhas, descartados: [...vazios] };
+}
+
 /* ---------- coleta parcial ---------- */
 /**
  * Situação das coletas de um dia: quantas faltaram (já passou o horário)
