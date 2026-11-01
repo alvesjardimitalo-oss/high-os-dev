@@ -6749,17 +6749,11 @@ if(!keys.includes(metricPeriodKey))metricPeriodKey=current;
 
 }
 function metricGroupRecords(group){
- const current=metricFaccaoDoGroup(group);
- const faction=current&&!current.removido&&ocupadoV14(current)?String(current.faccao||'').trim():'';
- const rows=activeMetricRows().filter(m=>{
-   const sameGroup=alvesNorm(m.group||m.organizacao||m.faccao)===alvesNorm(group);
-   if(!faction)return sameGroup;
-   const historical=String(m.faccaoSnapshot||m.faccaoHistorica||'').trim();
-   /* Se existe identidade histórica, acompanha a FACÇÃO através de qualquer
-      Group/segmento. Snapshot vazio só vale para o Group atual quando ele
-      está ocupado hoje; isso mantém compatibilidade com registros legados. */
-   return historical ? alvesNorm(historical)===alvesNorm(faction) : sameGroup;
- }).sort((a,b)=>metricDateValue(a)-metricDateValue(b));
+ /* V15.6.2: leitura SOMENTE pelo nome do Group. A atribuição (motor) já
+    levou cada coleta para o Group atual da facção; o nome da facção vindo
+    das fontes pode ter grafia diferente e não é usado para filtrar. */
+ const k=chaveGroup(group);
+ const rows=activeMetricRows().filter(m=>chaveGroup(m.group||m.organizacao||m.faccao)===k).sort((a,b)=>metricDateValue(a)-metricDateValue(b));
  return rows;
 }
 function metricPredominanceRange(values=[],width=5){
@@ -7411,6 +7405,7 @@ async function loadMetrics({force=false}={}){
  if(metricsLoadPromise&&!force)return metricsLoadPromise;
  metricsLoadPromise=(async()=>{
   metricPeriodKey=metricPeriodKey||currentMetricMonthKey();
+  await loadMetricSourceConfig().catch(()=>{});
   await carregarTransferenciasMetricas();
   try{
    const remote=await metricTimeout(highOsDiscordRequest('/v1/metrics'),15000,'métricas do Discord');
@@ -7421,10 +7416,10 @@ async function loadMetrics({force=false}={}){
    metricsLoaded=true;
    return remote;
   }catch(e){
-   // O Discord é a fonte operacional preferida, mas a tela de Métricas não
-   // pode ficar vazia durante restart/deploy do bot. A Google Sheets continua
-   // sendo a fonte oficial das coletas e já possui leitor sem popup no Web.
+   // Fallback para a planilha só quando ela estiver ativada como fonte
+   // (Métricas > Fonte de métricas). Padrão: somente Paradise via bot.
    try{
+    if(metricSourceConfig.planilhaAtiva!==true)throw new Error('planilha desativada como fonte (somente Paradise)');
     const direct=await metricTimeout(readMetricsWithoutPopup(),15000,'leitura direta da planilha');
     if(!Array.isArray(direct?.rows)||!direct.rows.length)throw new Error('Planilha sem métricas reconhecíveis.');
     const rows=direct.rows.map(metricSnapshot);
@@ -8429,6 +8424,7 @@ function openMetricSource(){
 
  if($('#metricSourceSheet'))$('#metricSourceSheet').value=metricSourceConfig.sheet||'';
 
+ if($('#metricPlanilhaAtiva'))$('#metricPlanilhaAtiva').checked=metricSourceConfig.planilhaAtiva===true;
  if($('#metricAutoSync')){$('#metricAutoSync').checked=true;
 $('#metricAutoSync').disabled=true}
  if(out)out.innerHTML='<b>SINCRONIZAÇÃO GRATUITA VIA GOOGLE APPS SCRIPT</b><br>A planilha envia as métricas automaticamente ao Firestore às 14:05, 16:05, 21:05 e 23:05. Não usa Cloud Functions nem plano Blaze.';
@@ -8787,8 +8783,8 @@ async function requestServerMetricSync({quiet=false}={}){
  }finally{if(btn){btn.disabled=false;btn.textContent=old||'ATUALIZAR CENTRAL'}}
 }
 async function saveMetricSource(){
- const cfg={url:$('#metricSourceUrl')?.value?.trim()||metricSourceConfig.url||'',sheet:$('#metricSourceSheet')?.value?.trim()||metricSourceConfig.sheet||'',autoSync:true,mode:'DISCORD_APPS_SCRIPT',schedule:'14:05,16:05,21:05,23:05',timeZone:'America/Sao_Paulo',updatedAt:new Date().toISOString(),updatedBy:currentUser.email};
- try{await highOsStorePut('config','metricas',cfg);metricSourceConfig={...metricSourceConfig,...cfg};metricConfigReadAt=Date.now();$('#metricSourceModal')?.classList.add('hidden');renderMetricSourceStatus();alert('Fonte registrada no Discord. O Apps Script alimenta o bot/Discord automaticamente.')}catch(e){alert('Erro ao salvar a fonte: '+e.message)}
+ const cfg={...metricSourceConfig,planilhaAtiva:!!$('#metricPlanilhaAtiva')?.checked,url:$('#metricSourceUrl')?.value?.trim()||metricSourceConfig.url||'',sheet:$('#metricSourceSheet')?.value?.trim()||metricSourceConfig.sheet||'',autoSync:true,mode:'DISCORD_APPS_SCRIPT',schedule:'14:05,16:05,21:05,23:05',timeZone:'America/Sao_Paulo',updatedAt:new Date().toISOString(),updatedBy:currentUser.email};
+ try{await highOsStorePut('config','metricas',cfg);metricSourceConfig={...metricSourceConfig,...cfg};metricConfigReadAt=Date.now();$('#metricSourceModal')?.classList.add('hidden');renderMetricSourceStatus();alert(cfg.planilhaAtiva?'Fonte salva: Paradise + planilha MÉTRICAS.':'Fonte salva: somente Paradise (planilha desativada).');loadMetrics({force:true}).catch(()=>{})}catch(e){alert('Erro ao salvar a fonte: '+e.message)}
 }
 $('#metricSourceBtn')?.addEventListener('click',openMetricSource);
 $('#metricSourceClose')?.addEventListener('click',()=>$('#metricSourceModal')?.classList.add('hidden'));
@@ -16359,7 +16355,7 @@ function rh15Coletar(r,comAtuais){
  const dias=rh15Dias(r),ini=r.ini.getTime(),fim=r.fim.getTime()+86399999;
  const atuais=new Map();(RH15_FACCOES()||[]).filter(f=>f&&!f.removido).forEach(f=>atuais.set(org15GK(f.group),f));
  const ent=new Map(),slotSet=new Set();
- const pegar=(faccao,group,seg,ex)=>{const k=rh15K(faccao)+'|'+org15GK(group);
+ const pegar=(faccao,group,seg,ex)=>{const k=ex?'ex|'+rh15K(faccao)+'|'+org15GK(group):org15GK(group);
   if(!ent.has(k))ent.set(k,{k,faccao,group,segmento:seg||'OUTROS',ex:!!ex,dias:new Map()});
   const e=ent.get(k);if(!ex)e.ex=false;return e};
  (RH15_METRICAS()||[]).forEach(m=>{
@@ -16368,7 +16364,8 @@ function rh15Coletar(r,comAtuais){
   const gRaw=String(m.group||m.organizacao||'').trim();if(!gRaw)return;
   const ex=!!m.__exFaccao,group=ex?String(m.groupOrigem||gRaw.split(' • ')[0]).trim():gRaw;
   const cur=atuais.get(org15GK(group));
-  const faccao=String(m.faccaoSnapshot||m.faccaoHistorica||(!ex&&cur&&ocupadoRH15(cur)?cur.faccao:'')||'').trim();if(!faccao)return;
+  /* V15.6.2: identidade pelo GROUP; nome da facção sempre do cadastro atual */
+  const faccao=String((!ex&&cur&&ocupadoRH15(cur)?cur.faccao:'')||m.faccaoSnapshot||m.faccaoHistorica||(ex?'':group)||'').trim();if(!faccao)return;
   const seg=String(m.segmentoSnapshot||cur?.segmento||orgV92Segment({group})||'OUTROS').trim().toUpperCase();
   const e=pegar(faccao,cur&&!ex?cur.group:group,seg,ex),dk=rh15DK(d),prev=e.dias.get(dk),merged={...(prev?prev.slots:{}),...slots};
   Object.keys(slots).forEach(s=>slotSet.add(s));
@@ -16382,8 +16379,8 @@ function rh15Coletar(r,comAtuais){
 }
 function rh15Base(){
  const r=rh15Range(),A=rh15Coletar(r,true),ra=rh15RangeAnterior(r),P=rh15Coletar(ra,false);
- const ant=new Map(P.lista.map(e=>[rh15K(e.faccao),e]));
- A.lista.forEach(e=>{e.ant=ant.get(rh15K(e.faccao))?.st||null});
+ const ant=new Map(P.lista.map(e=>[e.k,e]));
+ A.lista.forEach(e=>{e.ant=ant.get(e.k)?.st||null});
  return {r,ra,dias:A.dias,slotKeys:A.slotKeys,lista:A.lista,anterior:P};
 }
 function rh15Stats(e,dias,slotKeys){
