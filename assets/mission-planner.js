@@ -4059,5 +4059,7 @@ z=zones[0];if(!z)return false;
     }
   }
   window.HighMissionPlanner={activate,fit,captureSnapshot,syncCloud:syncMissionsFromCloud,applyCloudMissions};
-  document.addEventListener('DOMContentLoaded',()=>{if(qs('#missionPlannerMap'))bind();});
+  /* V15.6.3: o planejador pode ser carregado sob demanda (depois do DOMContentLoaded). */
+  const iniciar=()=>{if(qs('#missionPlannerMap'))bind();};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',iniciar);else iniciar();
 })();

@@ -1481,6 +1481,16 @@ async function highOsDiscordWriteSelfTest(){
  }
 }
 
+/* V15.6.3: o Planejador de Missões (~360 KB) só é baixado quando a página dele é aberta. */
+let planejadorCarregando=null;
+function carregarScriptUnico(src){return new Promise((ok,er)=>{const s=document.createElement('script');s.src=src;s.onload=()=>ok();s.onerror=()=>er(new Error('falha ao carregar '+src));document.body.appendChild(s)})}
+function carregarPlanejadorMissoes(){
+ if(window.HighMissionPlanner)return Promise.resolve();
+ return planejadorCarregando||=carregarScriptUnico('assets/modules/eventos-painel.js?v=12.17.0')
+  .then(()=>carregarScriptUnico('assets/mission-planner.js?v=12.18.2'))
+  .then(()=>carregarScriptUnico('assets/mission-planner-nav.js?v=12.8.1'))
+  .catch(e=>{planejadorCarregando=null;throw e});
+}
 async function carregarCadastro(user){
  const email=String(user.email||'').trim().toLowerCase();
  try{
@@ -1837,7 +1847,7 @@ if(page==='solicitacoes')setTimeout(()=>loadRequests(),0);
 if(page==='diario')setTimeout(()=>loadOperationalDiary(),0);
 if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','group-profile','group-settings','org-profile'].includes(page)&&!faccoesLoaded)setTimeout(()=>loadFaccoes().catch(e=>console.warn('[FACÇÕES] lazy-load falhou',e)),0);
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
-if(page==='planejador')setTimeout(()=>window.HighMissionPlanner?.activate?.(),60);
+if(page==='planejador')carregarPlanejadorMissoes().then(()=>setTimeout(()=>window.HighMissionPlanner?.activate?.(),60)).catch(err=>{console.error('[PLANEJADOR]',err);const box=document.querySelector('#page-planejador');if(box)box.insertAdjacentHTML('afterbegin','<div class="placeholder"><h3>NÃO FOI POSSÍVEL CARREGAR O PLANEJADOR</h3><p>Recarregue a página.</p></div>')});
 if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=28').then(mod=>mod.mountActionPlanner({
  onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
  onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
