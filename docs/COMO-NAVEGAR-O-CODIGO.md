@@ -31,7 +31,7 @@ lado do commit. Se ficar vermelho, clique para ver qual passo falhou.
 
 ```
 node tools/mapa-do-codigo.mjs                 panorama + o que dá para remover
-node tools/mapa-do-codigo.mjs --md            grava INDICE-DO-CODIGO.md
+node tools/mapa-do-codigo.mjs --md            grava docs/INDICE-DO-CODIGO.md
 node tools/mapa-do-codigo.mjs nomeDaFuncao    impacto de uma função
 node tools/verificar-integridade.mjs          funções perdidas
 node tools/verificar-regras.mjs               coleções sem regra no firestore.rules

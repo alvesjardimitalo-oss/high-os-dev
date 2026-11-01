@@ -1,5 +1,15 @@
 # HIGH OS
 
+## Estado atual (V15.6.3 · novembro/2026)
+- **Painel:** `index.html` + `assets/app.js` (módulo ES) + módulos em `assets/modules/`. Sem build: publicado direto pelo GitHub Pages.
+- **Bot / API:** repositório `high-os-discord`, rodando no PC (Tailscale Funnel). Endereço em `assets/api-config.js`.
+- **Métricas:** fonte padrão = Paradise (apidash.touz.dev), sincronizada por tarefa agendada via Chrome e gravada em `metricas/paradise-AAAA-MM`. A planilha MÉTRICAS pode ser reativada em Métricas › Fonte de métricas.
+- **Carregamento sob demanda:** Planejador de Missões (`mission-planner*.js`, `eventos-painel.js`) e `html2canvas` só são baixados quando usados. Leaflet e html2canvas ficam em `assets/vendor/` (workflow "Bibliotecas locais").
+- **Removido em 15/10–01/11:** Spotify, Chat da Equipe/High Call e Alvesinho. A Central de Solicitações continua no código porque a Troca de Group e o perfil do Group geram solicitações por ela.
+- **Verificação antes de publicar:** `node --test tests/*.test.mjs`, `node tools/verificar-integridade.mjs`, `node tools/verificar-chamadas.mjs`, `node tools/verificar-regras.mjs` (o mesmo que o GitHub Actions roda). Ao remover funções de propósito: `node tools/verificar-integridade.mjs --salvar`.
+- **Documentação:** guias em `docs/` (navegação no código, índice de funções, rotinas Firebase); notas de versões antigas em `docs/historico/`.
+
+
 ## V14.1 + Planejador V12.17 (atual — trazido do high-os, mantendo o banco Discord do dev — bot rodando no PC)
 
 **Ocupação dos Groups (V14)** — `assets/modules/ocupacao.js`

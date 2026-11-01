@@ -2397,6 +2397,7 @@ cb=qs('#mpCancelEdit');
     const m=active(),
 el=qs('#missionPlannerMap');if(!m||!el)return;
     try{
+      if(typeof html2canvas==='undefined'&&window.HighCarregarHtml2canvas)await window.HighCarregarHtml2canvas();
       if(typeof html2canvas==='undefined')throw new Error('html2canvas indisponível');
       const canvas=await html2canvas(el,{useCORS:true,
 allowTaint:false,

@@ -1484,10 +1484,14 @@ async function highOsDiscordWriteSelfTest(){
 /* V15.6.3: o Planejador de Missões (~360 KB) só é baixado quando a página dele é aberta. */
 let planejadorCarregando=null;
 function carregarScriptUnico(src){return new Promise((ok,er)=>{const s=document.createElement('script');s.src=src;s.onload=()=>ok();s.onerror=()=>er(new Error('falha ao carregar '+src));document.body.appendChild(s)})}
+/* V15.6.3: html2canvas (~200 KB) só é baixado na primeira captura de imagem. */
+let html2canvasCarregando=null;
+function carregarHtml2canvas(){if(window.html2canvas)return Promise.resolve();return html2canvasCarregando||=carregarScriptUnico('assets/vendor/html2canvas.min.js?v=1.4.1').catch(e=>{html2canvasCarregando=null;throw e});}
+window.HighCarregarHtml2canvas=carregarHtml2canvas;
 function carregarPlanejadorMissoes(){
  if(window.HighMissionPlanner)return Promise.resolve();
  return planejadorCarregando||=carregarScriptUnico('assets/modules/eventos-painel.js?v=12.17.0')
-  .then(()=>carregarScriptUnico('assets/mission-planner.js?v=12.18.2'))
+  .then(()=>carregarScriptUnico('assets/mission-planner.js?v=12.18.3'))
   .then(()=>carregarScriptUnico('assets/mission-planner-nav.js?v=12.8.1'))
   .catch(e=>{planejadorCarregando=null;throw e});
 }
@@ -13391,7 +13395,7 @@ grRenderRouteUi(true);
 alert('Solicitação de remoção gerada. As CDS foram preservadas até a remoção ser confirmada.')}catch(e){alert('Erro ao gerar remoção: '+e.message)}finally{routeActionEnd(routeKey,routeBtn)}}
 async function grMapPng(){grRenderMap();
 await new Promise(r=>setTimeout(r,500));
-if(!window.html2canvas)return alert('Captura de imagem indisponível.');
+try{await carregarHtml2canvas()}catch(e){}if(!window.html2canvas)return alert('Captura de imagem indisponível.');
 try{const canvas=await html2canvas($('#grGroupMap'),{useCORS:true,
 backgroundColor:'#174f70'}),
 a=document.createElement('a');

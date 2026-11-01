@@ -154,13 +154,9 @@
 }
 .logs-head input:focus{outline:none;border-color:rgba(141,53,255,.55)}
 .logs-stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.logs-list{display:grid;gap:6px}
-
-/* =========================================================
+.logs-list{display:grid;gap:6px} /* =========================================================
    CHAT REPAGINADO (V12.2)
-   Bloco por autor, separador de dia, hora só no fim do bloco.
-   ========================================================= */
-.hm-messages{padding:18px 16px!important}
+   Bloco por autor, separador de dia{padding:18px 16px!important}
 
 .chat-dia{display:flex;align-items:center;gap:12px;margin:18px 0 12px}
 .chat-dia::before,.chat-dia::after{content:"";flex:1;height:1px;background:var(--linha)}
@@ -214,13 +210,6 @@
 }
 .chat-bloco:hover .chat-delete{opacity:1}
 .chat-balao .chat-delete:hover{background:#ff5b76;color:#fff;border-color:#ff5b76}
-
-.hm-empty{
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  height:100%;min-height:220px;gap:6px;text-align:center;
-}
-.hm-empty b{font-size:14px;color:#fff;font-weight:600}
-.hm-empty span{font-size:12px;color:var(--hm-text-3);max-width:34ch;line-height:1.6}
 
 /* =========================================================
    ORGANIZAÇÕES · TOPO CONSOLIDADO (V12.3.2)

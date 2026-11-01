@@ -49,13 +49,11 @@ body{
 .brand{gap:11px!important}
 .brand img{height:46px!important;filter:drop-shadow(0 0 16px rgba(147,60,255,.32))!important}
 .brand-copy strong{font-size:14px!important;letter-spacing:.24em!important;font-weight:900}
-.brand-copy span{font-size:8px!important;letter-spacing:.18em!important;color:var(--h-text-3)!important}
-.busca-atalho,.spotify-dock-main{
+.brand-copy span{font-size:8px!important;letter-spacing:.18em!important;color:var(--h-text-3)!important} .busca-atalho{
  border:1px solid var(--h-line)!important;background:rgba(255,255,255,.025)!important;
  border-radius:10px!important;color:var(--h-text-3)!important;
  transition:all var(--h-fast)!important;
-}
-.busca-atalho:hover,.spotify-dock-main:hover{
+} .busca-atalho:hover{
  background:rgba(147,60,255,.09)!important;border-color:rgba(147,60,255,.28)!important;color:#fff!important;
 }
 
@@ -356,17 +354,6 @@ tbody tr:hover{background:rgba(147,60,255,.028)!important}
 #page-planejador .mpc-zone{background:rgba(255,255,255,.018)!important}
 #page-planejador .mpc-zone:hover{background:rgba(147,60,255,.065)!important;border-color:rgba(147,60,255,.22)!important}
 
-/* CHAT / ALVESINHO */
-#page-chat .chat-feature-grid,#page-alvesinho .alves-layout{gap:12px!important}
-#page-chat .chat-feature-grid>*,
-#page-alvesinho .alves-side,#page-alvesinho .alves-chat-card{
- border:1px solid var(--h-line)!important;border-radius:var(--h-r3)!important;
- background:linear-gradient(180deg,rgba(20,16,26,.92),rgba(13,11,17,.96))!important;
-}
-#page-alvesinho .alves-avatar{box-shadow:0 0 0 1px rgba(147,60,255,.24),0 12px 35px rgba(0,0,0,.28)!important}
-#page-alvesinho .alves-msg.bot .alves-bubble{background:rgba(147,60,255,.08)!important;border-color:rgba(147,60,255,.15)!important}
-#page-alvesinho .alves-compose{border-color:var(--h-line)!important}
-
 /* PERFIS */
 #page-group-profile .group-profile-page-head,
 #page-group-settings .group-profile-page-head,
@@ -389,12 +376,10 @@ tbody tr:hover{background:rgba(147,60,255,.028)!important}
 #page-administracao .admin-tab-panel{
  border:1px solid var(--h-line)!important;border-radius:var(--h-r3)!important;
  background:linear-gradient(180deg,rgba(20,16,26,.82),rgba(13,11,17,.90))!important;
-}
-#page-administracao .admin-access-card,
+} #page-administracao .admin-access-card,
 #page-administracao .admin-group-card,
 #page-administracao .dashboard-config-card,
 #page-administracao .sheet-sync-admin-card,
-#page-administracao .spotify-admin-card,
 #page-administracao .segment-admin-card,
 #page-administracao .audit-admin-card,
 #page-administracao .danger-zone{

@@ -91,6 +91,7 @@
     "canonicalProductImage",
     "carregarAnunciosLivres",
     "carregarCadastro",
+    "carregarHtml2canvas",
     "carregarPlanejadorMissoes",
     "carregarScriptUnico",
     "carregarTransferenciasMetricas",
