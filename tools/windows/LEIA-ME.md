@@ -20,6 +20,13 @@ e lê tudo de volta do canal 💾 storage do Discord (nada fica só no PC).
 1. GitHub → `high-os-dev` → `assets/api-config.js` → ✏️ → troque o endereço antigo pelo novo → **Commit**.
 2. Apps Script **"HIGH OS - Sync Métricas"** → troque `HIGH_OS_BOT_URL` (nos scripts antigos: `HIGH_OS_RAILWAY_URL`) pelo novo endereço → Salvar.
 
+## Métricas pelo Paradise (opcional, recomendado)
+Faz o bot ler o online de cada Group direto do painel Paradise (mesma fonte do "Pico Diário por Grupo").
+```powershell
+irm https://raw.githubusercontent.com/alvesjardimitalo-oss/high-os-dev/main/tools/windows/ligar-paradise.ps1 | iex
+```
+Ele pede o cookie da sua sessão no Paradise (explica como copiar), testa, salva só no `.env` do PC, atualiza e reinicia o bot. Quando a sessão vencer, rode de novo.
+
 ## Atalhos (pasta "High OS Bot" na Área de Trabalho)
 | Atalho | Para quê |
 | --- | --- |
