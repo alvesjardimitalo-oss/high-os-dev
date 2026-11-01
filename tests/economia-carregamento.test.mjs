@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createActionWorkspace} from '../assets/modules/acoes-workspace.js';
 
 test('cliques internos não são confundidos com o atributo de estado do painel',()=>{
- const handlers={};const root={dataset:{},querySelector:()=>null,querySelectorAll:()=>[],addEventListener:(kind,handler)=>{(handlers[kind]??=[]).push(handler);},scrollIntoView(){}};
+ const handlers={};const root={dataset:{},querySelector:()=>null,querySelectorAll:()=>[],addEventListener:(kind,handler)=>{(handlers[kind]??=[]).push(handler);},dispatchEvent(){return true},scrollIntoView(){}};
  createActionWorkspace({root,getActions:()=>[],getPublished:()=>[],getSelected:()=>'',getCatalog:()=>null,select(){},refresh(){}});
  const target={closest(selector){if(selector==='[data-economy-area]')return root;if(selector==='[data-ap-nav]')return {dataset:{apNav:'catalog'}};return null;}};
  handlers.click[0]({target});assert.equal(root.dataset.apSection,'catalog');
@@ -29,7 +29,7 @@ test('falha no Mercado Negro preserva os módulos e carrega cadastro independent
 
 
 test('navegação separa ações, roubos e comerciantes',()=>{
- const handlers={};const root={dataset:{},querySelector:()=>null,querySelectorAll:()=>[],addEventListener:(kind,handler)=>{(handlers[kind]??=[]).push(handler);},scrollIntoView(){}};
+ const handlers={};const root={dataset:{},querySelector:()=>null,querySelectorAll:()=>[],addEventListener:(kind,handler)=>{(handlers[kind]??=[]).push(handler);},dispatchEvent(){return true},scrollIntoView(){}};
  createActionWorkspace({root,getActions:()=>[],getPublished:()=>[],getSelected:()=>'',getCatalog:()=>null,select(){},refresh(){}});
  const click=area=>handlers.click[0]({target:{closest:selector=>selector==='button[data-economy-area]'?{dataset:{economyArea:area}}:null}});
  click('acoes');assert.equal(root.dataset.apSection,'overview');assert.equal(root.dataset.economyArea,'acoes');
