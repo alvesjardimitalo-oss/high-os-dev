@@ -5,7 +5,7 @@
 #    irm https://raw.githubusercontent.com/alvesjardimitalo-oss/high-os-dev/main/tools/windows/ligar-paradise.ps1 | iex
 #
 #  O que faz:
-#    1. pede o cookie da sua sessão no Paradise (a digitação fica oculta)
+#    1. le o cookie da sua sessao no Paradise da area de transferencia (nada e digitado no terminal)
 #    2. testa o cookie direto no site antes de salvar
 #    3. grava PARADISE_COOKIE no .env do bot (só no seu PC)
 #    4. atualiza o bot pelo GitHub e reinicia
@@ -28,16 +28,16 @@ Write-Host 'HIGH OS - Métricas pelo Paradise' -ForegroundColor Magenta
 if (-not (Test-Path $EnvFile)) { Falha "Bot não encontrado em $App. Rode antes o instalador do bot (tools/windows/instalar-bot-windows.ps1)." }
 
 Write-Host ''
-Write-Host 'Como copiar o cookie (uma vez):' -ForegroundColor Cyan
-Write-Host '  1. Abra https://paradise.touz.dev/groups/daily-peak logado e aperte F12 > aba Rede.'
-Write-Host '  2. Selecione um grupo na página. Clique na linha "hourly-batch..." que aparecer.'
-Write-Host '  3. Cabeçalhos > Cabeçalhos de solicitação > linha "cookie": clique com o botão direito > Copiar valor.'
-Write-Host ''
-$seguro = Read-Host 'Cole o valor do cookie aqui (não aparece na tela) e aperte ENTER' -AsSecureString
-$cookie = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($seguro)).Trim()
+Write-Host 'Lendo o cookie da area de transferencia (copie o valor ANTES de rodar este comando)...' -ForegroundColor Cyan
+Write-Host '  Como copiar: paradise.touz.dev/groups/daily-peak logado > F12 > aba Rede > clique num grupo >'
+Write-Host '  linha "hourly-batch..." > Cabecalhos > Cabecalhos de solicitacao > "cookie" > botao direito > Copiar valor.'
+$cookie = ''
+try { $cookie = [string](Get-Clipboard -Raw) } catch {}
+$cookie = $cookie.Trim()
 if ($cookie -match '^(?i)cookie\s*:\s*') { $cookie = $cookie -replace '^(?i)cookie\s*:\s*', '' }
-if (-not $cookie) { Falha 'Nada foi colado.' }
-if ($cookie -match '[\r\n]') { Falha 'O valor colado tem quebra de linha. Copie só o valor do cookie.' }
+if (-not $cookie) { Falha 'A area de transferencia esta vazia. Copie o valor do cookie e rode o comando de novo.' }
+if ($cookie -match '[\r\n]') { Falha 'O que esta copiado tem quebra de linha. Copie so o valor do cookie.' }
+if ($cookie -notmatch 'auth_token=') { Falha 'O que esta copiado nao parece o cookie do Paradise (falta auth_token=). Copie o valor da linha cookie.' }
 
 Write-Host ''
 Write-Host 'Testando o cookie no Paradise...' -ForegroundColor Cyan
@@ -53,7 +53,8 @@ $linhas = @(Get-Content -Path $EnvFile -Encoding UTF8) | Where-Object { $_ -notm
 $linhas = @($linhas) + @("PARADISE_COOKIE=$cookie")
 [IO.File]::WriteAllLines($EnvFile, [string[]]$linhas, $Utf8)
 $cookie = $null
-Ok 'Cookie salvo no .env do bot (só no seu PC).'
+try { Set-Clipboard -Value ' ' } catch {}
+Ok 'Cookie salvo no .env do bot (so no seu PC). Area de transferencia limpa.'
 
 Write-Host ''
 Write-Host 'Atualizando e reiniciando o bot...' -ForegroundColor Cyan

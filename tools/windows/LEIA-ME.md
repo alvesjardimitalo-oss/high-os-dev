@@ -25,7 +25,7 @@ Faz o bot ler o online de cada Group direto do painel Paradise (mesma fonte do "
 ```powershell
 irm https://raw.githubusercontent.com/alvesjardimitalo-oss/high-os-dev/main/tools/windows/ligar-paradise.ps1 | iex
 ```
-Ele pede o cookie da sua sessão no Paradise (explica como copiar), testa, salva só no `.env` do PC, atualiza e reinicia o bot. Quando a sessão vencer, rode de novo.
+Copie antes o valor do cookie da sua sessão no Paradise; o script lê da área de transferência, testa, salva só no `.env` do PC, atualiza e reinicia o bot. Quando a sessão vencer, rode de novo.
 
 ## Atalhos (pasta "High OS Bot" na Área de Trabalho)
 | Atalho | Para quê |
