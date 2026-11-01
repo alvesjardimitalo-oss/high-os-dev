@@ -41,8 +41,16 @@ if ($cookie -notmatch 'auth_token=') { Falha 'O que esta copiado nao parece o co
 
 Write-Host ''
 Write-Host 'Testando o cookie no Paradise...' -ForegroundColor Cyan
+# O Windows PowerShell 5.1 ignora o cabecalho Cookie passado em -Headers;
+# por isso os cookies vao numa sessao web (CookieContainer).
+$sessao = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+foreach ($par in ($cookie -split ';')) {
+  $p = $par.Trim(); if (-not $p -or $p -notmatch '=') { continue }
+  $i = $p.IndexOf('='); $nome = $p.Substring(0, $i).Trim(); $valor = $p.Substring($i + 1).Trim()
+  try { $sessao.Cookies.Add((New-Object System.Net.Cookie($nome, $valor, '/', 'apidash.touz.dev'))) } catch {}
+}
 try {
-  $r = Invoke-RestMethod -Uri $Teste -Headers @{ Cookie = $cookie } -TimeoutSec 20
+  $r = Invoke-RestMethod -Uri $Teste -WebSession $sessao -Headers @{ Origin = 'https://paradise.touz.dev' } -TimeoutSec 20
 } catch {
   Falha ("O Paradise recusou o cookie (" + $_.Exception.Message + "). Confira se copiou o valor inteiro e se está logado no site.")
 }
