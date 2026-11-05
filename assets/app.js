@@ -28,6 +28,7 @@ import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules
 import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
+import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason } from './modules/season.js?v=13.0.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
 authDomain:'high-os.firebaseapp.com',
@@ -50,7 +51,7 @@ facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
 const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#deniedView'),appView=$('#appView'),sessionArea=$('#sessionArea');
 
-let currentUser=null,currentProfile=null,faccoes=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
+let currentUser=null,currentProfile=null,faccoes=[],faccoesTodas=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
 // Endereço vem de assets/api-config.js (uma linha para trocar de servidor).
 const HIGH_OS_DISCORD_API=String(window.HIGH_OS_API_URL||'https://desktop-a2oor0c.taile5cb57.ts.net').replace(/\/+$/,'');
 // Acesso de contingência: requer cadastro ativo validado no Firestore e é sempre somente leitura.
@@ -1596,6 +1597,7 @@ userPhotoEl=$('#userPhoto');
   const needsSegments=['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','group-profile','group-settings','org-profile'].includes(initialPage);
   if(needsSegments)await loadSegmentConfig();
   if(initialPage==='dashboard')await loadDashboardConfig();
+  await iniciarSeason();
   if(needsSegments&&(!highOsEmergencyReadOnly||canViewModule('faccoes'))){
    try{await loadFaccoes()}catch(e){
     if(!highOsEmergencyReadOnly)throw e;
@@ -1944,12 +1946,17 @@ async function loadFaccoes(){
      if(result.updated)currentSnapshot=await getDocsCached(facCol,'faccoes',{ttl:0});
     }catch(err){console.warn('[MECÂNICAS] Cadastro pendente:',err?.message||err)}
    }
-   faccoes=currentSnapshot.docs.map(d=>({id:d.id,...d.data()}));
-   try{await recuperarTelaoIlegalMechanic02(faccoes)}catch(err){console.warn('[TELÃO MECÂNICA 02] Recuperação pendente:',err?.message||err)}
-   faccoes.sort((a,b)=>(a.numero||999)-(b.numero||999));
+   /* V13 - a lista crua fica guardada inteira; o painel trabalha so com
+      os Groups da season ativa. Filtrar num lugar so faz todas as telas
+      respeitarem a season sem precisar mexer em cada uma. */
+   faccoesTodas=currentSnapshot.docs.map(d=>({id:d.id,...d.data()}));
+   try{await recuperarTelaoIlegalMechanic02(faccoesTodas)}catch(err){console.warn('[TELÃO MECÂNICA 02] Recuperação pendente:',err?.message||err)}
+   faccoesTodas.sort((a,b)=>(a.numero||999)-(b.numero||999));
+   faccoes=filtrarPorSeason(faccoesTodas);
    faccoesEmergencyError='';
    faccoesLoaded=true;
    renderFaccoes();
+   renderSeasonBadge();
    renderAvailableFaccoes();
    renderCommandDashboard();
    return faccoes;
@@ -1962,6 +1969,85 @@ async function loadFaccoes(){
  try{return await faccoesLoadPromise}
  finally{faccoesLoadPromise=null}
 }
+/* ============================================================
+   V13 · SEASON ATIVA
+   A planilha de blips e coordenadas e a lista oficial da season:
+   quem nao esta nela nao aparece no painel. Os Groups da season
+   anterior continuam gravados, so saem de vista.
+   ============================================================ */
+async function iniciarSeason(){
+ const {lista}=await lerIndice({getDoc,doc,db});
+ if(!lista.length){
+  /* Nenhuma season importada ainda: nao escondemos nada, mas avisamos -
+     um filtro silencioso que some com tudo seria pior que nao filtrar. */
+  avisarSeasonAusente();
+  return;
+ }
+ const salva=seasonEscolhida();
+ const valida=lista.find(s=>s.id===salva);
+ if(valida){try{await carregarSeason(valida.id,{getDoc,doc,db});return}catch(e){console.warn('[HIGH OS] season salva falhou:',e.message)}}
+ if(lista.length===1){try{await carregarSeason(lista[0].id,{getDoc,doc,db});guardarEscolha(lista[0].id);return}catch(e){}}
+ await perguntarSeason(lista);
+}
+
+function avisarSeasonAusente(){
+ const el=$('#seasonBadge');
+ if(!el)return;
+ el.hidden=false;
+ el.classList.add('vazia');
+ el.innerHTML='<span><b>SEM SEASON</b><small>importe a planilha</small></span>';
+ el.title='Nenhuma season foi importada ainda. Rode tools/importador-planilha.html; enquanto isso o painel mostra todos os Groups.';
+ el.onclick=()=>alert('Nenhuma season importada ainda.\n\nO painel esta mostrando TODOS os Groups gravados. Para limitar o painel aos QGs da season, importe a aba de blips e coordenadas em tools/importador-planilha.html.');
+}
+
+function perguntarSeason(lista){
+ return new Promise(resolve=>{
+  const caixa=document.createElement('div');
+  caixa.className='season-ask';
+  caixa.innerHTML=`<div class="season-ask-box" role="dialog" aria-modal="true" aria-label="Escolher season">
+   <span>HIGH OS</span>
+   <h2>Qual season você vai trabalhar?</h2>
+   <p>O painel mostra apenas os Groups que estão na planilha da season escolhida.</p>
+   <div class="season-ask-list">${lista.map(s=>`<button type="button" data-season="${esc(s.id)}">
+     <b>${esc(s.nome||s.id)}</b>
+     <small>${Number(s.total||0)} QGs${Number(s.semGroup||0)?` • ${Number(s.semGroup)} sem Group vinculado`:''}</small>
+    </button>`).join('')}</div>
+   <p class="season-ask-erro" hidden></p>
+  </div>`;
+  document.body.appendChild(caixa);
+  caixa.querySelectorAll('[data-season]').forEach(b=>b.onclick=async()=>{
+   caixa.querySelectorAll('button').forEach(x=>x.disabled=true);
+   const erro=caixa.querySelector('.season-ask-erro');
+   try{
+    await carregarSeason(b.dataset.season,{getDoc,doc,db});
+    guardarEscolha(b.dataset.season);
+    caixa.remove();
+    resolve(true);
+   }catch(e){
+    erro.hidden=false;
+    erro.textContent=e.message;
+    caixa.querySelectorAll('button').forEach(x=>x.disabled=false);
+   }
+  });
+ });
+}
+
+function renderSeasonBadge(){
+ const el=$('#seasonBadge');
+ if(!el)return;
+ if(!season.carregada)return;            // o aviso de "sem season" ja cuidou do selo
+ const r=resumoSeason(faccoesTodas||[]);
+ el.hidden=false;
+ el.classList.remove('vazia');
+ el.innerHTML=`<span><b>${esc(season.nome)}</b><small>${r.noPainel} no painel${r.semVinculo?` • ${r.semVinculo} QG sem Group`:''}</small></span>`;
+ el.title=`${r.qgs} QGs na planilha • ${r.foraDaPlanilha} Group(s) do painel fora da planilha desta season`;
+ el.onclick=()=>{
+  if(!confirm(`Trocar de season? Agora você está em ${season.nome}.`))return;
+  esquecerEscolha();
+  location.reload();
+ };
+}
+
 function renderFaccoes(){
  const q=($('#facSearch').value||'').toLowerCase(),
 seg=$('#facSegment').value,
