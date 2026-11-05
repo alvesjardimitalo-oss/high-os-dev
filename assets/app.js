@@ -28,8 +28,11 @@ import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules
 import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
-import * as fila from './modules/fila-bot.js?v=13.0.0';
-import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason } from './modules/season.js?v=13.0.0';
+import * as fila from './modules/fila-bot.js?v=13.1.0';
+import * as qgsUi from './modules/qgs-ui.js?v=13.1.0';
+import * as catCraft from './modules/catalogo-craft.js?v=13.1.0';
+import * as catUi from './modules/catalogo-ui.js?v=13.1.0';
+import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason, salvarQg, vincularGroup, desvincularGroup } from './modules/season.js?v=13.1.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
 authDomain:'high-os.firebaseapp.com',
@@ -69,7 +72,7 @@ let highOsEmergencyReadOnly=false;
    fila, o app todo. */
 let _fnsFila=null;
 function fnsFila(){
- return _fnsFila||(_fnsFila={db,doc,collection,getDoc,getDocs,setDoc,serverTimestamp,writeBatch,query,where,orderBy,limit});
+ return _fnsFila||(_fnsFila={db,doc,collection,getDoc,getDocs,setDoc,serverTimestamp,writeBatch,runTransaction,query,where,orderBy,limit});
 }
 
 async function highOsDiscordRequest(path,options={}){
@@ -1409,6 +1412,8 @@ const INTERNAL_MODULE_PARENT={'planejador-acoes':'economia',
 'organizacoes':'faccoes',
 'org-profile':'faccoes',
 'disponiveis':'faccoes',
+'qgs':'faccoes',
+'receitas':'faccoes',
 'entregas':'faccoes'};
 
 function normalizePermission(v){v=String(v||'').toUpperCase();
@@ -1884,6 +1889,8 @@ if(page==='dashboard')setTimeout(()=>loadDashboardConfig(),0);
 if(page==='economia')setTimeout(()=>loadMarketCatalog(),0);
 if(page==='solicitacoes')setTimeout(()=>loadRequests(),0);
 if(page==='diario')setTimeout(()=>loadOperationalDiary(),0);
+if(page==='qgs')setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes()}catch(e){}renderQgs()},0);
+if(page==='receitas')setTimeout(async()=>{await carregarCatalogo();renderCatalogo()},0);
 if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','group-profile','group-settings','org-profile'].includes(page)&&!faccoesLoaded)setTimeout(()=>loadFaccoes().catch(e=>console.warn('[FACÇÕES] lazy-load falhou',e)),0);
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='planejador')carregarPlanejadorMissoes().then(()=>setTimeout(()=>window.HighMissionPlanner?.activate?.(),60)).catch(err=>{console.error('[PLANEJADOR]',err);const box=document.querySelector('#page-planejador');if(box)box.insertAdjacentHTML('afterbegin','<div class="placeholder"><h3>NÃO FOI POSSÍVEL CARREGAR O PLANEJADOR</h3><p>Recarregue a página.</p></div>')});
@@ -2002,6 +2009,330 @@ async function loadFaccoes(){
  try{return await faccoesLoadPromise}
  finally{faccoesLoadPromise=null}
 }
+/* ============================================================
+   V13 · CATÁLOGO DE CRAFT E ROTA
+   As receitas saem do código e passam a morar no Firebase,
+   editáveis pela equipe. A rota continua derivada dos insumos.
+   ============================================================ */
+let catalogoCraft={versao:0,segmentos:{}}, catSegAtivo='', catalogoCarregado=false;
+
+/* O panorama e MONTADO a partir dos QGs da season, nao de um catalogo
+   separado: a receita mora no QG, junto das coordenadas. Assim nao ha
+   duas verdades sobre a mesma receita. Custo zero de leitura: a season
+   ja esta carregada. */
+async function carregarCatalogo(){
+ const segmentos={};
+ for(const f of (faccoesTodas||[])){
+  const receitas=f.perfilTecnico?.craft?.receitas||[];
+  if(!receitas.length)continue;
+  const seg=(f.segmento||'SEM SEGMENTO').toUpperCase();
+  (segmentos[seg]=segmentos[seg]||{receitas:[]}).receitas.push(...receitas);
+ }
+ catalogoCraft=catCraft.normalizarCatalogo({segmentos});
+ catalogoCarregado=true;
+ return catalogoCraft;
+}
+
+
+
+function renderCatalogo(){
+ const box=$('#catalogoBox');
+ if(!box)return;
+ box.innerHTML=catUi.catalogoHtml({catalogo:catalogoCraft,segmentoAtivo:catSegAtivo,esc,
+  podeEditar:false});
+ ligarCatalogo();
+}
+
+function ligarCatalogo(){
+ const box=$('#catalogoBox');
+ if(!box)return;
+ box.querySelectorAll('[data-cat-seg]').forEach(b=>b.onclick=()=>{catSegAtivo=b.dataset.catSeg;renderCatalogo()});
+}
+
+/* ============================================================
+   V13 · QGs DA SEASON
+   O Firebase e o banco: esta tela grava. A planilha semeia e
+   serve de espelho, mas nao manda.
+   ============================================================ */
+let qgFiltro={setor:'',estado:'',busca:''};
+
+function renderQgs(){
+ const box=$('#qgsBox');
+ if(!box)return;
+ box.innerHTML=qgsUi.qgsHtml({season,faccoes:faccoesTodas||[],esc,filtro:qgFiltro});
+ ligarQgs();
+}
+
+function ligarQgs(){
+ const box=$('#qgsBox');
+ if(!box)return;
+ box.querySelectorAll('[data-qg-estado]').forEach(b=>b.onclick=()=>{
+  qgFiltro.estado=b.dataset.qgEstado; renderQgs();
+ });
+ const busca=$('#qgBusca');
+ if(busca)busca.oninput=()=>{qgFiltro.busca=busca.value;clearTimeout(busca._t);
+  busca._t=setTimeout(()=>{const pos=busca.selectionStart;renderQgs();
+   const novo=$('#qgBusca');if(novo){novo.focus();novo.setSelectionRange(pos,pos)}},250)};
+ const setor=$('#qgSetor');
+ if(setor)setor.onchange=()=>{qgFiltro.setor=setor.value;renderQgs()};
+
+ box.querySelectorAll('[data-qg-editar]').forEach(b=>b.onclick=()=>abrirEditorQg(b.dataset.qgEditar));
+ box.querySelectorAll('[data-qg-vincular]').forEach(b=>b.onclick=()=>vincularQg(b.dataset.qgVincular));
+ box.querySelectorAll('[data-qg-desvincular]').forEach(b=>b.onclick=()=>desvincularQg(b.dataset.qgDesvincular));
+}
+
+function qgPorChave(chave){return (season.qgs||[]).find(q=>q.chave===chave)}
+
+async function vincularQg(chave){
+ if(!canEditModule('faccoes'))return permissionDeniedMessage('faccoes',true);
+ const q=qgPorChave(chave);
+ if(!q)return;
+ const sugestao=qgsUi.sugerirGroup(q.setor,faccoesTodas||[],season.qgs||[]);
+ const nome=prompt(`Vincular um Group a "${q.local||chave}".\n\nSugestão pela convenção do setor:`,sugestao);
+ if(nome===null)return;
+ const g=nome.trim();
+ try{
+  /* Vincular CRIA o Group. Antes so anotava o nome no QG, e o Group nao
+     existia em lugar nenhum - sem registro nao ha onde guardar a receita
+     nem como ele aparecer nas Organizacoes. */
+  const jaExiste=(faccoesTodas||[]).some(x=>String(x.group||'').toUpperCase()===g.toUpperCase());
+  if(!jaExiste){
+   await setDoc(doc(db,'highos','data','faccoes',g),{
+    group:g, segmento:q.setor||'', qg:q.local||'', produto:q.produto||'',
+    status:'INATIVA', faccao:'', lider:'', staff:'',
+    seasonId:season.id||'', qgChave:q.chave,
+    criadoEm:serverTimestamp(), updatedAt:serverTimestamp(), updatedBy:currentUser?.email||''
+   },{merge:true});
+  }
+  await vincularGroup(fnsFila(),chave,g,currentUser?.email||'');
+  await registrarHistoricoQg('QG_VINCULADO',q,`Group ${g} ${jaExiste?'vinculado':'criado e vinculado'} a ${q.local||chave}`);
+  try{await loadFaccoes()}catch(e){}
+  renderQgs(); renderSeasonBadge();
+ }catch(e){alert('Não vinculou: '+e.message)}
+}
+
+async function desvincularQg(chave){
+ if(!canEditModule('faccoes'))return permissionDeniedMessage('faccoes',true);
+ const q=qgPorChave(chave);
+ if(!q)return;
+ if(!confirm(`Tirar o Group "${q.group}" de "${q.local||chave}"?\n\nO cadastro do Group não é apagado — ele só deixa de ocupar este QG.`))return;
+ try{
+  await desvincularGroup(fnsFila(),chave,currentUser?.email||'');
+  await registrarHistoricoQg('QG_DESVINCULADO',q,`Group ${q.group} desvinculado de ${q.local||chave}`);
+  renderQgs(); renderSeasonBadge();
+ }catch(e){alert('Não desvinculou: '+e.message)}
+}
+
+function abrirEditorQg(chave){
+ const q=qgPorChave(chave);
+ if(!q)return;
+ const pode=canEditModule('faccoes');
+ const modal=document.createElement('div');
+ modal.className='modal';
+ modal.innerHTML=`<div class="modal-card qg-modal">
+   <button class="modal-x" type="button" aria-label="Fechar">×</button>
+   <div class="eyebrow">COORDENADAS DO QG</div>
+   <h2 style="margin:4px 0 2px">${esc(q.local||chave)}</h2>
+   <p class="page-subtitle" style="margin:0 0 16px">${esc(q.setor||'sem setor')}${q.group?' · Group '+esc(q.group):' · sem Group'}</p>
+   ${qgsUi.editorHtml(q,esc)}
+   <div class="modal-actions">
+    <button type="button" class="btn-secondary" data-fechar>FECHAR</button>
+    ${pode?'<button type="button" class="btn-primary compact" data-salvar>SALVAR NO BANCO</button>':''}
+   </div>
+  </div>`;
+ document.body.appendChild(modal);
+ const fechar=()=>modal.remove();
+ modal.querySelector('.modal-x').onclick=fechar;
+ modal.querySelector('[data-fechar]').onclick=fechar;
+ modal.onclick=e=>{if(e.target===modal)fechar()};
+ if(!pode)modal.querySelectorAll('input').forEach(i=>i.disabled=true);
+
+ modal.querySelector('[data-salvar]')?.addEventListener('click',async ev=>{
+  const btn=ev.currentTarget;
+  btn.disabled=true; btn.textContent='SALVANDO...';
+  try{
+   const atualizado=qgsUi.lerEditor(modal,q);
+   await salvarQg(fnsFila(),chave,{
+    local:atualizado.local,setor:atualizado.setor,produto:atualizado.produto,cds:atualizado.cds
+   },currentUser?.email||'');
+   await registrarHistoricoQg('QG_EDITADO',q,`Coordenadas de ${atualizado.local||chave} atualizadas no painel`);
+   fechar(); renderQgs();
+  }catch(e){
+   alert('Não salvou: '+e.message);
+   btn.disabled=false; btn.textContent='SALVAR NO BANCO';
+  }
+ });
+}
+
+/* ------------------------------------------------------------
+   CRAFT E ROTA DO QG
+   A receita e cadastrada no Group, e o Group mora num QG - entao
+   ela fica no proprio registro do QG, junto das coordenadas. Uma
+   leitura traz o lugar, a receita e a rota: e o que a solicitacao
+   precisa, tudo no mesmo documento.
+   ------------------------------------------------------------ */
+function abrirCraftQg(chave){
+ const q=qgPorChave(chave);
+ if(!q)return;
+ const pode=canEditModule('faccoes');
+ /* Catalogo de uma season so: as receitas dos QGs dela, para um insumo
+    poder apontar para a receita de outro QG quando for intermediario. */
+ /* Para um insumo intermediario poder apontar para a receita de outro
+    Group da cidade. */
+ const catalogoDaSeason=()=>({versao:1,segmentos:{
+  CIDADE:{receitas:(faccoesTodas||[]).flatMap(x=>(x.perfilTecnico?.craft?.receitas||[]))}
+ }});
+
+ /* A RECEITA MORA NO GROUP, nao na favela: se o Group for recolhido e
+    for para outro QG, ela vai junto. Sem Group nao ha onde cadastrar. */
+ const grp=(faccoesTodas||[]).find(x=>String(x.group||'').toUpperCase()===String(q.group||'').toUpperCase());
+ if(!q.group||!grp){
+  alert(`"${q.local||chave}" ainda nao tem Group.\n\nA receita fica no Group, nao na favela - vincule um Group primeiro e depois cadastre o craft dele.`);
+  return;
+ }
+ let receitas=catCraft.normalizarCatalogo({segmentos:{S:{receitas:grp.perfilTecnico?.craft?.receitas||[]}}}).segmentos.S.receitas;
+
+ const modal=document.createElement('div');
+ modal.className='modal';
+ document.body.appendChild(modal);
+
+ function desenhar(){
+  const cat=catalogoDaSeason();
+  const rotaTotal=receitas.flatMap(r=>catCraft.rotaDaReceita(r,cat));
+  const soma=new Map();
+  for(const i of rotaTotal){
+   const k=i.spawn.toLowerCase();
+   const c=soma.get(k)||{spawn:i.spawn,qtd:0,semReceita:false};
+   c.qtd+=i.qtd; if(i.semReceita)c.semReceita=true; soma.set(k,c);
+  }
+  const rota=[...soma.values()].sort((a,b)=>b.qtd-a.qtd);
+
+  modal.innerHTML=`<div class="modal-card cat-modal">
+   <button class="modal-x" type="button" aria-label="Fechar">×</button>
+   <div class="eyebrow">CRAFT E ROTA</div>
+   <h2 style="margin:4px 0 2px">${esc(q.local||chave)}</h2>
+   <p class="page-subtitle" style="margin:0 0 16px">Group <b>${esc(q.group)}</b>${q.setor?' · '+esc(q.setor):''} · a receita fica no Group e vai com ele se mudar de favela</p>
+
+   <div class="cat-layout">
+    <section>
+     <div class="cat-cab"><h3>Receitas</h3>
+      ${pode?'<button type="button" class="mini-btn primaria" data-nova>NOVA RECEITA</button>':''}</div>
+     ${receitas.length?`<div class="cat-receitas">${receitas.map((r,i)=>`
+       <article class="cat-receita">
+        <header><div><h4>${esc(r.nome||'(sem nome)')}</h4>
+         <span>${esc(r.spawn||'sem spawn')}${r.nivel?' · nível '+r.nivel:''}${r.max?' · máx '+r.max:''}</span></div>
+         ${pode?`<button type="button" class="mini-btn" data-edit="${i}">EDITAR</button>`:''}</header>
+        <div class="cat-insumos">${r.insumos.map(x=>`<span class="ins ${x.origem.toLowerCase()}">${esc(x.spawn)} <b>×${x.qtd}</b><i>${esc(catCraft.ORIGENS[x.origem]?.label||x.origem)}</i></span>`).join('')||'<span class="vazio">sem insumos</span>'}</div>
+       </article>`).join('')}</div>`
+      :`<div class="placeholder peq"><h3>SEM RECEITA</h3><p>Cadastre o que este QG fabrica. A rota sai dos insumos.</p></div>`}
+    </section>
+    <aside class="cat-rota">
+     <h3>Rota</h3>
+     <p>O que a facção precisa colher para dar conta das receitas deste QG. Entra na solicitação junto das coordenadas.</p>
+     ${rota.length?`<ul>${rota.map(i=>`<li${i.semReceita?' class="alerta"':''}><b>${esc(i.spawn)}</b><span>×${i.qtd}</span>${i.semReceita?'<small>craft sem receita cadastrada</small>':''}</li>`).join('')}</ul>`
+      :'<p class="vazio">Nada a colher ainda.</p>'}
+    </aside>
+   </div>
+
+   <div class="modal-actions">
+    <button type="button" class="btn-secondary compact" data-fechar>FECHAR</button>
+    ${pode?'<button type="button" class="btn-primary compact" data-salvar>SALVAR NO BANCO</button>':''}
+   </div>
+  </div>`;
+
+  modal.querySelector('.modal-x').onclick=()=>modal.remove();
+  modal.querySelector('[data-fechar]').onclick=()=>modal.remove();
+  modal.querySelector('[data-nova]')?.addEventListener('click',()=>editarReceitaQg(-1));
+  modal.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editarReceitaQg(Number(b.dataset.edit)));
+  modal.querySelector('[data-salvar]')?.addEventListener('click',salvar);
+ }
+
+ function editarReceitaQg(idx){
+  const nova=idx<0;
+  const base=nova?catCraft.normalizarReceita({}):receitas[idx];
+  const cat=catalogoDaSeason();
+  const sub=document.createElement('div');
+  sub.className='modal';
+  sub.innerHTML=`<div class="modal-card cat-modal">
+    <button class="modal-x" type="button" aria-label="Fechar">×</button>
+    <div class="eyebrow">${nova?'NOVA RECEITA':'EDITAR RECEITA'}</div>
+    <h2 style="margin:4px 0 14px">${esc(base.nome||'Sem nome')}</h2>
+    ${catUi.editorReceitaHtml(base,cat,esc)}
+    <div class="modal-actions">
+     ${nova?'':'<button type="button" class="btn-danger" data-apagar>APAGAR</button>'}
+     <div style="display:flex;gap:9px;margin-left:auto">
+      <button type="button" class="btn-secondary compact" data-cancelar>CANCELAR</button>
+      <button type="button" class="btn-primary compact" data-ok>OK</button>
+     </div>
+    </div>
+   </div>`;
+  document.body.appendChild(sub);
+  const fecharSub=()=>sub.remove();
+  sub.querySelector('.modal-x').onclick=fecharSub;
+  sub.querySelector('[data-cancelar]').onclick=fecharSub;
+
+  const previa=()=>{
+   const atual=catCraft.normalizarReceita(catUi.lerEditorReceita(sub,base));
+   const alvo=sub.querySelector('[data-previa]');
+   if(alvo)alvo.innerHTML=catUi.previaRota(atual,cat,esc);
+  };
+  const lista=sub.querySelector('[data-ins-lista]');
+  sub.querySelector('[data-ins-add]').onclick=()=>{
+   lista.insertAdjacentHTML('beforeend',sub.querySelector('[data-ins-modelo]').innerHTML);
+   ligar();previa();
+  };
+  function ligar(){
+   lista.querySelectorAll('[data-ins-remover]').forEach(b=>b.onclick=()=>{b.closest('.cat-ins-linha').remove();previa()});
+   lista.querySelectorAll('[data-i="origem"]').forEach(sl=>{
+    const cx=sl.closest('.cat-ins-linha').querySelector('.cat-ins-receita');
+    cx.style.display=sl.value==='CRAFT'?'':'none';
+    sl.onchange=()=>{cx.style.display=sl.value==='CRAFT'?'':'none';previa()};
+   });
+  }
+  ligar(); sub.addEventListener('input',previa); previa();
+
+  sub.querySelector('[data-apagar]')?.addEventListener('click',()=>{
+   if(!confirm(`Apagar "${base.nome||'esta receita'}"?`))return;
+   receitas.splice(idx,1); fecharSub(); desenhar();
+  });
+  sub.querySelector('[data-ok]').onclick=()=>{
+   const atual=catCraft.normalizarReceita(catUi.lerEditorReceita(sub,base));
+   if(!atual.nome||!atual.spawn)return alert('Produto final e spawn são obrigatórios.');
+   if(nova)receitas.push(atual); else receitas[idx]=atual;
+   fecharSub(); desenhar();
+  };
+ }
+
+ async function salvar(ev){
+  const btn=ev.currentTarget;
+  btn.disabled=true; btn.textContent='SALVANDO...';
+  try{
+   const perfil={...(grp.perfilTecnico||{})};
+   perfil.craft={...(perfil.craft||{}),receitas};
+   await setDoc(doc(db,'highos','data','faccoes',grp.group),
+    {perfilTecnico:perfil,updatedAt:serverTimestamp(),updatedBy:currentUser?.email||''},{merge:true});
+   await registrarHistoricoQg('GROUP_CRAFT',q,`Craft do Group ${grp.group}: ${receitas.length} receita(s)`);
+   try{await loadFaccoes()}catch(e){}
+   modal.remove(); renderQgs();
+  }catch(e){
+   alert('Não salvou: '+e.message);
+   btn.disabled=false; btn.textContent='SALVAR NO BANCO';
+  }
+ }
+
+ desenhar();
+}
+
+/* O historico ja registra tudo que a equipe faz; os QGs entram nele
+   para a trilha de niveis poder ser lida dali depois. */
+async function registrarHistoricoQg(tipo,q,descricao){
+ try{
+  await addDoc(histCol,{sessionId:currentSessionId||'',tipo,
+   group:q.group||'',qg:q.local||q.chave,season:season.id,
+   descricao,usuario:currentUser?.email||'',data:serverTimestamp()});
+ }catch(e){console.warn('[QG] histórico não gravou:',e?.message||e)}
+}
+
 /* ============================================================
    V13 · FILA DE ATUALIZAÇÕES PARA O BOT
    O bot roda no PC de casa. Com a máquina desligada, o que
