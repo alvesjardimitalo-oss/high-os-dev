@@ -2036,8 +2036,18 @@ async function carregarCatalogo(){
   const receitas=f.perfilTecnico?.craft?.receitas||[];
   if(!receitas.length)continue;
   const seg=(f.segmento||'SEM SEGMENTO').toUpperCase();
-  (segmentos[seg]=segmentos[seg]||{receitas:[]}).receitas.push(...receitas);
+  const bloco=(segmentos[seg]=segmentos[seg]||{receitas:[],vistas:new Set()});
+  /* Os Groups do mesmo segmento repetem as mesmas receitas (Armas01 a
+     Armas06 tem as mesmas 10). O catalogo mostra cada receita uma vez:
+     mesma saida e mesmos insumos = mesma receita. */
+  for(const r of receitas){
+   const ins=(r.insumos||[]).map(i=>Array.isArray(i)?i.join(':'):`${i.spawn}:${i.qtd}`).sort().join('|');
+   const chave=String(r.spawn||r.nome||'').toLowerCase()+'#'+ins;
+   if(bloco.vistas.has(chave))continue;
+   bloco.vistas.add(chave);bloco.receitas.push(r);
+  }
  }
+ for(const b of Object.values(segmentos))delete b.vistas;
  catalogoCraft=catCraft.normalizarCatalogo({segmentos});
  catalogoCarregado=true;
  return catalogoCraft;
