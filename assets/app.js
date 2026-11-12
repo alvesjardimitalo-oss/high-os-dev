@@ -1274,8 +1274,18 @@ currentSessionStart=0;
 if(sessionTimer){clearInterval(sessionTimer);
 sessionTimer=null}
 }
-async function logout(reason='LOGOUT'){await closeCurrentSession(reason);
-await signOut(auth)}
+/* Sair nao pode depender do bot: se o registro do fim da sessao demorar
+   (PC lento, bot reiniciando), o relogio chamava logout de novo a cada
+   segundo e a tela seguia aberta com dados velhos. Registro com prazo de
+   3 s e uma saida so por vez. */
+let saindo=false;
+async function logout(reason='LOGOUT'){
+ if(saindo)return;
+ saindo=true;
+ if(sessionTimer){clearInterval(sessionTimer);sessionTimer=null}
+ try{await Promise.race([closeCurrentSession(reason).catch(()=>{}),new Promise(r=>setTimeout(r,3000))])}
+ finally{try{await signOut(auth)}finally{saindo=false}}
+}
 async function startOrResumeSession(user,profile){
  const email=String(user.email||'').toLowerCase(),
 key=sessionStorageKey(email),
