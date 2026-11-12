@@ -5634,8 +5634,13 @@ function orgKey(name){return String(name||'').trim().toLowerCase().normalize('NF
 function derivedOrganizations(){
  const map=new Map();
 
- organizacoes.forEach(o=>map.set(String(o.nome||o.id||'').toLowerCase(),{...o,
-source:'cadastro'}));
+ /* Com season ativa no bot, o Group atual de uma organizacao so vale se
+    a ficha da season confirma (faccoes ja e so da season). Sem isso a
+    facção da S2 aparecia "ocupando Armas01" no Armas01 da S3. */
+ const ocupaNaSeason=new Set(faccoes.filter(f=>f.faccao).map(f=>String(f.faccao).toLowerCase()));
+ organizacoes.forEach(o=>{const k=String(o.nome||o.id||'').toLowerCase();
+  const velho=botSeasonId&&o.groupAtual&&!ocupaNaSeason.has(k);
+  map.set(k,{...o,...(velho?{groupAtual:'',qgAtual:'',segmentoAtual:''}:{}),source:'cadastro'})});
 
  faccoes.filter(f=>f.faccao).forEach(f=>{const k=String(f.faccao).toLowerCase(),
 old=map.get(k)||{};map.set(k,{...old,
