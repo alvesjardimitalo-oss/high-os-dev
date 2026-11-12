@@ -103,7 +103,15 @@ async function highOsDiscordRequest(path,options={}){
 function factionDiscordPayload(f={}){
  return {group:f.group,segmento:f.segmento||'',qg:f.qg||'',status:f.status||'INATIVA',faccao:f.faccao||'',lider:f.lider||'',staff:f.staff||'',dataEntrega:f.dataEntrega||'',contingenteMin:Number(f.contingenteMin||0),contingenteMax:Number(f.contingenteMax||0),beneficios:f.beneficios||{},observacoes:f.observacao||f.observacoes||'',discordImageUrls:Array.isArray(f.discordImageUrls)?f.discordImageUrls:(f.imagemAnuncio?[f.imagemAnuncio]:[])};
 }
-async function saveFactionToDiscord(f,extra={}){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify({...factionDiscordPayload(f),...extra})});}
+/* Season do bot. Com season ativa, o bot guarda um Armas01 por season
+   (chave "s3::armas01"). O painel le so os registros da season ativa e
+   manda seasonId em toda gravacao - sem isso, gravar "Armas01" caia no
+   registro legado da season anterior. */
+let botSeasonId='';
+const comSeasonDoBot=(body={})=>botSeasonId&&!Object.prototype.hasOwnProperty.call(body,'seasonId')?{...body,seasonId:botSeasonId}:body;
+const chaveNoBot=group=>botSeasonId&&!String(group).includes('::')?botSeasonId+'::'+group:String(group);
+const daSeasonDoBot=rec=>!botSeasonId||String(rec?.seasonId||'').toLowerCase()===botSeasonId.toLowerCase();
+async function saveFactionToDiscord(f,extra={}){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify(comSeasonDoBot({...factionDiscordPayload(f),...extra}))});}
 async function highOsStoreList(scope){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope));return (r.records||[]).map(x=>({id:x.id,...(x.data||{})}));}
 async function highOsStoreGet(scope,id){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id));return {id:r.record.id,...(r.record.data||{})};}
 async function highOsStorePut(scope,id,data){return highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(data)});}
@@ -2659,7 +2667,7 @@ async function discordFactionPatch(id,patch={}){
   if(pt==='segmento'){p.segment=String(p.segmento||'').trim();continue;}
   delete p[nat];
  }
- return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify({...p,group:id})});
+ return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(comSeasonDoBot({...p,group:id}))});
 }
 const setDoc=async(ref,data,opts={})=>{
  const ds=discordStoreRef(ref);
@@ -2910,7 +2918,7 @@ return comoSnapshot(mem.rows)}
   const ds=discordStoreRef(colRef);
   if(ds&&!ds.id){
    let rows;
-   if(ds.scope==='faccoes'){const r=await highOsDiscordRequest('/v1/factions');rows=(r.records||[]).map(x=>({
+   if(ds.scope==='faccoes'){const r=await highOsDiscordRequest('/v1/factions');botSeasonId=String(r.season?.id||'').trim();rows=(r.records||[]).filter(daSeasonDoBot).map(x=>({
     ...x,
     id:x.group||x.id,
     group:x.group||x.id||'',
@@ -10519,7 +10527,7 @@ async function persistirSolicitacaoMecanicas20261019(docs=[]){
  let updated=false;
  for(const group of groups){
   // Consulta sempre o registro vivo antes de fazer patch (cache pode estar antigo).
-  const result=await highOsDiscordRequest('/v1/factions/'+encodeURIComponent(group));
+  const result=await highOsDiscordRequest('/v1/factions/'+encodeURIComponent(chaveNoBot(group)));
   const old=result.record||{};
   if(old.solicitacaoMecanica20261019===true)continue;
   const p=old.perfilTecnico||{},c=p.craft||{},f=p.farm||{};
@@ -13561,7 +13569,7 @@ async function createAdminNewGroup(event){
  try{
   // Verificação remota evita sobrescrever um Group criado por outro admin.
   const latest=await highOsDiscordRequest('/v1/factions');
-  if((latest.records||[]).some(f=>String(f.group||'').toLowerCase()===group.toLowerCase()))return alert('Este Group já existe no cadastro. Atualize a lista.');
+  if((latest.records||[]).filter(daSeasonDoBot).some(f=>String(f.group||'').toLowerCase()===group.toLowerCase()))return alert('Este Group já existe no cadastro. Atualize a lista.');
   await setDoc(doc(db,'highos','data','faccoes',group),{
    group,segmento,qg,status:'DISPONIVEL',faccao:'',lider:'',staff:'',
    dataEntrega:'',contingenteMin:min,contingenteMax:max,observacoes
