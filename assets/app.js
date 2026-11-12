@@ -6192,6 +6192,20 @@ let dlvCurrent={group:'',stored:{},sheet:{b:{},src:{},found:0,unknown:[]},status
 function dlvMergedBenefits(){
  const out={...(dlvCurrent.stored||{})};
  Object.entries(dlvCurrent.sheet?.b||{}).forEach(([k,v])=>{if(v!==''&&v!=null)out[k]=v});
+ /* Na season, a planilha traz TODAS as coordenadas planejadas do QG, mas
+    so esta instalado o que esta FUNCIONANDO nos blips do QG. O resto
+    aparece como "nao instalado - marque para solicitar". */
+ const q=typeof qgDoGroup==='function'?qgDoGroup(dlvCurrent.group):null;
+ if(q){
+  const inst=new Set(blipsQg.instaladosDe(q));
+  const chaveEntrega={garagemBlindados:'blindados'};
+  for(const it of blipsQg.ITENS_BLIP){
+   if(inst.has(it.id))continue;
+   for(const c of it.campos)delete out[c];
+   delete out[chaveEntrega[it.id]||it.id];
+   if(it.id==='telao')['telao','telaoNome','telaoPostit','telaoCaixa1','telaoCaixa2','telaoCaixa3','telaoCaixa4'].forEach(k=>delete out[k]);
+  }
+ }
  return out;
 }
 /* VIP Org Ultra é um pacote OPCIONAL por entrega e não a garagem VIP já instalada.
