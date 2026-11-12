@@ -10084,7 +10084,7 @@ function sourceToGroupPatch(f,src){
  oldT=mergedTechProfile(f||{}),
  b={...oldB},
  t=clonePlain(oldT)||{},
- correction=GROUP_BASE_CORRECTIONS[f?.group]||{};
+ correction=corrBaseS2(f);
 
  const local=cleanProfileValue(src.LOCAL),
  product=cleanProfileValue(src.PRODUTO),
@@ -10176,7 +10176,8 @@ missing=0;
 const batch=writeBatch(db);
 for(const [sourceGroup,
 src] of entries){const f=(faccoes||[]).find(x=>alvesNorm(x.group).replace(/\s+/g,'')===alvesNorm(sourceGroup).replace(/\s+/g,''));
-if(!f){missing++;
+/* a base oficial e da S2: nunca sobrescreve um Group de season */
+if(!f||daSeasonAtual(f)){missing++;
 continue}const patch=sourceToGroupPatch(f,src);
 batch.set(doc(db,'highos','data','faccoes',f.group),{...patch,
 updatedAt:serverTimestamp(),
@@ -10793,8 +10794,15 @@ insumos:[['tarp',
 };
 
 function segmentKey(v=''){return alvesNorm(String(v)).replace(/[^a-z0-9]/g,'')}
+/* Tabelas fixas da S2 (correcoes, perfil de origem, extras e receitas
+   padrao) sao chaveadas pelo NOME do Group. Na S3 os nomes se repetem
+   (Armas01 da S2 e da S3), entao elas so valem para registro sem
+   season - o legado. Registro de season usa apenas o que esta gravado. */
+const daSeasonAtual=f=>!!String(f?.seasonId||'').trim();
+const corrBaseS2=f=>daSeasonAtual(f)?{}:(GROUP_BASE_CORRECTIONS?.[f?.group]||{});
 function standardRecipesForGroup(f={}){
- if(f.semCraft||GROUP_BASE_CORRECTIONS?.[f.group]?.state==='SEM_CRAFT')return [];
+ if(daSeasonAtual(f))return [];
+ if(f.semCraft||corrBaseS2(f).state==='SEM_CRAFT')return [];
 
  const k=segmentKey(f.segmento),
 g=String(f.group||'');
@@ -11006,7 +11014,7 @@ function mergedTechProfile(f={}){
  const d=defaultTechProfile(f),
 p=clonePlain(f.perfilTecnico||{})||{};
 
- const semCraft=!!(f.semCraft||GROUP_BASE_CORRECTIONS?.[f.group]?.state==='SEM_CRAFT'||p?.craft?.ativo===false);
+ const semCraft=!!(f.semCraft||corrBaseS2(f).state==='SEM_CRAFT'||p?.craft?.ativo===false);
 
  const saved=Array.isArray(p?.craft?.receitas)?p.craft.receitas:[];
 
@@ -11485,8 +11493,8 @@ return out}
 function operationalFromExisting(f={}){
  const o=opBlank(),
 b=f.beneficios||{},
-src=f.perfilFonte||GROUP_PROFILE_SOURCE?.[f.group]||{},
-corr=GROUP_BASE_CORRECTIONS?.[f.group]||{};
+src=f.perfilFonte||(daSeasonAtual(f)?{}:GROUP_PROFILE_SOURCE?.[f.group])||{},
+corr=corrBaseS2(f);
 
  o.localizacao.nome=f.qg||cleanProfileValue(src.LOCAL||'');
 o.localizacao.cdsPrincipal=corr.cds||f.perfilBase?.cds||f.cds||cleanProfileValue(src.COORDENADA||'');
@@ -11531,7 +11539,7 @@ cds:b.telaoCds||'',
 permissao:f.group||'',
 sons:Array.isArray(b.telaoSons)&&b.telaoSons.some(Boolean)?b.telaoSons:[1,2,3,4].map(i=>b['telaoCaixa'+i]||'')};
 
- return opMerge(o,OP_KNOWN_EXTRAS[f.group]||{});
+ return opMerge(o,(daSeasonAtual(f)?null:OP_KNOWN_EXTRAS[f.group])||{});
 
 }
 const _mergedTechProfileV71=mergedTechProfile;
@@ -12979,7 +12987,20 @@ const ANUNCIO_FABRICACAO={
 };
 function anuncioSegmentoKey(seg){return String(seg||'OUTROS').trim().toUpperCase().replace(/\d+$/,'')}
 function anuncioSegmentoNome(seg){const k=anuncioSegmentoKey(seg);return ANUNCIO_SEGMENTO_NOME[k]||k.charAt(0)+k.slice(1).toLowerCase()}
+/* O que o Group fabrica de verdade: as receitas cadastradas nele (da
+   season dele). A tabela fixa por segmento era da S2 e anunciava itens
+   que nao existem mais. */
+function nomesDasReceitas(f){
+ const vistos=new Set(),nomes=[];
+ for(const r of f?.perfilTecnico?.craft?.receitas||[]){
+  const n=String(r?.nome||'').trim().replace(/[.\s]+$/,'');
+  if(n&&!vistos.has(n.toLowerCase())){vistos.add(n.toLowerCase());nomes.push(n)}
+ }
+ return nomes;
+}
 function anuncioFabricacao(f){
+ const nomes=nomesDasReceitas(f);
+ if(nomes.length)return nomes.join(', ')+'.';
  const k=anuncioSegmentoKey(f.segmento);
  // Apoio/Outros variam por Group: usa o produto cadastrado no próprio Group.
  if(ANUNCIO_FABRICACAO[k])return ANUNCIO_FABRICACAO[k];
@@ -13142,7 +13163,7 @@ text=availableAnnouncementText(f),
 stateLabel=dcState==='POSTADO'?'POSTADO':dcState==='NAO_POSTADO'?'NÃO POSTADO':'RESPONDER STATUS';return `<article class="available-card" data-group="${esc(f.group)}">
    <div class="available-card-head"><div><span>${esc(f.segmento||'OUTROS')}</span><h3>${esc(f.group)}</h3></div><span class="discord-state ${posted?'posted':dcState==='NAO_POSTADO'?'not-posted':'pending'}">${stateLabel}</span></div>
    <div class="available-qg">${esc(f.qg||'SEM LOCAL')}</div>
-   <div class="available-product">${esc(f.produto||'Produto não informado')}</div>
+   <div class="available-product">${esc(f.produto||nomesDasReceitas(f).slice(0,4).join(', ')||'Produto não informado')}</div>
    <div class="available-contingent-editor"><span>CONTINGENTE DO ANÚNCIO</span><div class="available-contingent-row"><label>MÍNIMO<input class="available-cont-min" type="number" min="1" max="100" value="${Number(f.contingenteMin||15)}"></label><label>MÁXIMO<input class="available-cont-max" type="number" min="1" max="100" value="${Number(f.contingenteMax||28)}"></label><button class="mini-btn available-save-contingent" data-group="${esc(f.group)}">SALVAR CONTINGENTE</button></div></div>
    <div class="available-image-editor ${f.imagemAnuncio?'':'missing'}"><label><span>LINK DA IMAGEM PARA O DISCORD</span><div class="available-image-input-row"><input class="available-image-input" data-group="${esc(f.group)}" value="${esc(f.imagemAnuncio||'')}" placeholder="Cole aqui o link direto da imagem..."><button class="mini-btn available-save-image" data-group="${esc(f.group)}">SALVAR LINK</button></div><small>${f.imagemAnuncio?'O link será incluído automaticamente no texto do anúncio.':'Cadastre o link aqui; não precisa abrir o perfil do Group.'}</small></label></div>
    ${posted?`<div class="available-posted-meta">Publicado por <b>${esc(meta.responsavel||meta.postadoPor||'—')}</b>${meta.dataHora?` • ${esc(meta.dataHora)}`:''}</div>`:''}
@@ -13575,6 +13596,7 @@ IlegalMedic1:'APOIO',
 IlegalMedic2:'APOIO',
 IlegalMechanic01:'APOIO',
 IlegalMechanic02:'APOIO',
+IlegalMedic02:'APOIO',
 IlegalMecanic01:'APOIO'};
 const needs=faccoes.filter(f=>rules[f.group]&&segmentKey(f.segmento)!==segmentKey(rules[f.group]));
 if(!needs.length)return;
