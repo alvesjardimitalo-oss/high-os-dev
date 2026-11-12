@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>High OS · Inserir Groups da Season</title>
+<style>
+  :root{--bg:#07060b;--panel:#141019;--line:#33283b;--purple:#8d35ff;--text:#f7f4fb;--muted:#a79db6;--ok:#50f5a0;--err:#ff5b76;--warn:#ffcf5c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 system-ui,Segoe UI,Roboto,sans-serif;padding:26px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
+  .card h2{font-size:10.5px;letter-spacing:.12em;margin:0 0 12px;color:#d9c4eb}
+  button{background:var(--purple);color:#fff;border:none;border-radius:9px;padding:12px 18px;font-weight:800;letter-spacing:.05em;cursor:pointer;font-size:11px}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{display:block;font-size:9.5px;letter-spacing:.09em;color:var(--muted);margin:0 0 5px}
+  input{width:100%;background:#0a0810;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px 12px;font:13px/1.5 inherit}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:9.5px;letter-spacing:.09em;color:var(--muted)}
+  .ok{color:var(--ok)}.err{color:var(--err)}.warn{color:var(--warn)}.mut{color:var(--muted)}
+  .verdict{border-left:3px solid var(--purple);padding:11px 14px;margin-top:12px;background:rgba(141,53,255,.07);border-radius:0 10px 10px 0;font-size:13px}
+  .verdict.err{border-left-color:var(--err);background:rgba(255,91,118,.08)}
+  .verdict.ok{border-left-color:var(--ok);background:rgba(80,245,160,.08)}
+  .verdict.warn{border-left-color:var(--warn);background:rgba(255,207,92,.08)}
+  .kpi{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+  .kpi div{background:#0a0810;border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+  .kpi .rot{font-size:9.5px;letter-spacing:.09em;color:var(--muted)}
+  .num{font-size:22px;font-weight:800;display:block;line-height:1.2}
+  .tag{display:inline-block;font-size:9.5px;letter-spacing:.07em;padding:2px 7px;border-radius:20px;border:1px solid var(--line);margin:0 4px 3px 0}
+  .scroll{max-height:460px;overflow:auto}
+  .hide{display:none}
+  code{background:#0a0810;padding:2px 6px;border-radius:5px;font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Inserir Groups da season</h1>
+  <p class="sub">Lê a aba BLIPS COORDENADAS ao vivo, vincula cada Group ao seu QG na season e cria a ficha do Group. Ficha com o mesmo nome vinda de outra season é guardada como arquivo antes — nada se perde.</p>
+
+  <div class="card">
+    <h2>1 · ENTRAR E LER A PLANILHA</h2>
+    <div class="grid">
+      <div><label>SEASON</label><input id="sId" value="s3"></div>
+      <div><label>NOME</label><input id="sNome" value="High Season 3"></div>
+      <div><label>SEASON ANTERIOR (para o arquivo)</label><input id="sAnt" value="s2"></div>
+    </div>
+    <button id="entrar">ENTRAR COM GOOGLE E LER</button>
+    <span id="ident" class="mut" style="margin-left:10px"></span>
+    <div id="status"></div>
+  </div>
+
+  <div class="card hide" id="cardPlano">
+    <h2>2 · O QUE VAI SER GRAVADO</h2>
+    <div class="kpi" id="kpis"></div>
+    <div id="avisos"></div>
+    <div class="scroll"><table id="tabela"></table></div>
+    <div style="margin-top:14px"><button id="gravar">GRAVAR NO FIREBASE</button></div>
+    <div id="statusGravar"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
+import { getFirestore, doc, getDoc, getDocs, collection, writeBatch, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+import { qgsDaGrade, planejar, resumoPlano } from '../assets/modules/groups-season.js?v=1.0.0';
+
+const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',authDomain:'high-os.firebaseapp.com',projectId:'high-os',storageBucket:'high-os.firebasestorage.app',messagingSenderId:'471862600170',appId:'1:471862600170:web:ff55af6f7e808ff39'};
+const SHEET_ID='1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4';
+const ABA='BLIPS COORDENADAS';
+
+const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
+const provider=new GoogleAuthProvider();
+provider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly');
+provider.setCustomParameters({prompt:'select_account'});
+
+const $=s=>document.querySelector(s);
+const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const msg=(alvo,cls,html)=>{$(alvo).innerHTML=`<div class="verdict ${cls}">${html}</div>`};
+
+let usuario=null, plano=null, salvo=null;
+
+async function lerGrade(token){
+  const url=`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(`'${ABA}'!A1:BZ1300`)}?valueRenderOption=FORMATTED_VALUE`;
+  const r=await fetch(url,{headers:{Authorization:'Bearer '+token}});
+  if(!r.ok)throw new Error('Planilha: HTTP '+r.status+' '+(await r.text()).slice(0,160));
+  return (await r.json()).values||[];
+}
+
+async function entrarELer(){
+  try{
+    const res=await signInWithPopup(auth,provider);
+    usuario=res.user;
+    const token=GoogleAuthProvider.credentialFromResult(res)?.accessToken;
+    $('#ident').innerHTML=`conectado como <code>${esc(usuario.email)}</code>`;
+    if(!token)throw new Error('O Google não devolveu permissão de leitura da planilha.');
+    msg('#status','','Lendo a planilha e o Firebase…');
+
+    const grade=await lerGrade(token);
+    const qgsPlanilha=qgsDaGrade(grade);
+    const id=$('#sId').value.trim();
+    const snap=await getDoc(doc(db,'highos','data','seasons',id));
+    salvo=snap.exists()?snap.data():null;
+    const fs=await getDocs(collection(db,'highos','data','faccoes'));
+    const faccoes=fs.docs.map(d=>({id:d.id,...d.data()}));
+
+    plano=planejar({qgsPlanilha,qgsSalvos:salvo?.qgs||[],faccoes,seasonId:id,seasonAnterior:$('#sAnt').value.trim()||'s2'});
+    msg('#status','ok',`Planilha lida: ${grade.length} linhas, ${qgsPlanilha.filter(q=>q.group).length} Groups. Fichas no banco: ${faccoes.length}. Season gravada: ${salvo?`versão ${esc(salvo.versao||1)}, ${esc((salvo.qgs||[]).length)} QGs`:'nenhuma ainda'}.`);
+    mostrar();
+  }catch(e){ msg('#status','err',esc(e.message||String(e))) }
+}
+
+function mostrar(){
+  const r=resumoPlano(plano);
+  $('#cardPlano').classList.remove('hide');
+  $('#kpis').innerHTML=[
+    ['Groups na season',r.groups,'ok'],['QGs atualizados',r.qgsAtualizados,''],['QGs novos',r.qgsNovos,''],
+    ['Fichas novas',r.fichasNovas,'ok'],['Fichas S2 arquivadas',r.fichasArquivadas,r.fichasArquivadas?'warn':''],
+    ['Fichas atualizadas',r.fichasAtualizadas,''],['QGs fora da planilha',r.foraDaPlanilha,r.foraDaPlanilha?'warn':'']
+  ].map(([rot,v,c])=>`<div><span class="rot">${rot}</span><span class="num ${c}">${esc(v)}</span></div>`).join('');
+
+  const av=[];
+  if(plano.repetidos.length)av.push(`<div class="verdict warn">Group repetido na planilha (entrou só o primeiro): ${plano.repetidos.map(g=>`<span class="tag">${esc(g)}</span>`).join('')}</div>`);
+  if(plano.foraDaPlanilha.length)av.push(`<div class="verdict warn">QGs gravados que não estão mais na planilha — ficam como estão, confira: ${plano.foraDaPlanilha.map(q=>`<span class="tag">${esc(q.local||q.chave)}</span>`).join('')}</div>`);
+  if(plano.arquivar.length)av.push(`<div class="verdict">Fichas de outra season com o mesmo nome, guardadas como arquivo: ${plano.arquivar.map(a=>`<span class="tag">${esc(a.de)} → ${esc(a.para)}${a.dados.faccao?' ('+esc(a.dados.faccao)+')':''}</span>`).join('')}</div>`);
+  $('#avisos').innerHTML=av.join('');
+
+  const fichaDe=g=>plano.criar.find(f=>f.group===g)?'NOVA':plano.atualizar.find(a=>a.id===g)?'ATUALIZA':'—';
+  $('#tabela').innerHTML=`<thead><tr><th>GROUP</th><th>LOCAL</th><th>SEGMENTO</th><th>CDS</th><th>FICHA</th></tr></thead><tbody>`+
+    plano.qgsFinal.filter(q=>q.vinculado).map(q=>`<tr>
+      <td><b>${esc(q.group)}</b></td><td>${esc(q.local)}</td>
+      <td class="mut">${esc((plano.criar.find(f=>f.group===q.group)||{}).segmento||q.setor||'')}</td>
+      <td class="mut">${Object.keys(q.cds||{}).length}</td><td>${fichaDe(q.group)}</td></tr>`).join('')+'</tbody>';
+}
+
+async function gravar(){
+  if(!plano||!usuario)return;
+  const id=$('#sId').value.trim(), nome=$('#sNome').value.trim()||id;
+  const r=resumoPlano(plano);
+  if(!confirm(`Gravar ${r.groups} Groups na season "${id}"?\n\n${r.fichasNovas} fichas novas, ${r.fichasArquivadas} fichas de outra season arquivadas, ${r.fichasAtualizadas} atualizadas.`))return;
+  $('#gravar').disabled=true;
+  msg('#statusGravar','','Gravando…');
+  try{
+    const b=writeBatch(db);
+    const quem=usuario.email;
+    for(const a of plano.arquivar)
+      b.set(doc(db,'highos','data','faccoes',a.para),{...a.dados,arquivadoEm:serverTimestamp(),arquivadoPor:quem});
+    for(const f of plano.criar)
+      b.set(doc(db,'highos','data','faccoes',f.group),{...f,criadoEm:serverTimestamp(),updatedAt:serverTimestamp(),updatedBy:quem});
+    for(const u of plano.atualizar)
+      b.set(doc(db,'highos','data','faccoes',u.id),{...u.patch,updatedAt:serverTimestamp(),updatedBy:quem},{merge:true});
+
+    const versao=Number(salvo?.versao||0)+1;
+    const qgs=plano.qgsFinal;
+    b.set(doc(db,'highos','data','seasons',id),{
+      ...(salvo||{}),id,nome,versao,total:qgs.length,qgs,
+      planilhaUrl:salvo?.planilhaUrl||`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`,aba:ABA,
+      atualizadaEm:serverTimestamp(),atualizadaPor:quem,criadaEm:salvo?.criadaEm||serverTimestamp()
+    });
+
+    let lista=[];
+    try{const ix=await getDoc(doc(db,'highos','season_atual'));lista=Array.isArray(ix.data()?.lista)?ix.data().lista:[]}catch(e){}
+    const entrada={id,nome,versao,total:qgs.length,semGroup:qgs.filter(q=>!q.vinculado).length};
+    const i=lista.findIndex(s=>s.id===id); if(i>=0)lista[i]=entrada; else lista.push(entrada);
+    b.set(doc(db,'highos','season_atual'),{...entrada,ativa:id,lista,atualizadaEm:serverTimestamp(),atualizadaPor:quem},{merge:true});
+
+    await b.commit();
+    try{
+      await addDoc(collection(db,'highos','data','historico'),{tipo:'SEASON_GROUPS_INSERIDOS',
+        descricao:`${r.groups} Groups da ${nome} inseridos pela planilha (${r.fichasNovas} novos, ${r.fichasArquivadas} arquivados da season anterior)`,
+        usuario:quem,email:quem,createdAt:serverTimestamp(),data:serverTimestamp()});
+    }catch(e){}
+    salvo={...(salvo||{}),versao,qgs};
+    msg('#statusGravar','ok',`Gravado. Season <b>${esc(id)}</b> na versão <b>${versao}</b> com ${r.groups} Groups. Recarregue o painel para ver.`);
+  }catch(e){
+    $('#gravar').disabled=false;
+    msg('#statusGravar','err','Não gravou: '+esc(e.message||String(e))+' — nada foi alterado (a gravação é tudo ou nada).');
+  }
+}
+
+$('#entrar').onclick=entrarELer;
+$('#gravar').onclick=gravar;
+</script>
+</body>
+</html>
