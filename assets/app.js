@@ -2107,6 +2107,7 @@ function ligarQgs(){
  box.querySelectorAll('[data-qg-vincular]').forEach(b=>b.onclick=()=>vincularQg(b.dataset.qgVincular));
  box.querySelectorAll('[data-qg-desvincular]').forEach(b=>b.onclick=()=>desvincularQg(b.dataset.qgDesvincular));
  box.querySelectorAll('[data-qg-blips]').forEach(b=>b.onclick=()=>abrirBlipsQg(b.dataset.qgBlips));
+ box.querySelectorAll('[data-qg-craft]').forEach(b=>b.onclick=()=>abrirCraftQg(b.dataset.qgCraft));
  box.querySelectorAll('[data-qg-sol-craft]').forEach(b=>b.onclick=()=>abrirSolicitacaoCraft([]));
 }
 
