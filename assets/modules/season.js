@@ -20,8 +20,18 @@ export const season={
  groups:new Set(),
  ordem:new Map(),
  carregada:false,
- indice:[]
+ indice:[],
+ inicio:null
 };
+
+/* Data em que a season abriu na cidade. Antes dela, coletas de presenca
+   e metricas sao da season anterior (Groups com outras faccoes). O doc
+   da season pode trazer "inicio"; senao vale a data conhecida abaixo. */
+export const INICIO_CONHECIDO={s3:'2026-11-12'};
+export function inicioDaSeason(){
+ const m=String(season.inicio||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+ return m?new Date(+m[1],+m[2]-1,+m[3]):null;
+}
 
 const norm=v=>String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toUpperCase();
 
@@ -70,7 +80,7 @@ export async function carregarSeason(id,{getDoc,doc,db}){
  const meta=season.indice.find(s=>s.id===id)||{id,nome:id,versao:0};
  const espelho=lerEspelho(id,meta.versao);
  if(espelho){
-  aplicar(id,meta,espelho);
+  aplicar(id,{...meta,inicio:meta.inicio||INICIO_CONHECIDO[id]||null},espelho);
   return {qgs:espelho,origem:'espelho',leituras:0};
  }
  const snap=await getDoc(doc(db,'highos','data','seasons',id));
@@ -78,7 +88,7 @@ export async function carregarSeason(id,{getDoc,doc,db}){
  const d=snap.data();
  const qgs=Array.isArray(d.qgs)?d.qgs:[];
  gravarEspelho(id,d.versao||meta.versao||1,qgs);
- aplicar(id,{...meta,nome:d.nome||meta.nome,versao:d.versao||1},qgs);
+ aplicar(id,{...meta,nome:d.nome||meta.nome,versao:d.versao||1,inicio:d.inicio||meta.inicio||INICIO_CONHECIDO[id]||null},qgs);
  return {qgs,origem:'firestore',leituras:1};
 }
 
@@ -89,6 +99,7 @@ function aplicar(id,meta,qgs){
  season.qgs=qgs;
  season.groups=new Set(qgs.map(q=>norm(q.group)).filter(Boolean));
  season.ordem=mapaOrdem(qgs);
+ season.inicio=meta.inicio||null;
  season.carregada=true;
 }
 

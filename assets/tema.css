@@ -415,8 +415,8 @@ button:disabled{opacity:.45 !important}
 .qg-barra i{display:block;height:100%;background:linear-gradient(90deg,var(--lime-dim),var(--lime))}
 .qg-cds small{display:block;margin-top:7px;font-size:11.5px;color:var(--muted);line-height:1.5}
 
-.qg-acoes{display:flex;gap:7px}
-.qg-acoes .mini-btn{flex:1}
+.qg-acoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.qg-acoes .mini-btn{width:100%;min-width:0;white-space:normal;line-height:1.15;padding:9px 6px;font-size:10.5px;text-align:center}
 .qg-acoes .mini-btn.primaria{background:rgba(160,240,64,.13) !important;
  border-color:var(--lime-dim) !important;color:var(--lime) !important;font-weight:800}
 .qg-acoes .mini-btn.primaria:hover{background:rgba(160,240,64,.2) !important}

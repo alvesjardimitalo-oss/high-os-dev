@@ -35,7 +35,7 @@ import * as blipsQg from './modules/blips-qg.js?v=1.0.0';
 import * as solCraft from './modules/solicitacao-craft.js?v=1.0.0';
 import * as catCraft from './modules/catalogo-craft.js?v=13.1.0';
 import * as catUi from './modules/catalogo-ui.js?v=13.1.0';
-import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason, salvarQg, vincularGroup, desvincularGroup, ordemNaSeason } from './modules/season.js?v=13.2.0';
+import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason, salvarQg, vincularGroup, desvincularGroup, ordemNaSeason, inicioDaSeason } from './modules/season.js?v=13.3.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
 authDomain:'high-os.firebaseapp.com',
@@ -16399,7 +16399,8 @@ const rh15VarTxt=(a,b)=>{if(a===null||b===null||a===undefined||b===undefined||!N
 function rh15Meses(){
  const set=new Set();(RH15_METRICAS()||[]).forEach(m=>{const d=metricDateValue(m);if(d&&d.getTime&&d.getTime()>0)set.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`)});
  const h=rh15Hoje();set.add(`${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`);
- return [...set].sort().reverse();
+ const i0=inicioDaSeason(),mesIni=i0?`${i0.getFullYear()}-${String(i0.getMonth()+1).padStart(2,'0')}`:'';
+ return [...set].filter(k=>!mesIni||k>=mesIni).sort().reverse();
 }
 function rh15Range(){
  const h=rh15Hoje(),p=String(rh15.per||'mes:atual');
@@ -16420,7 +16421,10 @@ function rh15Dias(r){const out=[];if(r.fim<r.ini)return out;for(let d=new Date(r
 
 /* ---------- base de dados do período ---------- */
 function rh15Coletar(r,comAtuais){
- const dias=rh15Dias(r),ini=r.ini.getTime(),fim=r.fim.getTime()+86399999;
+ const dias=rh15Dias(r),fim=r.fim.getTime()+86399999;
+ /* Coleta de antes da season abrir é da season anterior: outro dono no
+    Group (ex.: 24K no Armas11 da S2). Não entra nem como "saiu do Group". */
+ const iniSeason=inicioDaSeason(),ini=Math.max(r.ini.getTime(),iniSeason?iniSeason.getTime():-Infinity);
  const atuais=new Map();(RH15_FACCOES()||[]).filter(f=>f&&!f.removido).forEach(f=>atuais.set(org15GK(f.group),f));
  const ent=new Map(),slotSet=new Set();
  const pegar=(faccao,group,seg,ex)=>{const k=ex?'ex|'+rh15K(faccao)+'|'+org15GK(group):org15GK(group);
@@ -16431,6 +16435,7 @@ function rh15Coletar(r,comAtuais){
   const slots=metricSlots(m),vals=Object.values(slots).map(Number).filter(Number.isFinite);if(!vals.length)return;
   const gRaw=String(m.group||m.organizacao||'').trim();if(!gRaw)return;
   const ex=!!m.__exFaccao,group=ex?String(m.groupOrigem||gRaw.split(' • ')[0]).trim():gRaw;
+  if(season.carregada&&!season.groups.has(String(group).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()))return;
   const cur=atuais.get(org15GK(group));
   /* V15.6.2: identidade pelo GROUP; nome da facção sempre do cadastro atual */
   const faccao=String((!ex&&cur&&ocupadoRH15(cur)?cur.faccao:'')||m.faccaoSnapshot||m.faccaoHistorica||(ex?'':group)||'').trim();if(!faccao)return;
