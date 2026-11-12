@@ -1648,6 +1648,9 @@ userPhotoEl=$('#userPhoto');
   if(needsSegments)await loadSegmentConfig();
   if(initialPage==='dashboard')await loadDashboardConfig();
   await iniciarSeason();
+  /* ADMIN: garante que todo usuario cadastrado no bot tenha o espelho no
+     Firebase (regras da season/historico). Em segundo plano. */
+  if(isAdmin())setTimeout(()=>highOsStoreList('users').then(l=>sincronizarUsuariosFirebase(l.map(x=>({email:String(x.email||x.id||'').toLowerCase(),...x})))).catch(()=>{}),4000);
   renderSeasonTopo();
   await iniciarFila();
   if(needsSegments&&(!highOsEmergencyReadOnly||canViewModule('faccoes'))){
@@ -5051,11 +5054,37 @@ function initUsersUi(){
 }
 function assertAdmin(){if(String(currentProfile?.role||'').toUpperCase()!=='ADMIN'){alert('Apenas ADMIN pode gerenciar usuários.');
 return false}return true}
+/* O cadastro vive no bot, mas as regras do Firebase (season, historico,
+   catalogo...) conferem users/{email} NO Firebase. Sem o espelho, um
+   usuario novo entra no painel mas o Firebase recusa a leitura da season.
+   Guardamos so o que as regras usam. */
+async function espelharUsuarioFirebase(u){
+ const email=String(u?.email||'').trim().toLowerCase();
+ if(!email)return;
+ await _setDoc(doc(db,'users',email),{email,name:u.name||'',cargo:u.cargo||'',
+  role:String(u.role||'CONSULTA').toUpperCase(),active:u.active===true,permissions:u.permissions||{},
+  updatedAt:serverTimestamp(),updatedBy:currentUser?.email||''},{merge:true});
+}
+async function sincronizarUsuariosFirebase(lista=[]){
+ let ok=0,falhas=0;
+ for(const u of lista){
+  try{
+   const atual=await getDoc(doc(db,'users',String(u.email).toLowerCase()));
+   const d=atual.exists()?atual.data():null;
+   const igual=d&&String(d.role||'').toUpperCase()===String(u.role||'CONSULTA').toUpperCase()&&(d.active===true)===(u.active===true)
+    &&JSON.stringify(d.permissions||{})===JSON.stringify(u.permissions||{});
+   if(igual)continue;
+   await espelharUsuarioFirebase(u);ok++;
+  }catch(e){falhas++;console.warn('[USUÁRIOS] espelho Firebase:',u.email,e?.code||e?.message)}
+ }
+ if(ok||falhas)console.info('[USUÁRIOS] espelho no Firebase',{atualizados:ok,falhas});
+}
 async function loadUsers(){
  if(!assertAdmin())return;
  try{
   usuarios=(await highOsStoreList('users')).map(x=>({email:String(x.email||x.id||'').toLowerCase(),...x})).sort((a,b)=>(a.name||a.email).localeCompare(b.name||b.email,'pt-BR'));
   renderUsers();
+  sincronizarUsuariosFirebase(usuarios).catch(()=>{});
  }catch(e){$('#userList').innerHTML=`<div class="placeholder"><h3>ERRO AO CARREGAR</h3><p>${esc(e.message)}</p></div>`}
 }
 function renderUsers(){
@@ -5109,6 +5138,7 @@ async function saveUser(e){
  }
  try{
   await highOsStorePut('users',email,{...userData,updatedAt:new Date().toISOString(),updatedBy:currentUser.email});
+  try{await espelharUsuarioFirebase(userData)}catch(e){alert('Usuário salvo no bot, mas não no Firebase ('+(e?.code||e?.message)+'). Sem isso ele não vê a season.')}
   await addDoc(histCol,{sessionId:currentSessionId||'',tipo:old?'USUARIO_EDITADO':'USUARIO_CRIADO',usuarioAlvo:email,antes:snapshot(old),depois:snapshot(payload),usuario:currentUser.email,data:serverTimestamp()});
   $('#userModal').classList.add('hidden');
   const local={...(old||{}),...clonePlain(userData),updatedBy:currentUser.email};
@@ -5128,6 +5158,7 @@ async function toggleUserAccess(){
  if(!confirm(`${next?'Reativar':'Desativar'} o acesso de ${old.name||email}?`))return;
  try{
   await highOsStorePut('users',email,{...old,active:next,updatedAt:new Date().toISOString(),updatedBy:currentUser.email});
+  try{await espelharUsuarioFirebase({...old,email,active:next})}catch(e){console.warn('[USUÁRIOS] espelho Firebase:',e?.code||e?.message)}
   await addDoc(histCol,{sessionId:currentSessionId||'',tipo:next?'USUARIO_REATIVADO':'USUARIO_DESATIVADO',usuarioAlvo:email,usuario:currentUser.email,data:serverTimestamp()});
   $('#userModal').classList.add('hidden');
   const ix=usuarios.findIndex(x=>x.email===email);
