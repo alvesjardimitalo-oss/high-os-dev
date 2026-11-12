@@ -25,7 +25,7 @@ import { getFirestore,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
-import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.2.0';
+import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.3.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 import * as fila from './modules/fila-bot.js?v=13.1.0';
@@ -12251,6 +12251,10 @@ async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true,overwriteFi
  try{
   const result=await syncBlipsCoordinates({token:facSheetAccessToken,groups:rows,onlyMissing,overwriteFieldsByGroup});
   if(result.created)console.info('[BLIPS COORDENADAS] '+result.created+' quadro(s) cadastrado(s) na categoria correta.');
+  if(result.semEspaco?.length){
+   console.warn('[BLIPS COORDENADAS] Sem quadro livre na aba (estrutura fixa, nenhuma linha criada):',result.semEspaco);
+   if(!quiet)alert('BLIPS COORDENADAS: '+result.semEspaco.map(x=>x.group).join(', ')+' não tem quadro livre no segmento. A aba tem estrutura fixa, então nada foi criado; as coordenadas continuam salvas no painel.');
+  }
   const inconsistencies=[...(result.categoryMismatches||[]),...(result.duplicates||[])];
   if(inconsistencies.length){
    console.warn('[BLIPS COORDENADAS] Groups que precisam de revisão de categoria/duplicidade:',inconsistencies);

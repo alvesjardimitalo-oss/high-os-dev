@@ -149,3 +149,12 @@ test('Mecânica Ilegal e Hospital Ilegal permanecem separados de Apoio',async()=
   });
  }
 });
+
+test('Estrutura fixa: Group sem quadro livre fica de fora e nenhuma linha e criada',async()=>{
+ await withSheet(fakeSheet(),async batches=>{
+  const r=await syncBlipsCoordinates({token:'mock',groups:[{group:'Armas99',segmento:'Armas',beneficios:{craft:'1,1,1'}}]});
+  assert.deepEqual(r.semEspaco,[{group:'Armas99',sector:'ARMAS'}]);
+  const reqs=batches.flatMap(b=>b.requests);
+  assert.equal(reqs.some(x=>x.appendDimension||x.insertDimension||x.copyPaste||x.repeatCell),false);
+ });
+});

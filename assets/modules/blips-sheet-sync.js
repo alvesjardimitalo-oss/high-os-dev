@@ -4,7 +4,10 @@
  * Não reordenar, mover ou apagar os quadros antigos.
  */
 const SHEET_ID="1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4";
-const TAB_GID=2037219913;
+// A aba foi recriada na Season 3 e o gid mudou (era 2037219913). Procuramos
+// pelo gid atual, depois pelo antigo e, por fim, pelo NOME da aba.
+const TAB_GIDS=[1571924835,2037219913];
+const TAB_TITLE="BLIPS COORDENADAS";
 const GROUP_COLS=Array.from({length:11},(_,i)=>6+i*7);
 // Campos podem chegar a 45+ linhas após ampliação do quadro.
 const MAX_FIELDS_SCAN=90;
@@ -134,17 +137,19 @@ function safeBlank(rows,sec,entry){
  }
  return true;
 }
-/* Preenche apenas células pertencentes ao quadro do Group; novas seções são
-   clonadas ao FIM da aba com o layout expandido, sem inserir linhas dentro de
-   quadros vizinhos nem apagar coordenadas antigas. */
+/* Preenche apenas células pertencentes ao quadro do Group, em quadros que
+   ja existem. A aba tem estrutura fixa: nada de linha ou quadro novo. */
 export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,preserveExisting=true,overwriteFieldsByGroup={}}={}){
  if(!token)throw new Error("Conecte o Google Sheets para sincronizar Blips e Coordenadas.");
  const list=[...new Map(groups.filter(g=>g&&plain(g.group)).map(g=>[fold(g.group),g])).values()];
  if(!list.length)return {created:0,updated:0,skipped:0};
  const root="https://sheets.googleapis.com/v4/spreadsheets/"+SHEET_ID;
  const meta=await sheets(root+"?fields=sheets.properties(sheetId,title,gridProperties)",token);
- const tab=(meta.sheets||[]).find(s=>Number(s.properties?.sheetId)===TAB_GID)?.properties;
+ const abas=(meta.sheets||[]).map(s=>s.properties||{});
+ const tab=TAB_GIDS.map(g=>abas.find(p=>Number(p.sheetId)===g)).find(Boolean)
+  ||abas.find(p=>fold(p.title)===fold(TAB_TITLE));
  if(!tab)throw new Error("A aba BLIPS COORDENADAS não foi encontrada.");
+ const TAB_GID=Number(tab.sheetId);
  const a1="'"+String(tab.title).replace(/'/g,"''")+"'";
  const range=a1+"!A1:CD"+Math.min(tab.gridProperties?.rowCount||1006,4000);
  const data=await sheets(root+"/values/"+encodeURIComponent(range)+"?valueRenderOption=FORMATTED_VALUE",token);
@@ -153,46 +158,8 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
  if(!sections.length)throw new Error("Quadros da planilha não reconhecidos. Nenhuma alteração feita.");
  const requests=[];
  let created=0,updated=0,skipped=0;
- const categoryMismatches=[],duplicates=[];
- let nextStart=Math.max(rows.length+3,150),capacity=Number(tab.gridProperties?.rowCount||1006);
- const sectionBlocks=new Map();
+ const categoryMismatches=[],duplicates=[],semEspaco=[];
  const findSector=key=>sections.filter(s=>s.sector===key);
- const planNewSection=(key,title)=>{
-  let s=sectionBlocks.get(key);
-  if(s&&s.reserved.size<s.entries.length)return s;
-  const template=sections.find(x=>x.sector==="MUNICAO"&&!x.newBlock)||sections.find(x=>!x.newBlock);
-  if(!template)throw new Error("Modelo visual da planilha não encontrado.");
-  const height=template.footerRow-template.sectionRow+3,start=nextStart;
-  nextStart+=height+3;
-  if(nextStart>=capacity){
-   const extra=Math.max(150,nextStart-capacity+10);
-   requests.push({appendDimension:{sheetId:TAB_GID,dimension:"ROWS",length:extra}});
-   capacity+=extra;
-  }
-  requests.push({copyPaste:{
-   source:{sheetId:TAB_GID,startRowIndex:template.sectionRow,endRowIndex:template.sectionRow+height,startColumnIndex:4,endColumnIndex:82},
-   destination:{sheetId:TAB_GID,startRowIndex:start,endRowIndex:start+height,startColumnIndex:4,endColumnIndex:82},
-   pasteType:"PASTE_NORMAL",pasteOrientation:"NORMAL"}});
-  // Limpa só os valores da cópia NOVA. Formatação, bordas e validações continuam.
-  requests.push({repeatCell:{range:{sheetId:TAB_GID,startRowIndex:start,endRowIndex:start+height,startColumnIndex:4,endColumnIndex:82},cell:{},fields:"userEnteredValue"}});
-  const headerRow=start+template.headerRow-template.sectionRow;
-  const footerRow=start+template.footerRow-template.sectionRow;
-  const labels=Array.from({length:template.footerRow-template.headerRow},(_,i)=>cell(rows,template.headerRow+i,5));
-  const cols=template.entries.map(x=>x.col);
-  put(requests,TAB_GID,start,4,title);
-  put(requests,TAB_GID,start,8,"0");
-  for(let d=0;d<labels.length;d++)if(labels[d]){
-   for(const col of cols)put(requests,TAB_GID,headerRow+d,col-1,labels[d]);
-  }
-  for(const col of cols){
-   put(requests,TAB_GID,footerRow,col-1,"TRUE");
-   put(requests,TAB_GID,footerRow,col,"COMPLETO");
-  }
-  s={sector:key,title,sectionRow:start,headerRow,footerRow,labels,
-   entries:cols.map(col=>({col,name:""})),reserved:new Set(),newBlock:true};
-  sections.push(s);sectionBlocks.set(key,s);
-  return s;
- };
  for(const f of list){
   const key=fold(f.group),[sectorKey,title]=sector(f);
   const correct=findSector(sectorKey);
@@ -216,13 +183,10 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
     if(entry){selected={s,entry};isNew=true;s.reserved.add(entry.col);break;}
    }
   }
-  if(!selected){
-   const s=planNewSection(sectorKey,title);
-   const entry=s.entries.find(e=>!s.reserved.has(e.col));
-   if(!entry)throw new Error("Sem espaço para Group "+f.group);
-   s.reserved.add(entry.col);
-   selected={s,entry};isNew=true;
-  }
+  /* ESTRUTURA CONGELADA: a aba nao pode ganhar linha nem quadro novo.
+     Sem quadro livre no segmento, o Group fica de fora e e reportado -
+     a equipe abre espaco na planilha a mao, se quiser. */
+  if(!selected){semEspaco.push({group:f.group,sector:sectorKey});skipped++;continue;}
   const {s,entry}=selected;
   const fields=valuesFor(f),col=entry.col,header=s.headerRow;
   const forceFields=new Set((overwriteFieldsByGroup[key]||overwriteFieldsByGroup[f.group]||[]).map(fold));
@@ -251,12 +215,13 @@ export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,pr
    const existingAnchor=occupiedColumns[0]??col;
    put(requests,TAB_GID,r,existingAnchor,value);
   }
-  if(s.newBlock)put(requests,TAB_GID,s.sectionRow,8,String(s.reserved.size));
   if(isNew){created++;entry.name=f.group;}else updated++;
  }
  if(requests.length){
   // Limite defensivo: uma falha não deve apagar a planilha preexistente.
+  if(requests.some(r=>r.appendDimension||r.insertDimension||r.copyPaste||r.repeatCell))
+   throw new Error("BLIPS COORDENADAS: a estrutura da aba é fixa; nada foi gravado.");
   await sheets(root+":batchUpdate",token,"POST",{requests});
  }
- return {created,updated,skipped,groups:list.length,sectionsAdded:[...sectionBlocks.keys()],categoryMismatches,duplicates};
+ return {created,updated,skipped,groups:list.length,sectionsAdded:[],semEspaco,categoryMismatches,duplicates};
 }
