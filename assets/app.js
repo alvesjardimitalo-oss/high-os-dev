@@ -29,7 +29,8 @@ import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/bli
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 import * as fila from './modules/fila-bot.js?v=13.1.0';
-import * as qgsUi from './modules/qgs-ui.js?v=13.2.0';
+import * as qgsUi from './modules/qgs-ui.js?v=13.3.0';
+import * as blipsQg from './modules/blips-qg.js?v=1.0.0';
 import * as catCraft from './modules/catalogo-craft.js?v=13.1.0';
 import * as catUi from './modules/catalogo-ui.js?v=13.1.0';
 import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason, salvarQg, vincularGroup, desvincularGroup, ordemNaSeason } from './modules/season.js?v=13.2.0';
@@ -2087,7 +2088,112 @@ function ligarQgs(){
  box.querySelectorAll('[data-qg-editar]').forEach(b=>b.onclick=()=>abrirEditorQg(b.dataset.qgEditar));
  box.querySelectorAll('[data-qg-vincular]').forEach(b=>b.onclick=()=>vincularQg(b.dataset.qgVincular));
  box.querySelectorAll('[data-qg-desvincular]').forEach(b=>b.onclick=()=>desvincularQg(b.dataset.qgDesvincular));
+ box.querySelectorAll('[data-qg-blips]').forEach(b=>b.onclick=()=>abrirBlipsQg(b.dataset.qgBlips));
 }
+
+/* ------------------------------------------------------------
+   BLIPS DO QG · funcionando / solicitado / planejado
+   Na abertura da season a favela funciona so com craft, iniciar
+   rota e garagem publica. O resto e pedido a cidade depois: marca
+   os blips, GERAR SOLICITACAO monta o texto no padrao da cidade
+   com as cds da planilha. Quando a cidade instala, MARCAR COMO
+   FUNCIONANDO leva o blip para a ficha do Group.
+   ------------------------------------------------------------ */
+function qgDoGroup(group){
+ const g=String(group||'').trim().toUpperCase();
+ return (season.qgs||[]).find(q=>String(q.group||'').trim().toUpperCase()===g);
+}
+const BLIP_ESTADO={FUNCIONANDO:['FUNCIONANDO','ok'],SOLICITADO:['SOLICITADO','pend'],PLANEJADO:['PLANEJADO','plan'],SEM_CDS:['SEM CDS','sem']};
+
+async function atualizarFichaFuncionando(q){
+ if(!q.group)return;
+ const f=(faccoesTodas||[]).find(x=>String(x.group||'').toUpperCase()===String(q.group).toUpperCase())||{};
+ const ficha=blipsQg.fichaFuncionando(q,{beneficios:f.beneficios||{},perfilTecnico:f.perfilTecnico||{}});
+ await setDoc(doc(db,'highos','data','faccoes',q.group),{group:q.group,beneficios:ficha.beneficios,perfilTecnico:ficha.perfilTecnico,cds:ficha.cds,
+  updatedAt:serverTimestamp(),updatedBy:currentUser?.email||''},{merge:true});
+}
+
+function abrirBlipsQg(chave){
+ let q=qgPorChave(chave);
+ if(!q)return alert('QG não encontrado na season ativa.');
+ const pode=canEditModule('faccoes');
+ const modal=document.createElement('div');
+ modal.className='modal';
+ const desenhar=()=>{
+  q=qgPorChave(chave)||q;
+  const linhas=blipsQg.ITENS_BLIP.map(item=>{
+   const e=blipsQg.estadoItem(q,item.id),[rot,cls]=BLIP_ESTADO[e];
+   const c=item.campos.map(k=>String(q.cds?.[k]||'').trim());
+   const cds=item.par?`Blip ${esc(c[0]||'—')}<br>Spawn ${esc(c[1]||'—')}`:esc(c[0]||'—');
+   const quando=e==='SOLICITADO'?` <small>desde ${esc(new Date(q.solicitados[item.id]).toLocaleDateString('pt-BR'))}</small>`:'';
+   return `<label class="blip-linha ${cls}">
+     <input type="checkbox" data-blip="${item.id}" ${e==='SEM_CDS'||!pode?'disabled':''}>
+     <span class="blip-nome">${esc(item.nome)}</span>
+     <span class="blip-cds">${cds}</span>
+     <span class="blip-estado ${cls}">${rot}${quando}</span>
+    </label>`;
+  }).join('');
+  modal.innerHTML=`<div class="modal-card qg-modal">
+   <button class="modal-x" type="button" aria-label="Fechar">×</button>
+   <div class="eyebrow">BLIPS DO QG</div>
+   <h2 style="margin:4px 0 2px">${esc(q.group||'sem Group')} · ${esc(q.local||chave)}</h2>
+   <p class="page-subtitle" style="margin:0 0 14px">Marque os blips e gere a solicitação no padrão da cidade. As coordenadas vêm da planilha.</p>
+   <div class="blip-lista">${linhas}</div>
+   <div class="blip-saida" hidden>
+    <textarea readonly rows="14"></textarea>
+    <button type="button" class="btn-primary compact" data-copiar>COPIAR PARA O DISCORD</button>
+   </div>
+   <div class="modal-actions">
+    <button type="button" class="btn-secondary" data-fechar>FECHAR</button>
+    ${pode?`<span style="display:flex;gap:8px;flex-wrap:wrap">
+     <button type="button" class="btn-secondary" data-desligar>TIRAR DE FUNCIONANDO</button>
+     <button type="button" class="btn-secondary" data-instalar>MARCAR COMO FUNCIONANDO</button>
+     <button type="button" class="btn-primary compact" data-gerar>GERAR SOLICITAÇÃO</button></span>`:''}
+   </div>
+  </div>`;
+  const fechar=()=>modal.remove();
+  modal.querySelector('.modal-x').onclick=fechar;
+  modal.querySelector('[data-fechar]').onclick=fechar;
+  const marcados=()=>[...modal.querySelectorAll('[data-blip]:checked')].map(i=>i.dataset.blip);
+  modal.querySelector('[data-gerar]')?.addEventListener('click',async ev=>{
+   const ids=marcados().filter(id=>blipsQg.estadoItem(q,id)!=='FUNCIONANDO');
+   if(!ids.length)return alert('Marque os blips que quer solicitar (os que já funcionam não entram).');
+   const texto=blipsQg.textoSolicitacao(q,ids);
+   const btn=ev.currentTarget;btn.disabled=true;
+   try{
+    const agora=new Date().toISOString();
+    const solicitados={...(q.solicitados||{})};ids.forEach(id=>solicitados[id]=agora);
+    await salvarQg(fnsFila(),chave,{solicitados},currentUser?.email||'');
+    await registrarHistoricoQg('QG_BLIPS_SOLICITADOS',q,`Solicitação de blips ${q.group||''}: ${ids.join(', ')}`);
+   }catch(e){alert('O texto foi gerado, mas não marquei como solicitado: '+e.message)}
+   desenhar();
+   const saida=modal.querySelector('.blip-saida');saida.hidden=false;
+   saida.querySelector('textarea').value=texto;
+   saida.querySelector('[data-copiar]').onclick=async()=>{try{await navigator.clipboard.writeText(texto);saida.querySelector('[data-copiar]').textContent='COPIADO ✓'}catch(_){saida.querySelector('textarea').select()}};
+  });
+  const mudarInstalados=async(ev,ligar)=>{
+   const ids=marcados();
+   if(!ids.length)return alert('Marque os blips primeiro.');
+   const btn=ev.currentTarget;btn.disabled=true;btn.textContent='SALVANDO...';
+   try{
+    const atual=new Set(blipsQg.instaladosDe(q));
+    ids.forEach(id=>ligar?atual.add(id):atual.delete(id));
+    const solicitados={...(q.solicitados||{})};if(ligar)ids.forEach(id=>delete solicitados[id]);
+    const novo=await salvarQg(fnsFila(),chave,{instalados:[...atual],solicitados},currentUser?.email||'');
+    await atualizarFichaFuncionando(novo||{...q,instalados:[...atual]});
+    await registrarHistoricoQg(ligar?'QG_BLIPS_INSTALADOS':'QG_BLIPS_DESLIGADOS',q,`${ligar?'Funcionando':'Desligados'} em ${q.group||q.local}: ${ids.join(', ')}`);
+    try{await loadFaccoes()}catch(_){}
+    desenhar();
+   }catch(e){alert('Não salvou: '+e.message);btn.disabled=false}
+  };
+  modal.querySelector('[data-instalar]')?.addEventListener('click',ev=>mudarInstalados(ev,true));
+  modal.querySelector('[data-desligar]')?.addEventListener('click',ev=>mudarInstalados(ev,false));
+ };
+ modal.onclick=e=>{if(e.target===modal)modal.remove()};
+ document.body.appendChild(modal);
+ desenhar();
+}
+window.abrirBlipsDoGroup=group=>{const q=qgDoGroup(group);if(!q)return alert('Esse Group não está na season ativa.');abrirBlipsQg(q.chave)};
 
 function qgPorChave(chave){return (season.qgs||[]).find(q=>q.chave===chave)}
 
@@ -15820,7 +15926,7 @@ function org15FreqCell(f,r,max){
 }
 function org15Acoes(f){
  const s=f.__orgStatus,id=esc(f.id||f.group),group=esc(f.group||'');
- const perfil=`<button type="button" class="org15-btn ghost org-v92-open" data-id="${id}">PERFIL</button>`;
+ const perfil=`<button type="button" class="org15-btn ghost org-v92-open" data-id="${id}">PERFIL</button>`+(qgDoGroup(f.group)?`<button type="button" class="org15-btn ghost" data-org15-blips="${group}">BLIPS</button>`:'');
  if(s==='ASSUMIDA')return perfil+`<button type="button" class="org15-btn org-v92-request" data-group="${group}">SOLICITAÇÃO</button>`;
  if(s==='DISPONIVEL')return perfil+`<button type="button" class="org15-btn primary org-v92-deliver" data-group="${group}">ASSUMIR</button>`;
  return perfil+`<button type="button" class="org15-btn org-v92-open" data-id="${id}">${s==='REVISAR'?'REVISAR':'CADASTRAR QG'}</button>`;
@@ -15979,6 +16085,7 @@ renderFaccoes=function(){
  box.querySelectorAll('.org-v92-request').forEach(b=>b.onclick=e=>{e.stopPropagation();openRequestModal('',b.dataset.group)});
  box.querySelectorAll('.org-v92-deliver').forEach(b=>b.onclick=e=>{e.stopPropagation();openNewDelivery(b.dataset.group)});
  box.querySelectorAll('[data-org15-freq]').forEach(b=>b.onclick=e=>{e.stopPropagation();org15Detalhe(b.dataset.org15Freq)});
+ box.querySelectorAll('[data-org15-blips]').forEach(b=>b.onclick=e=>{e.stopPropagation();window.abrirBlipsDoGroup(b.dataset.org15Blips)});
 };
 /* métricas chegam depois dos Groups: redesenha a página aberta quando elas carregam */
 {const _rmOrg15=renderMetrics;renderMetrics=function(...a){const out=_rmOrg15.apply(this,a);try{if($('#page-faccoes')?.classList.contains('active'))renderFaccoes()}catch(_){}return out}}

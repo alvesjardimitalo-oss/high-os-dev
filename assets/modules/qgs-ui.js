@@ -177,6 +177,7 @@ function cartaoQg(q,faccoes,esc){
 
   <div class="qg-acoes">
    <button type="button" class="mini-btn" data-qg-editar="${esc(q.chave)}">COORDENADAS</button>
+   ${q.group?`<button type="button" class="mini-btn" data-qg-blips="${esc(q.chave)}">BLIPS</button>`:''}
    <button type="button" class="mini-btn" data-qg-craft="${esc(q.chave)}">CRAFT${f?.perfilTecnico?.craft?.receitas?.length?' ('+f.perfilTecnico.craft.receitas.length+')':''}</button>
    ${q.group
      ?`<button type="button" class="mini-btn" data-qg-desvincular="${esc(q.chave)}">DESVINCULAR</button>`

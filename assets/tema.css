@@ -522,3 +522,16 @@ button:disabled{opacity:.45 !important}
 .qg-setor-bloco{margin:0 0 22px}
 .qg-setor-titulo{margin:0 0 10px;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#d9c4eb;border-bottom:1px solid #30263b;padding-bottom:7px}
 .qg-setor-titulo small{font-weight:600;letter-spacing:.04em;text-transform:none;color:#a79db6;margin-left:6px}
+/* blips do QG: funcionando / solicitado / planejado */
+.blip-lista{display:grid;gap:6px;max-height:52vh;overflow:auto;margin-bottom:12px}
+.blip-linha{display:grid;grid-template-columns:22px 170px 1fr 130px;gap:10px;align-items:center;padding:9px 11px;border:1px solid #30263b;border-radius:10px;background:#0d0b12;font-size:12.5px;cursor:pointer}
+.blip-linha input{width:16px;height:16px}
+.blip-linha.sem{opacity:.45;cursor:default}
+.blip-nome{font-weight:800}
+.blip-cds{font:11.5px/1.45 ui-monospace,Consolas,monospace;color:#c9b6dd;word-break:break-all}
+.blip-estado{font-size:10px;font-weight:800;letter-spacing:.08em;text-align:right}
+.blip-estado small{display:block;font-weight:600;letter-spacing:0;color:#a79db6}
+.blip-estado.ok{color:#50f5a0}.blip-estado.pend{color:#ffcf5c}.blip-estado.plan{color:#b98cff}.blip-estado.sem{color:#776d84}
+.blip-saida{margin:0 0 12px}
+.blip-saida textarea{width:100%;box-sizing:border-box;background:#0a0810;border:1px solid #30263b;color:#f7f4fb;border-radius:9px;padding:10px;font:12px/1.5 ui-monospace,Consolas,monospace;margin-bottom:8px}
+@media(max-width:720px){.blip-linha{grid-template-columns:22px 1fr;}.blip-cds,.blip-estado{grid-column:2;text-align:left}}
