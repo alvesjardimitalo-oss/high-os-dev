@@ -68,7 +68,7 @@ export function qgsDaGrade(grade=[]){
 
 /* Monta o plano completo, sem gravar nada. Puro: recebe os dados ja
    lidos e devolve o que muda. */
-export function planejar({qgsPlanilha=[],qgsSalvos=[],faccoes=[],seasonId='s3',seasonAnterior='s2'}){
+export function planejar({qgsPlanilha=[],qgsSalvos=[],faccoes=[],seasonId='s3',seasonAnterior='s2',manterForaDaPlanilha=true}){
  const comGroup=qgsPlanilha.filter(q=>String(q.group||'').trim());
  const semGroupPlanilha=qgsPlanilha.filter(q=>!String(q.group||'').trim());
 
@@ -105,10 +105,10 @@ export function planejar({qgsPlanilha=[],qgsSalvos=[],faccoes=[],seasonId='s3',s
    const cds={...(s.cds||{})};
    for(const [k,v] of Object.entries(q.cds||{}))if(String(v||'').trim())cds[k]=String(v).trim();
    const reg={...s,group,local:q.local||s.local||'',produto:q.produto||s.produto||'',
-    setor:s.setor||setor,vinculado:true,origem:q.origem,avisos:q.avisos||[],cds};
+    setor,vinculado:true,origem:q.origem,avisos:q.avisos||[],cds};
    qgsFinal.push(reg); qgsAtualizados.push(reg);
   }else{
-   const reg={...q,group,setor:q.setor||setor,vinculado:true,chave:chaveQg({campos:{group},linha:q.origem?.linha,coluna:q.origem?.coluna})};
+   const reg={...q,group,setor,vinculado:true,chave:chaveQg({campos:{group},linha:q.origem?.linha,coluna:q.origem?.coluna})};
    qgsFinal.push(reg); qgsNovos.push(reg);
   }
  }
@@ -118,7 +118,9 @@ export function planejar({qgsPlanilha=[],qgsSalvos=[],faccoes=[],seasonId='s3',s
  qgsFinal.sort((a,b)=>{const [la,ca]=pos(a),[lb,cb]=pos(b);return la-lb||ca-cb});
  /* QGs salvos que a planilha nao tem mais: ficam como estao. */
  const foraDaPlanilha=salvos.filter((s,idx)=>!usados.has(idx));
- for(const s of foraDaPlanilha)qgsFinal.push(s);
+ /* A aba e a referencia: quando ela foi reorganizada, o que saiu dela
+    pode ser descartado (o chamador guarda copia do pacote antes). */
+ if(manterForaDaPlanilha)for(const s of foraDaPlanilha)qgsFinal.push(s);
 
  /* chaves unicas */
  const chaves=new Set();

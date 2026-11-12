@@ -49,6 +49,7 @@
       <div><label>NOME</label><input id="sNome" value="High Season 3"></div>
       <div><label>SEASON ANTERIOR (para o arquivo)</label><input id="sAnt" value="s2"></div>
     </div>
+    <label style="display:flex;gap:8px;align-items:center;margin:0 0 12px"><input type="checkbox" id="descartar" checked style="width:auto"> A ABA FOI REORGANIZADA: tirar da season os QGs que não estão mais nela (o pacote atual é guardado como cópia antes)</label>
     <button id="entrar">ENTRAR COM GOOGLE E LER</button>
     <span id="ident" class="mut" style="margin-left:10px"></span>
     <div id="status"></div>
@@ -68,7 +69,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
 import { getFirestore, doc, getDoc, getDocs, collection, writeBatch, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
-import { qgsDaGrade, planejar, resumoPlano } from '../assets/modules/groups-season.js?v=1.1.0';
+import { qgsDaGrade, planejar, resumoPlano } from '../assets/modules/groups-season.js?v=1.2.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',authDomain:'high-os.firebaseapp.com',projectId:'high-os',storageBucket:'high-os.firebasestorage.app',messagingSenderId:'471862600170',appId:'1:471862600170:web:ff55af6f7e808ff39'};
 const SHEET_ID='1zs-LNN1XS8t9cYwHe4_6TMxRDIy6yS-cLv66Rx_K9C4';
@@ -109,7 +110,7 @@ async function entrarELer(){
     const fs=await getDocs(collection(db,'highos','data','faccoes'));
     const faccoes=fs.docs.map(d=>({id:d.id,...d.data()}));
 
-    plano=planejar({qgsPlanilha,qgsSalvos:salvo?.qgs||[],faccoes,seasonId:id,seasonAnterior:$('#sAnt').value.trim()||'s2'});
+    plano=planejar({qgsPlanilha,qgsSalvos:salvo?.qgs||[],faccoes,seasonId:id,seasonAnterior:$('#sAnt').value.trim()||'s2',manterForaDaPlanilha:!$('#descartar').checked});
     msg('#status','ok',`Planilha lida: ${grade.length} linhas, ${qgsPlanilha.filter(q=>q.group).length} Groups. Fichas no banco: ${faccoes.length}. Season gravada: ${salvo?`versão ${esc(salvo.versao||1)}, ${esc((salvo.qgs||[]).length)} QGs`:'nenhuma ainda'}.`);
     mostrar();
   }catch(e){ msg('#status','err',esc(e.message||String(e))) }
@@ -126,7 +127,7 @@ function mostrar(){
 
   const av=[];
   if(plano.repetidos.length)av.push(`<div class="verdict warn">Group repetido na planilha (entrou só o primeiro): ${plano.repetidos.map(g=>`<span class="tag">${esc(g)}</span>`).join('')}</div>`);
-  if(plano.foraDaPlanilha.length)av.push(`<div class="verdict warn">QGs gravados que não estão mais na planilha — ficam como estão, confira: ${plano.foraDaPlanilha.map(q=>`<span class="tag">${esc(q.local||q.chave)}</span>`).join('')}</div>`);
+  if(plano.foraDaPlanilha.length)av.push(`<div class="verdict warn">QGs gravados que não estão mais na planilha — ${$('#descartar').checked?'saem da season (ficam na cópia de backup)':'ficam como estão'}: ${plano.foraDaPlanilha.map(q=>`<span class="tag">${esc(q.local||q.chave)}</span>`).join('')}</div>`);
   if(plano.arquivar.length)av.push(`<div class="verdict">Fichas de outra season com o mesmo nome, guardadas como arquivo: ${plano.arquivar.map(a=>`<span class="tag">${esc(a.de)} → ${esc(a.para)}${a.dados.faccao?' ('+esc(a.dados.faccao)+')':''}</span>`).join('')}</div>`);
   $('#avisos').innerHTML=av.join('');
 
@@ -148,6 +149,8 @@ async function gravar(){
   try{
     const b=writeBatch(db);
     const quem=usuario.email;
+    /* copia do pacote atual antes de mexer: da para voltar atras */
+    if(salvo)b.set(doc(db,'highos','data','seasons',`${id}_backup_v${salvo.versao||1}`),{...salvo,backupDe:id,backupEm:serverTimestamp(),backupPor:quem});
     for(const a of plano.arquivar)
       b.set(doc(db,'highos','data','faccoes',a.para),{...a.dados,arquivadoEm:serverTimestamp(),arquivadoPor:quem});
     for(const f of plano.criar)

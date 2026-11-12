@@ -96,3 +96,12 @@ test('QGs saem na ordem da planilha (segmento por segmento)', ()=>{
  const p=planejar({qgsPlanilha:qgsDaGrade(grade())});
  assert.deepEqual(p.qgsFinal.map(q=>q.group),['Armas01','Armas05','IlegalMechanic01']);
 });
+
+test('setor do QG vinculado e o segmento oficial e fora da planilha pode ser descartado', ()=>{
+ const qgsSalvos=[{chave:'FAVELA_DA_BARRAGEM',local:'Favela da Barragem',setor:'Setor 1',cds:{}},{chave:'VELHO',local:'Velho',setor:'Setor 2',cds:{}}];
+ const p=planejar({qgsPlanilha:qgsDaGrade(grade()),qgsSalvos,manterForaDaPlanilha:false});
+ assert.equal(p.qgsFinal.find(q=>q.group==='Armas01').setor,'Armas');
+ assert.equal(p.qgsFinal.find(q=>q.group==='IlegalMechanic01').setor,'Mecânica Ilegal');
+ assert.ok(!p.qgsFinal.some(q=>q.chave==='VELHO'));
+ assert.equal(p.foraDaPlanilha.length,1);
+});
