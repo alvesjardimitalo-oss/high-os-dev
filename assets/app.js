@@ -113,6 +113,10 @@ let botSeasonId='';
 const comSeasonDoBot=(body={})=>botSeasonId&&!Object.prototype.hasOwnProperty.call(body,'seasonId')?{...body,seasonId:botSeasonId}:body;
 const chaveNoBot=group=>botSeasonId&&!String(group).includes('::')?botSeasonId+'::'+group:String(group);
 const daSeasonDoBot=rec=>!botSeasonId||String(rec?.seasonId||'').toLowerCase()===botSeasonId.toLowerCase();
+/* Entregas antigas (S2) ficam no mesmo armazenamento e com o mesmo nome
+   de Group. Com season ativa, entrega sem a season dela e historico:
+   nao pode ser recolhida de novo pela facção nova do mesmo Group. */
+const entregaDaSeason=x=>daSeasonDoBot(x);
 async function saveFactionToDiscord(f,extra={}){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify(comSeasonDoBot({...factionDiscordPayload(f),...extra}))});}
 async function highOsStoreList(scope){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope));return (r.records||[]).map(x=>({id:x.id,...(x.data||{})}));}
 async function highOsStoreGet(scope,id){const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id));return {id:r.record.id,...(r.record.data||{})};}
@@ -2167,7 +2171,7 @@ async function atualizarFichaFuncionando(q){
  if(!q.group)return;
  const f=(faccoesTodas||[]).find(x=>String(x.group||'').toUpperCase()===String(q.group).toUpperCase())||{};
  const ficha=blipsQg.fichaFuncionando(q,{beneficios:f.beneficios||{},perfilTecnico:f.perfilTecnico||{}});
- await setDoc(doc(db,'highos','data','faccoes',q.group),{group:q.group,beneficios:ficha.beneficios,perfilTecnico:ficha.perfilTecnico,cds:ficha.cds,
+ await setDoc(doc(db,'highos','data','faccoes',q.group),{group:q.group,...(q.local?{qg:q.local}:{}),...(q.produto?{produto:q.produto}:{}),beneficios:ficha.beneficios,perfilTecnico:ficha.perfilTecnico,cds:ficha.cds,
   updatedAt:serverTimestamp(),updatedBy:currentUser?.email||''},{merge:true});
 }
 
@@ -2326,9 +2330,12 @@ function abrirEditorQg(chave){
   btn.disabled=true; btn.textContent='SALVANDO...';
   try{
    const atualizado=qgsUi.lerEditor(modal,q);
-   await salvarQg(fnsFila(),chave,{
+   const salvo=await salvarQg(fnsFila(),chave,{
     local:atualizado.local,setor:atualizado.setor,produto:atualizado.produto,cds:atualizado.cds
    },currentUser?.email||'');
+   /* coordenada corrigida de um blip que ja funciona tem que chegar na
+      ficha do Group, senao a ficha segue com a cds antiga */
+   if(salvo?.group){try{await atualizarFichaFuncionando(salvo);try{await loadFaccoes()}catch(_){}}catch(e){alert('O QG foi salvo, mas a ficha do Group não foi atualizada: '+e.message)}}
    await registrarHistoricoQg('QG_EDITADO',q,`Coordenadas de ${atualizado.local||chave} atualizadas no painel`);
    fechar(); renderQgs();
   }catch(e){
@@ -3910,7 +3917,7 @@ qgAtual:'',
 ultimoRecolhimento:recolhimento,
 updatedAt:serverTimestamp(),
 updatedBy:currentUser.email},{merge:true})}
-const activeDeliveries=entregas.filter(x=>x.group===group&&x.status==='ATIVA');
+const activeDeliveries=entregas.filter(x=>x.group===group&&x.status==='ATIVA'&&entregaDaSeason(x));
 for(const d of activeDeliveries)recollectBatch.set(doc(db,'highos','data','entregas',d.id),{status:'RECOLHIDA',
 recolhimento,
 recolhidaEm:serverTimestamp(),
@@ -6797,7 +6804,7 @@ async function recolherParaTrocaV14(f,novaFaccao,justificativa){
  const [titulo,...corpo]=extrato.split('\n');
  await setDoc(doc(db,'highos','data','faccoes',f.group),{...vago,anuncioRecolhimento:{title:titulo,description:corpo.join('\n').trim(),imageDataUrl:''}});
  try{await setDoc(doc(db,'highos','data','organizacoes',orgKey(f.faccao)),{nome:f.faccao,status:'SEM_GROUP',groupAtual:'',segmentoAtual:f.segmento||'',qgAtual:'',ultimoRecolhimento:recolhimento,updatedBy:currentUser.email},{merge:true})}catch(e){}
- entregas=entregas.map(d=>d.group===f.group&&d.status==='ATIVA'?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email,recolhimento}:d);
+ entregas=entregas.map(d=>d.group===f.group&&d.status==='ATIVA'&&entregaDaSeason(d)?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email,recolhimento}:d);
  const i=faccoes.findIndex(x=>x.group===f.group);if(i>=0)faccoes[i]={...faccoes[i],...vago};
 }
 async function saveNewDelivery(e){
@@ -6877,7 +6884,7 @@ createdBy:currentUser.email};
  try{
   // V12 Discord Storage: ocupação passa a ser persistida no High OS Discord.
   // Não cria/atualiza documentos de facções, entregas, organizações ou histórico no Firestore.
-  const previous=entregas.filter(x=>x.group===f.group&&x.status==='ATIVA');
+  const previous=entregas.filter(x=>x.group===f.group&&x.status==='ATIVA'&&entregaDaSeason(x));
   // Benefícios lidos da planilha passam a constar no cadastro do Group.
   const deliveredGroup={...f,
    // Persistir também as CDS informadas para novas instalações, não apenas os benefícios anteriores.
@@ -12634,8 +12641,11 @@ renderMetricFactionDetail(group);
 
 }
 /* ===== V14 · painéis de ocupação / revisão (modules/painel-ocupacao.js) ===== */
-const estadoV14={get faccoes(){return faccoes},get entregas(){return entregas}};
-function inconsistenciasV14(){return inconsistencias(faccoes,entregas)}
+/* so as entregas da season ativa: uma entrega ATIVA da S2 no Armas01
+   apareceria como "entrega orfa" do Armas01 da S3 e ofereceria
+   RESTAURAR a facção antiga no Group novo. */
+const estadoV14={get faccoes(){return faccoes},get entregas(){return entregas.filter(entregaDaSeason)}};
+function inconsistenciasV14(){return inconsistencias(faccoes,entregas.filter(entregaDaSeason))}
 function painelDepsV14(){return {esc,estado:estadoV14,db,fs:{setDoc,doc,addDoc,serverTimestamp},histCol,
  user:()=>({email:currentUser?.email||'',sessionId:currentSessionId||''}),
  discordState:f=>availableDiscordState(f),anuncioTexto:f=>availableAnnouncementText(f),
