@@ -102,7 +102,7 @@ service cloud.firestore {
     // O registro e prova: ninguem altera; so ADMIN apaga.
     match /highos/data/evidencias_recolhimento/{docId} {
       allow read: if canView('faccoes');
-      allow create: if canEdit('faccoes')
+      allow create: if isAdmin() || canEdit('faccoes')
                     && request.resource.data.get('createdBy', '').lower() == myEmail()
                     && request.resource.data.get('imagemDataUrl', '') is string
                     && request.resource.data.imagemDataUrl.matches('^data:image/(jpeg|png|webp);base64,.*')
@@ -143,7 +143,8 @@ service cloud.firestore {
       allow read: if canView('historico') || isAdmin();
       // V12.5 - o autor do evento precisa ser quem esta logado: antes qualquer
       // usuario ativo podia gravar um log em nome de outra pessoa.
-      allow create: if activeUser()
+      // ADMIN tambem cria: a migracao do bot copia o historico de toda a equipe.
+      allow create: if isAdmin() || activeUser()
                     && request.resource.data.get('usuario', '') is string
                     && request.resource.data.usuario.lower() == myEmail();
       allow update, delete: if isAdmin();
@@ -244,6 +245,12 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || canEdit('faccoes');
     }
+    // V17: marcador de onde os dados do painel moram (bot ou firestore).
+    // Lido antes do cadastro, por isso basta estar logado.
+    match /highos/fonte_dados {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
     match /highos/season_atual {
       allow read: if activeUser();
       allow write: if isAdmin();
@@ -291,9 +298,41 @@ service cloud.firestore {
                     && request.resource.data.json is string
                     && request.resource.data.json.size() <= 900000;
       allow delete: if isAdmin();
+      // ADMIN grava direto (migracao do bot), sem a trava de revisao
+      allow write: if isAdmin();
+    }
+
+    // ---------- V17: dados que moravam so no bot ----------
+    // Diario operacional (registros e cronograma extra)
+    match /highos/data/diario_operacional/{docId} {
+      allow read: if canView('diario');
+      allow write: if canEdit('diario');
+    }
+    match /highos/data/cronograma_operacional/{docId} {
+      allow read: if canView('diario');
+      allow write: if canEdit('diario');
+    }
+    match /highos/data/diario_fechamento/{docId} {
+      allow read: if canView('diario');
+      allow write: if canEdit('diario');
+    }
+    // Controle de "anuncio de faccao livre ja postado"
+    match /highos/data/anuncios_livres/{docId} {
+      allow read: if canView('faccoes');
+      allow write: if canEdit('faccoes');
+    }
+    // Espelho das abas da planilha oficial (checklist VIP da entrega)
+    match /highos/data/planilha/{docId} {
+      allow read: if canView('faccoes');
+      allow write: if isAdmin();
+    }
+    // Webhooks do Discord do Ilegal: so quem entrega/recolhe Group le.
+    match /highos/data/config/webhooks {
+      allow read: if canEdit('faccoes');
+      allow write: if isAdmin();
     }
     match /highos/data/config/{outro} {
-      allow read: if activeUser();
+      allow read: if activeUser() && outro != 'webhooks';
       allow write: if isAdmin();
     }
 
