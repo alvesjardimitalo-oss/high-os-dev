@@ -124,6 +124,7 @@ export function qgsHtml({season,faccoes=[],esc,filtro={}}){
 
  <div class="qg-filtros">
   <input id="qgBusca" placeholder="Buscar favela, Group ou produto..." value="${esc(filtro.busca||'')}">
+  <button type="button" class="mini-btn primaria" data-qg-sol-craft>SOLICITAR CRAFT E ROTA</button>
   <select id="qgSetor">
    <option value="">TODOS OS SETORES</option>
    ${Object.keys(r.setores).sort().map(s=>`<option value="${esc(s)}"${s===fSetor?' selected':''}>${esc(s)} (${r.setores[s]})</option>`).join('')}

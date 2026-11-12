@@ -29,8 +29,9 @@ import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/bli
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 import * as fila from './modules/fila-bot.js?v=13.1.0';
-import * as qgsUi from './modules/qgs-ui.js?v=13.3.0';
+import * as qgsUi from './modules/qgs-ui.js?v=13.4.0';
 import * as blipsQg from './modules/blips-qg.js?v=1.0.0';
+import * as solCraft from './modules/solicitacao-craft.js?v=1.0.0';
 import * as catCraft from './modules/catalogo-craft.js?v=13.1.0';
 import * as catUi from './modules/catalogo-ui.js?v=13.1.0';
 import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason, salvarQg, vincularGroup, desvincularGroup, ordemNaSeason } from './modules/season.js?v=13.2.0';
@@ -2089,7 +2090,54 @@ function ligarQgs(){
  box.querySelectorAll('[data-qg-vincular]').forEach(b=>b.onclick=()=>vincularQg(b.dataset.qgVincular));
  box.querySelectorAll('[data-qg-desvincular]').forEach(b=>b.onclick=()=>desvincularQg(b.dataset.qgDesvincular));
  box.querySelectorAll('[data-qg-blips]').forEach(b=>b.onclick=()=>abrirBlipsQg(b.dataset.qgBlips));
+ box.querySelectorAll('[data-qg-sol-craft]').forEach(b=>b.onclick=()=>abrirSolicitacaoCraft([]));
 }
+
+/* ------------------------------------------------------------
+   SOLICITACAO DE CRAFT E ROTA · padrao da cidade
+   Escolhe um ou varios Groups e o texto sai das receitas que ja
+   estao cadastradas em cada um.
+   ------------------------------------------------------------ */
+function abrirSolicitacaoCraft(marcados=[]){
+ const doGroup=g=>(faccoesTodas||[]).find(x=>String(x.group||'').toUpperCase()===String(g||'').toUpperCase());
+ const lista=(season.qgs||[]).filter(q=>q.group).slice()
+  .sort((a,b)=>(ordemNaSeason(a.group)-ordemNaSeason(b.group))||String(a.group).localeCompare(String(b.group),'pt-BR',{numeric:true}));
+ const marc=new Set(marcados.map(g=>String(g).toUpperCase()));
+ const porSeg=new Map();
+ for(const q of lista){const seg=q.setor||'(sem setor)';if(!porSeg.has(seg))porSeg.set(seg,[]);porSeg.get(seg).push(q)}
+ const modal=document.createElement('div');
+ modal.className='modal';
+ modal.innerHTML=`<div class="modal-card qg-modal">
+  <button class="modal-x" type="button" aria-label="Fechar">×</button>
+  <div class="eyebrow">SOLICITAÇÃO DE CRAFT E ROTA</div>
+  <h2 style="margin:4px 0 2px">Escolha os Groups</h2>
+  <p class="page-subtitle" style="margin:0 0 14px">O texto sai das receitas cadastradas em cada Group, no padrão da cidade.</p>
+  <div class="blip-lista">${[...porSeg.entries()].map(([seg,qs])=>`
+   <div class="craft-sol-seg"><b>${esc(seg)}</b> <button type="button" class="mini-btn" data-todos="${esc(seg)}">MARCAR TODOS</button></div>
+   ${qs.map(q=>{const n=(doGroup(q.group)?.perfilTecnico?.craft?.receitas||[]).length;
+    return `<label class="blip-linha ${n?'':'sem'}"><input type="checkbox" data-g="${esc(q.group)}" data-seg="${esc(seg)}" ${n?'':'disabled'} ${marc.has(String(q.group).toUpperCase())&&n?'checked':''}>
+     <span class="blip-nome">${esc(q.group)}</span><span class="blip-cds">${esc(q.local||'')}</span>
+     <span class="blip-estado ${n?'plan':'sem'}">${n?n+' RECEITA'+(n>1?'S':''):'SEM RECEITA'}</span></label>`}).join('')}`).join('')}</div>
+  <div class="blip-saida" hidden><textarea readonly rows="16"></textarea>
+   <button type="button" class="btn-primary compact" data-copiar>COPIAR PARA O DISCORD</button></div>
+  <div class="modal-actions"><button type="button" class="btn-secondary" data-fechar>FECHAR</button>
+   <button type="button" class="btn-primary compact" data-gerar>GERAR SOLICITAÇÃO</button></div>
+ </div>`;
+ document.body.appendChild(modal);
+ const fechar=()=>modal.remove();
+ modal.querySelector('.modal-x').onclick=fechar;modal.querySelector('[data-fechar]').onclick=fechar;
+ modal.onclick=e=>{if(e.target===modal)fechar()};
+ modal.querySelectorAll('[data-todos]').forEach(b=>b.onclick=()=>modal.querySelectorAll(`[data-seg="${CSS.escape(b.dataset.todos)}"]:not(:disabled)`).forEach(i=>i.checked=true));
+ modal.querySelector('[data-gerar]').onclick=()=>{
+  const gs=[...modal.querySelectorAll('[data-g]:checked')].map(i=>i.dataset.g);
+  if(!gs.length)return alert('Marque pelo menos um Group.');
+  const {texto}=solCraft.textoSolicitacaoCraft(gs.map(g=>({group:g,receitas:doGroup(g)?.perfilTecnico?.craft?.receitas||[]})));
+  const saida=modal.querySelector('.blip-saida');saida.hidden=false;saida.querySelector('textarea').value=texto;
+  saida.querySelector('[data-copiar]').onclick=async()=>{try{await navigator.clipboard.writeText(texto);saida.querySelector('[data-copiar]').textContent='COPIADO ✓'}catch(_){saida.querySelector('textarea').select()}};
+  try{registrarHistoricoQg('QG_CRAFT_SOLICITADO',{group:gs.join(', '),local:''},`Solicitação de craft e rota: ${gs.join(', ')}`)}catch(_){}
+ };
+}
+window.abrirSolicitacaoCraft=abrirSolicitacaoCraft;
 
 /* ------------------------------------------------------------
    BLIPS DO QG · funcionando / solicitado / planejado
@@ -2146,6 +2194,7 @@ function abrirBlipsQg(chave){
    <div class="modal-actions">
     <button type="button" class="btn-secondary" data-fechar>FECHAR</button>
     ${pode?`<span style="display:flex;gap:8px;flex-wrap:wrap">
+     <button type="button" class="btn-secondary" data-sol-craft>CRAFT E ROTA</button>
      <button type="button" class="btn-secondary" data-desligar>TIRAR DE FUNCIONANDO</button>
      <button type="button" class="btn-secondary" data-instalar>MARCAR COMO FUNCIONANDO</button>
      <button type="button" class="btn-primary compact" data-gerar>GERAR SOLICITAÇÃO</button></span>`:''}
@@ -2186,6 +2235,7 @@ function abrirBlipsQg(chave){
     desenhar();
    }catch(e){alert('Não salvou: '+e.message);btn.disabled=false}
   };
+  modal.querySelector('[data-sol-craft]')?.addEventListener('click',()=>{modal.remove();abrirSolicitacaoCraft([q.group])});
   modal.querySelector('[data-instalar]')?.addEventListener('click',ev=>mudarInstalados(ev,true));
   modal.querySelector('[data-desligar]')?.addEventListener('click',ev=>mudarInstalados(ev,false));
  };

@@ -535,3 +535,5 @@ button:disabled{opacity:.45 !important}
 .blip-saida{margin:0 0 12px}
 .blip-saida textarea{width:100%;box-sizing:border-box;background:#0a0810;border:1px solid #30263b;color:#f7f4fb;border-radius:9px;padding:10px;font:12px/1.5 ui-monospace,Consolas,monospace;margin-bottom:8px}
 @media(max-width:720px){.blip-linha{grid-template-columns:22px 1fr;}.blip-cds,.blip-estado{grid-column:2;text-align:left}}
+.craft-sol-seg{display:flex;align-items:center;gap:10px;margin:10px 0 2px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#d9c4eb}
+.qg-filtros{grid-template-columns:minmax(0,2fr) minmax(170px,1fr) auto}@media(max-width:640px){.qg-filtros{grid-template-columns:1fr}}
