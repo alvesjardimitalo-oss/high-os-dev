@@ -2610,17 +2610,24 @@ async function drenarFila(){
    anterior continuam gravados, so saem de vista.
    ============================================================ */
 async function iniciarSeason(){
- const {lista}=await lerIndice({getDoc,doc,db});
+ const {lista,ativa}=await lerIndice({getDoc,doc,db});
  if(!lista.length){
   /* Nenhuma season importada ainda: nao escondemos nada, mas avisamos -
      um filtro silencioso que some com tudo seria pior que nao filtrar. */
   avisarSeasonAusente();
   return;
  }
- /* A escolha aparece SEMPRE no login, mesmo com uma season so: saber em
-    qual temporada se esta trabalhando e parte de abrir o painel, nao um
-    detalhe a ser adivinhado. A ultima escolhida vem marcada. */
- await perguntarSeason(lista,seasonEscolhida());
+ /* Sem escolha no login: o painel trabalha sempre na season ATIVA do
+    indice (hoje a Season 3). A pergunta deixava a equipe abrir a S2 por
+    engano. Se a ativa nao carregar, ai sim cai para a escolha. */
+ const id=(lista.find(x=>x.id===ativa)||lista[lista.length-1]).id;
+ try{
+  await carregarSeason(id,{getDoc,doc,db});
+  guardarEscolha(id);
+ }catch(e){
+  console.warn('[SEASON] ativa nao carregou, pedindo escolha:',e?.message);
+  await perguntarSeason(lista,seasonEscolhida());
+ }
 }
 
 function avisarSeasonAusente(){
@@ -2673,7 +2680,7 @@ function renderSeasonBadge(){
   el.classList.remove('vazia');
   el.innerHTML=`<span><b>${esc(season.nome)}</b><small>${r.noPainel} no painel${r.semVinculo?` • ${r.semVinculo} QG sem Group`:''}</small></span>`;
   el.title=`${r.qgs} QGs na planilha • ${r.foraDaPlanilha} Group(s) do painel fora da planilha desta season`;
-  el.onclick=trocarSeason;
+  el.onclick=null;
  }
  renderSeasonTopo();
 }
@@ -2694,9 +2701,9 @@ function renderSeasonTopo(){
  }
  b.hidden=false;
  b.classList.remove('vazia');
- b.innerHTML=`<i></i><span><b>${esc(season.nome)}</b><small>trocar</small></span>`;
- b.title=`Season ativa: ${season.nome} — ${season.qgs.length} QGs na planilha. Clique para trocar.`;
- b.onclick=trocarSeason;
+ b.innerHTML=`<i></i><span><b>${esc(season.nome)}</b><small>season ativa</small></span>`;
+ b.title=`Season ativa: ${season.nome} — ${season.qgs.length} QGs.`;
+ b.onclick=null;
 }
 
 async function trocarSeason(){
