@@ -18,6 +18,7 @@ export const season={
  versao:0,
  qgs:[],
  groups:new Set(),
+ ordem:new Map(),
  carregada:false,
  indice:[]
 };
@@ -87,7 +88,22 @@ function aplicar(id,meta,qgs){
  season.versao=Number(meta.versao||0);
  season.qgs=qgs;
  season.groups=new Set(qgs.map(q=>norm(q.group)).filter(Boolean));
+ season.ordem=mapaOrdem(qgs);
  season.carregada=true;
+}
+
+/* Ordem dos Groups igual a da aba BLIPS COORDENADAS: bloco de segmento
+   de cima para baixo e, dentro dele, cartao da esquerda para a direita.
+   E essa ordem que as telas usam para organizar por segmento. */
+function mapaOrdem(qgs=[]){
+ const lista=qgs.filter(q=>String(q.group||'').trim())
+  .map((q,i)=>({g:norm(q.group),l:Number(q.origem?.linha)||1e6,c:Number(q.origem?.coluna)||1e6,i}))
+  .sort((a,b)=>a.l-b.l||a.c-b.c||a.i-b.i);
+ return new Map(lista.map((x,pos)=>[x.g,pos]));
+}
+export function ordemNaSeason(group=''){
+ const v=season.ordem.get(norm(group));
+ return v===undefined?Infinity:v;
 }
 
 /* ---------- filtro ---------- */
@@ -178,6 +194,7 @@ function aplicarLocal(chave,novoQg){
  season.versao++;
  season.groups=new Set(season.qgs.map(q=>String(q.group||'')
   .normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toUpperCase()).filter(Boolean));
+ season.ordem=mapaOrdem(season.qgs);
 }
 
 export async function vincularGroup(fns,chave,group,usuario=''){

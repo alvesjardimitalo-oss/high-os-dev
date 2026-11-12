@@ -91,3 +91,8 @@ test('Group repetido na planilha entra uma vez so', ()=>{
  assert.equal(p.repetidos.length,1);
  assert.equal(p.criar.length,1);
 });
+
+test('QGs saem na ordem da planilha (segmento por segmento)', ()=>{
+ const p=planejar({qgsPlanilha:qgsDaGrade(grade())});
+ assert.deepEqual(p.qgsFinal.map(q=>q.group),['Armas01','Armas05','IlegalMechanic01']);
+});

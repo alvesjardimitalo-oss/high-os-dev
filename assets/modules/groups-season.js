@@ -112,6 +112,10 @@ export function planejar({qgsPlanilha=[],qgsSalvos=[],faccoes=[],seasonId='s3',s
    qgsFinal.push(reg); qgsNovos.push(reg);
   }
  }
+ /* Ordem da planilha: bloco de segmento de cima para baixo, cartao da
+    esquerda para a direita. E a ordem em que o painel organiza. */
+ const pos=q=>[Number(q.origem?.linha)||1e6,Number(q.origem?.coluna)||1e6];
+ qgsFinal.sort((a,b)=>{const [la,ca]=pos(a),[lb,cb]=pos(b);return la-lb||ca-cb});
  /* QGs salvos que a planilha nao tem mais: ficam como estao. */
  const foraDaPlanilha=salvos.filter((s,idx)=>!usados.has(idx));
  for(const s of foraDaPlanilha)qgsFinal.push(s);

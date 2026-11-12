@@ -29,10 +29,10 @@ import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/bli
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 import * as fila from './modules/fila-bot.js?v=13.1.0';
-import * as qgsUi from './modules/qgs-ui.js?v=13.1.0';
+import * as qgsUi from './modules/qgs-ui.js?v=13.2.0';
 import * as catCraft from './modules/catalogo-craft.js?v=13.1.0';
 import * as catUi from './modules/catalogo-ui.js?v=13.1.0';
-import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason, salvarQg, vincularGroup, desvincularGroup } from './modules/season.js?v=13.1.0';
+import { season, lerIndice, carregarSeason, seasonEscolhida, guardarEscolha, esquecerEscolha, filtrarPorSeason, qgsSemVinculo, foraDaPlanilha, resumoSeason, salvarQg, vincularGroup, desvincularGroup, ordemNaSeason } from './modules/season.js?v=13.2.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',
 authDomain:'high-os.firebaseapp.com',
@@ -15774,7 +15774,11 @@ function org15Resumo(f,idx,dias){
 /* ---------- filtros / ordenação ---------- */
 function org15Ordenar(rows,res){
  const peso={ASSUMIDA:0,REVISAR:1,DISPONIVEL:2,INDISPONIVEL:3};
- const base=(a,b)=>String(a.__orgSegment).localeCompare(String(b.__orgSegment),'pt-BR')||String(a.group||'').localeCompare(String(b.group||''),'pt-BR',{numeric:true});
+ /* Ordem da planilha BLIPS COORDENADAS (segmento por segmento, Group por
+    Group). O que nao esta na season cai no fim, em ordem alfabetica. */
+ const pos=f=>ordemNaSeason(f.group);
+ const base=(a,b)=>{const pa=pos(a),pb=pos(b);if(pa!==pb)return pa===Infinity?1:pb===Infinity?-1:pa-pb;
+  return String(a.__orgSegment).localeCompare(String(b.__orgSegment),'pt-BR')||String(a.group||'').localeCompare(String(b.group||''),'pt-BR',{numeric:true})};
  const val=(f,k)=>{const r=res.get(f);return f.__orgStatus==='ASSUMIDA'&&r&&r[k]!==null&&r[k]!==undefined?r[k]:null};
  const met=(k,dir=-1)=>(a,b)=>{const va=val(a,k),vb=val(b,k);
   if(va===null&&vb===null)return base(a,b);if(va===null)return 1;if(vb===null)return -1;
@@ -15810,9 +15814,12 @@ function org15Acoes(f){
  return perfil+`<button type="button" class="org15-btn org-v92-open" data-id="${id}">${s==='REVISAR'?'REVISAR':'CADASTRAR QG'}</button>`;
 }
 function org15Lista(rows,res,max,r){
- return `<table class="org15-table"><thead><tr><th class="c-group">GROUP</th><th class="c-fac">FACÇÃO</th><th class="c-qg">QG / FAVELA</th><th class="c-freq">FREQUÊNCIA <small>${esc(r.rotulo)}</small></th><th class="c-st">SITUAÇÃO</th><th class="c-act"></th></tr></thead><tbody>${rows.map(f=>{
+ return `<table class="org15-table"><thead><tr><th class="c-group">GROUP</th><th class="c-fac">FACÇÃO</th><th class="c-qg">QG / FAVELA</th><th class="c-freq">FREQUÊNCIA <small>${esc(r.rotulo)}</small></th><th class="c-st">SITUAÇÃO</th><th class="c-act"></th></tr></thead><tbody>${rows.map((f,i)=>{
   const s=f.__orgStatus,hasCds=!!String(f.cds||'').trim();
-  return `<tr data-org-v92-id="${esc(f.id||f.group)}" class="st-${orgV92StatusClass(s)}">
+  /* separador de segmento quando a lista esta na ordem por segmento */
+  const seg=String(f.__orgSegment||'OUTROS'),novoSeg=org15.sort==='segmento'&&(i===0||String(rows[i-1].__orgSegment||'OUTROS')!==seg);
+  const qtdSeg=novoSeg?rows.filter(x=>String(x.__orgSegment||'OUTROS')===seg).length:0;
+  return `${novoSeg?`<tr class="org15-seg"><td colspan="6">${esc(seg)} <small>${qtdSeg} Group${qtdSeg===1?'':'s'}</small></td></tr>`:''}<tr data-org-v92-id="${esc(f.id||f.group)}" class="st-${orgV92StatusClass(s)}">
 <td class="c-group"><b>${esc(f.group||'—')}</b><small>${esc(f.__orgSegment)}</small></td>
 <td class="c-fac">${s==='ASSUMIDA'?`<b>${esc(f.faccao)}</b>${f.lider?`<small>Líder: ${esc(f.lider)}</small>`:'<small class="warn">Líder não informado</small>'}`:`<span class="org15-muted">${s==='DISPONIVEL'?'Livre para assumir':'—'}</span>`}</td>
 <td class="c-qg">${orgV92HasQG(f)?`<b>${esc(f.qg)}</b><small class="${hasCds?'':'warn'}">${hasCds?'CDS cadastrada':'CDS pendente'}</small>`:'<span class="org15-muted">Sem QG/Favela</span>'}</td>

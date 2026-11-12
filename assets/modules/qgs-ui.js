@@ -130,8 +130,21 @@ export function qgsHtml({season,faccoes=[],esc,filtro={}}){
   </select>
  </div>
 
- ${lista.length?`<div class="qg-grid">${lista.map(q=>cartaoQg(q,faccoes,esc)).join('')}</div>`
+ ${lista.length?porSetor(lista).map(([setor,qs])=>`<section class="qg-setor-bloco">
+   <h4 class="qg-setor-titulo">${esc(setor)} <small>${qs.length} QG${qs.length===1?'':'s'}</small></h4>
+   <div class="qg-grid">${qs.map(q=>cartaoQg(q,faccoes,esc)).join('')}</div></section>`).join('')
   :`<div class="placeholder"><b>◆</b><h3>NADA AQUI</h3><p>Nenhum QG bate com esse filtro.</p></div>`}`;
+}
+
+/* Organiza por segmento na ordem da aba BLIPS COORDENADAS: os blocos
+   aparecem de cima para baixo como na planilha e, dentro de cada um, os
+   cartoes da esquerda para a direita. */
+export function porSetor(lista=[]){
+ const pos=q=>[Number(q.origem?.linha)||1e6,Number(q.origem?.coluna)||1e6];
+ const ord=lista.slice().sort((a,b)=>{const [la,ca]=pos(a),[lb,cb]=pos(b);return la-lb||ca-cb});
+ const blocos=new Map();
+ for(const q of ord){const s=q.setor||'(sem setor)';if(!blocos.has(s))blocos.set(s,[]);blocos.get(s).push(q)}
+ return [...blocos.entries()];
 }
 
 function cartaoQg(q,faccoes,esc){
