@@ -37,6 +37,7 @@ Copie antes o valor do cookie da sua sessão no Paradise; o script lê da área 
 | **Reiniciar** | desliga e liga o bot |
 | **Parar** | desliga até você entrar no Windows de novo |
 | **Atualizar** | baixa a versão nova do GitHub e reinicia |
+| **Renovar Paradise** | copie o cookie do Paradise antes e dê dois cliques: testa, salva e reinicia o bot |
 
 Arquivos ficam em `%LOCALAPPDATA%\HighOS` (variáveis em `high-os-discord\.env`, log em `logs\bot.log`).
 

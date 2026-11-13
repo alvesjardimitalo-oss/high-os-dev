@@ -213,6 +213,9 @@ foreach ($nome in $atalhos.Keys) {
   $cmd = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"$Manage`" $($atalhos[$nome])`r`npause`r`n"
   [IO.File]::WriteAllText((Join-Path $pasta "$nome.cmd"), $cmd, (New-Object System.Text.ASCIIEncoding))
 }
+# Renovar Paradise: copia o cookie e dá dois cliques (baixa e roda o ligar-paradise.ps1).
+$renovar = "@echo off`r`necho Antes de abrir este atalho, copie o cookie do Paradise.`r`npowershell -NoProfile -ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/alvesjardimitalo-oss/high-os-dev/main/tools/windows/ligar-paradise.ps1 | iex`"`r`npause`r`n"
+[IO.File]::WriteAllText((Join-Path $pasta 'Renovar Paradise.cmd'), $renovar, (New-Object System.Text.ASCIIEncoding))
 Ok "Pasta 'High OS Bot' criada na Área de Trabalho."
 
 $r = Read-Host "  Quer impedir que o PC entre em suspensão quando estiver na tomada? (o bot para se o PC dormir) [S/N]"

@@ -82,4 +82,4 @@ for ($i = 0; $i -lt 12 -and -not $ok; $i++) {
 }
 if (-not $ok) { Write-Host '  !   Ainda sem confirmação. O bot pode estar carregando o Discord; confira daqui a pouco pelo atalho "Ver log" (procure "Paradise").' -ForegroundColor Yellow }
 Write-Host ''
-Write-Host 'Pronto. Quando a sessão do Paradise vencer, rode este mesmo comando de novo.' -ForegroundColor Green
+Write-Host 'Pronto. Quando a sessão do Paradise vencer: copie o cookie e dê dois cliques em "Renovar Paradise" (pasta High OS Bot).' -ForegroundColor Green
