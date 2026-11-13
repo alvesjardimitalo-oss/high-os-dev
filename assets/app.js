@@ -7709,11 +7709,11 @@ function renderMetricSourceStatus(){
  const localState=String(metricSourceState.status||'');
  const serverState=String(srv.status||'').toUpperCase();
  // V18: as métricas moram no Firestore (espelho mensal).
- const discordOnline=/FIRESTORE|GOOGLE SHEETS|ONLINE|CACHE_LOCAL/.test(localState.toUpperCase())&&metricas.length>0;
+ const discordOnline=/FIRESTORE|PARADISE|GOOGLE SHEETS|ONLINE|CACHE_LOCAL/.test(localState.toUpperCase())&&metricas.length>0;
  const sheetConfigured=metricSourceConfig.mode==='GOOGLE_APPS_SCRIPT_FREE'||!!extractSpreadsheetId(metricSourceConfig.url);
  const configured=discordOnline||sheetConfigured;
  const online=discordOnline||serverState==='ONLINE'||localState==='ONLINE';
- const failed=!online&&(serverState==='ERRO'||localState==='ERRO'||/INDISPON/.test(localState.toUpperCase()));
+ const failed=/PARADISE FORA/.test(localState)||(!online&&(serverState==='ERRO'||localState==='ERRO'||/INDISPON/.test(localState.toUpperCase())));
  el.classList.toggle('online',online);
  el.classList.toggle('error',failed);
  const last=metricTsToDate(srv.lastSuccessAt)||metricTsToDate(srv.lastRunAt)||(metricSourceState.lastSync?new Date(metricSourceState.lastSync):null);
@@ -8079,7 +8079,12 @@ async function loadMetrics({force=false}={}){
    const linhas=await metricTimeout(lerEspelhoMensal(),15000,'métricas do Firestore');
    if(!linhas.length)throw new Error('Nenhuma métrica salva no High OS ainda.');
    aplicarLinhasMetricas(linhas,'FIRESTORE');
-   metricSourceState={...metricSourceState,status:'HIGH OS • FIRESTORE',lastSync:Date.now(),count:linhas.length,activeCount:activeMetricRows().length,error:''};
+   /* O bot (modo só métricas) grava aqui como foi a última coleta do Paradise. */
+   let paradise=null;try{const st=await getDoc(doc(db,'highos','metricas_config'));paradise=st.exists()?st.data().paradise||null:null}catch(_){}
+   const quando=paradise?.ultimoSucesso?new Date(paradise.ultimoSucesso):null;
+   const avisoParadise=paradise&&paradise.ok===false?'PARADISE FORA — métricas congeladas desde '+(quando?quando.toLocaleString('pt-BR'):'?')+'. Renove a sessão (ligar-paradise.ps1). '+(paradise.erro||''):'';
+   if(avisoParadise&&isAdmin()&&!window.__avisoParadise){window.__avisoParadise=1;try{window.highToast?.(avisoParadise,'warn',15000)}catch(_){}}
+   metricSourceState={...metricSourceState,status:avisoParadise?'PARADISE FORA':'HIGH OS • FIRESTORE',lastSync:quando?quando.getTime():Date.now(),count:linhas.length,activeCount:activeMetricRows().length,error:avisoParadise};
    renderMetricSourceStatus();
    metricsLoaded=true;
    return {rows:linhas,source:'firestore'};

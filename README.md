@@ -2,9 +2,9 @@
 
 ## Estado atual (V18.0 · novembro/2026)
 - **Painel:** `index.html` + `assets/app.js` (módulo ES) + módulos em `assets/modules/`. Sem build: publicado direto pelo GitHub Pages.
-- **Dados:** só Firestore (plano gratuito). O **bot do Discord foi removido** do painel (V18): sem `api-config.js`, sem fila do bot, sem modo contingência. `tools/migrar-bot-firestore.html` faz a última cópia do bot (dados, métricas e agenda) antes de excluí-lo.
+- **Dados:** só Firestore (plano gratuito). O painel **não fala mais com o bot** (V18): sem `api-config.js`, sem fila do bot, sem modo contingência. `tools/migrar-bot-firestore.html` copia do bot os dados, o histórico de métricas e a agenda.
 - **Discord do Ilegal:** continua recebendo entregas/recolhimentos e logs dos baús por **webhook**, direto do painel (não depende de bot).
-- **Métricas:** espelho mensal em `highos/data/metricas_mensais/AAAA-MM` (importação em Métricas). A planilha MÉTRICAS pode ser reativada em Métricas › Fonte de métricas.
+- **Métricas:** fonte = paradise.touz.dev. O bot do PC roda em **modo só métricas** (sem comandos nem posts no Discord), coleta a cada 15 min e grava em `highos/data/metricas_mensais/AAAA-MM`; o painel só lê o Firestore. Situação da coleta em `highos/metricas_config.paradise`. Importação manual em Métricas. A planilha MÉTRICAS pode ser reativada em Métricas › Fonte de métricas.
 - **Diário Operacional:** agenda vem de `highos/data/cronograma_operacional`.
 - **Carregamento sob demanda:** Planejador de Missões (`mission-planner*.js`, `eventos-painel.js`) e `html2canvas` só são baixados quando usados. Leaflet e html2canvas ficam em `assets/vendor/` (workflow "Bibliotecas locais").
 - **Removido em 15/10–01/11:** Spotify, Chat da Equipe/High Call e Alvesinho. A Central de Solicitações continua no código porque a Troca de Group e o perfil do Group geram solicitações por ela.
