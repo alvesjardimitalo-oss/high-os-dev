@@ -1,12 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fonteDosDados, fonteDoMarcador, fichaDoBot, separarAnuncios, corpoDoAnuncio, postarNoWebhook, caminhoDoEscopo, semIndefinidos, ARTE, COR_ILEGAL } from '../assets/modules/fonte-dados.js';
+import { fonteDoMarcador, fichaDoBot, separarAnuncios, corpoDoAnuncio, postarNoWebhook, caminhoDoEscopo, semIndefinidos, ARTE, COR_ILEGAL } from '../assets/modules/fonte-dados.js';
 
-test('fonte: auto por padrao, forcada pelo api-config', ()=>{
- assert.equal(fonteDosDados({}),'auto');
- assert.equal(fonteDosDados({HIGH_OS_FONTE:'BOT'}),'bot');
- assert.equal(fonteDosDados({HIGH_OS_FONTE:'firestore'}),'firestore');
- assert.equal(fonteDoMarcador(null),'bot','sem marcador continua no bot');
+test('fonte: marcador da migracao', ()=>{
+ assert.equal(fonteDoMarcador(null),'bot','sem marcador = migracao nao marcada');
  assert.equal(fonteDoMarcador({fonte:'firestore'}),'firestore');
 });
 

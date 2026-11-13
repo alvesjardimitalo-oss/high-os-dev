@@ -209,24 +209,6 @@ service cloud.firestore {
       allow write: if canEdit('metricas');
     }
 
-    // ---------- fila de atualizacoes para o bot ----------
-    // O bot roda no PC de casa. Com ele offline, as gravacoes ficam
-    // aqui e sao reenviadas quando a maquina volta. So quem pode editar
-    // faccoes enfileira; o contador e lido por qualquer usuario ativo
-    // para o painel saber, em UMA leitura, se ha algo pendente.
-    match /highos/data/fila_bot/{itemId} {
-      allow read: if activeUser();
-      allow create: if canEdit('faccoes')
-                    && request.resource.data.status == 'PENDENTE'
-                    && request.resource.data.criadoPor == myEmail();
-      allow update: if canEdit('faccoes');
-      allow delete: if isAdmin();
-    }
-    match /highos/fila_bot_status {
-      allow read: if activeUser();
-      allow write: if canEdit('faccoes');
-    }
-
     // ---------- catalogo de craft e rota ----------
     // As receitas sairam do codigo e passaram a morar aqui, editaveis
     // pela equipe. Um documento so: ler custa 1 leitura.

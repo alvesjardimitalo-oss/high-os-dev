@@ -24,12 +24,11 @@ import { getFirestore,
  limit,
  startAfter,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
-import * as fonte from './modules/fonte-dados.js?v=1.0.0';
+import * as fonte from './modules/fonte-dados.js?v=1.1.0';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
 import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.3.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
-import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
-import * as fila from './modules/fila-bot.js?v=13.1.0';
+import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.1';
 import * as qgsUi from './modules/qgs-ui.js?v=13.5.0';
 import * as conf from './modules/conferencia.js?v=1.0.0';
 import * as blipsQg from './modules/blips-qg.js?v=1.1.0';
@@ -60,103 +59,35 @@ facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
 const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#deniedView'),appView=$('#appView'),sessionArea=$('#sessionArea');
 
 let currentUser=null,currentProfile=null,faccoes=[],faccoesTodas=[],solicitacoes=[],requestRecords=[],usuarios=[],organizacoes=[];
-// Endereço vem de assets/api-config.js (uma linha para trocar de servidor).
-const HIGH_OS_DISCORD_API=String(window.HIGH_OS_API_URL||'https://desktop-a2oor0c.taile5cb57.ts.net').replace(/\/+$/,'');
-// Acesso de contingência: requer cadastro ativo validado no Firestore e é sempre somente leitura.
-// A API Discord continua sendo a fonte operacional canônica, sem simular gravações.
-let highOsEmergencyReadOnly=false;
-/* V17 - os dados moram no Firestore; o bot do PC e opcional (metricas,
-   agenda, copia do anuncio livre). Modo antigo so com HIGH_OS_FONTE='bot'. */
-const FONTE_PEDIDA=fonte.fonteDosDados(window);
-let MODO_FIRESTORE=FONTE_PEDIDA==='firestore';
+// V18: sem bot do Discord, nao existe mais contingencia somente leitura.
+const highOsEmergencyReadOnly=false;
+/* V18 - o bot do Discord foi removido: dados so no Firestore. O marcador
+   highos/fonte_dados so serve para avisar se a migracao nunca rodou. */
 async function decidirFonteDosDados(){
- if(FONTE_PEDIDA!=='auto')return;
- try{const d=await getDoc(doc(db,'highos','fonte_dados'));MODO_FIRESTORE=fonte.fonteDoMarcador(d.exists()?d.data():null)==='firestore'}
- catch(e){console.warn('[HIGH OS] marcador da fonte de dados ilegivel; mantendo o bot',e?.code||e)}
- console.info('[HIGH OS] fonte dos dados:',MODO_FIRESTORE?'FIRESTORE':'BOT');
+ try{const d=await getDoc(doc(db,'highos','fonte_dados'));
+  if(fonte.fonteDoMarcador(d.exists()?d.data():null)!=='firestore')console.warn('[HIGH OS] highos/fonte_dados nao marca FIRESTORE: a migracao do bot pode nao ter rodado.')}
+ catch(e){}
 }
-/* V13 - ferramentas do Firestore repassadas aos modulos, para eles nao
-   abrirem conexao propria.
-
-   Montado SOB DEMANDA, nunca no topo do arquivo: setDoc e writeBatch
-   aqui sao os embrulhos com contagem de escrita e limpeza de cache,
-   declarados mais abaixo com const. Um objeto literal no topo leria
-   essas variaveis antes da declaracao e derrubava o modulo inteiro com
-   "Cannot access 'setDoc' before initialization" - nao o trecho da
-   fila, o app todo. */
-let _fnsFila=null;
-function fnsFila(){
- return _fnsFila||(_fnsFila={db,doc,collection,getDoc,getDocs,setDoc,serverTimestamp,writeBatch,runTransaction,query,where,orderBy,limit});
+/* Ferramentas do Firestore repassadas aos modulos, montadas sob demanda
+   (setDoc/writeBatch sao embrulhos declarados mais abaixo com const). */
+let _fnsFirestore=null;
+function fnsFirestore(){
+ return _fnsFirestore||(_fnsFirestore={db,doc,collection,getDoc,getDocs,setDoc,serverTimestamp,writeBatch,runTransaction,query,where,orderBy,limit});
 }
-
-async function highOsDiscordRequest(path,options={}){
- if(!currentUser)throw new Error('Sessão expirada. Entre novamente.');
- if(highOsEmergencyReadOnly){
-  /* V13 - API fora do ar. Leitura continua recusada (o cache ja cobre
-     isso); ESCRITA vai para a fila e e reenviada quando o PC voltar.
-     Nada aqui finge que o bot recebeu: o retorno diz "enfileirado". */
-  const metodo=String(options.method||'GET').toUpperCase();
-  if(!fila.mutacao(metodo))throw new Error('API do Discord offline. Modo de contingência: somente leitura.');
-  let corpo=null;
-  try{corpo=options.body?JSON.parse(options.body):null}catch(e){corpo=options.body??null}
-  const id=await fila.enfileirar(fnsFila(),{
-   caminho:path,metodo,corpo,
-   resumo:fila.resumirOperacao(path,metodo,corpo),
-   usuario:currentUser.email||''
-  });
-  await atualizarSeloFila();
-  return {enfileirado:true,filaId:id,
-   aviso:'O bot está offline. A alteração ficou na fila e será enviada quando o PC ligar.'};
- }
- const token=await currentUser.getIdToken();
- /* Bot opcional: com o PC desligado a chamada nao pode prender a tela. */
- const ctl=MODO_FIRESTORE&&!options.signal?new AbortController():null;
- const timer=ctl?setTimeout(()=>ctl.abort(),10000):null;
- let res;
- try{res=await fetch(HIGH_OS_DISCORD_API+path,{...options,...(ctl?{signal:ctl.signal}:{}),headers:{'content-type':'application/json','authorization':'Bearer '+token,...(options.headers||{})}});}
- catch(e){if(MODO_FIRESTORE)throw new Error('Bot do PC desligado ou fora do ar (recurso opcional).');throw e}
- finally{if(timer)clearTimeout(timer)}
- const data=await res.json().catch(()=>({}));
- if(!res.ok)throw new Error(data.error||('High OS Discord HTTP '+res.status));
- return data;
-}
-function factionDiscordPayload(f={}){
- return {group:f.group,segmento:f.segmento||'',qg:f.qg||'',status:f.status||'INATIVA',faccao:f.faccao||'',lider:f.lider||'',staff:f.staff||'',dataEntrega:f.dataEntrega||'',contingenteMin:Number(f.contingenteMin||0),contingenteMax:Number(f.contingenteMax||0),beneficios:f.beneficios||{},observacoes:f.observacao||f.observacoes||'',discordImageUrls:Array.isArray(f.discordImageUrls)?f.discordImageUrls:(f.imagemAnuncio?[f.imagemAnuncio]:[])};
-}
-/* Season do bot. Com season ativa, o bot guarda um Armas01 por season
-   (chave "s3::armas01"). O painel le so os registros da season ativa e
-   manda seasonId em toda gravacao - sem isso, gravar "Armas01" caia no
-   registro legado da season anterior. */
-let botSeasonId='';
-const comSeasonDoBot=(body={})=>botSeasonId&&!Object.prototype.hasOwnProperty.call(body,'seasonId')?{...body,seasonId:botSeasonId}:body;
-const chaveNoBot=group=>botSeasonId&&!String(group).includes('::')?botSeasonId+'::'+group:String(group);
-const daSeasonDoBot=rec=>!botSeasonId||String(rec?.seasonId||'').toLowerCase()===botSeasonId.toLowerCase();
-/* Entregas antigas (S2) ficam no mesmo armazenamento e com o mesmo nome
-   de Group. Com season ativa, entrega sem a season dela e historico:
-   nao pode ser recolhida de novo pela facção nova do mesmo Group. */
-const entregaDaSeason=x=>MODO_FIRESTORE?(!season?.id||String(x?.seasonId||'').toLowerCase()===String(season.id).toLowerCase()):daSeasonDoBot(x);
-async function saveFactionToDiscord(f,extra={}){return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(f.group),{method:'PUT',body:JSON.stringify(comSeasonDoBot({...factionDiscordPayload(f),...extra}))});}
+const entregaDaSeason=x=>!season?.id||String(x?.seasonId||'').toLowerCase()===String(season.id).toLowerCase();
 async function highOsStoreList(scope){
- if(MODO_FIRESTORE){const qs=await getDocs(collection(db,...fonte.caminhoDoEscopo(scope)));return qs.docs.map(d=>({...d.data(),id:d.id}));}
- const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope));return (r.records||[]).map(x=>({id:x.id,...(x.data||{})}));}
+ const qs=await getDocs(collection(db,...fonte.caminhoDoEscopo(scope)));return qs.docs.map(d=>({...d.data(),id:d.id}));}
 async function highOsStoreGet(scope,id){
- if(MODO_FIRESTORE){const d=await getDoc(doc(db,...fonte.caminhoDoEscopo(scope),String(id)));if(!d.exists())throw new Error('not_found');return {...d.data(),id:d.id};}
- const r=await highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id));return {id:r.record.id,...(r.record.data||{})};}
+ const d=await getDoc(doc(db,...fonte.caminhoDoEscopo(scope),String(id)));if(!d.exists())throw new Error('not_found');return {...d.data(),id:d.id};}
 async function highOsStorePut(scope,id,data){
- if(MODO_FIRESTORE){const dados=fonte.semIndefinidos({...(data||{})});delete dados.id;await _setDoc(doc(db,...fonte.caminhoDoEscopo(scope),String(id)),dados);return {ok:true,record:{id,data:dados}};}
- return highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(data)});}
+ const dados=fonte.semIndefinidos({...(data||{})});delete dados.id;await _setDoc(doc(db,...fonte.caminhoDoEscopo(scope),String(id)),dados);return {ok:true,record:{id,data:dados}};}
 async function highOsStoreDelete(scope,id){
- if(MODO_FIRESTORE){await _deleteDoc(doc(db,...fonte.caminhoDoEscopo(scope),String(id)));return {ok:true,deleted:true};}
- return highOsDiscordRequest('/v1/store/'+encodeURIComponent(scope)+'/'+encodeURIComponent(id),{method:'DELETE'});}
-/* Lista de facções: Firestore no modo novo, bot no antigo. Mesmo formato. */
+ await _deleteDoc(doc(db,...fonte.caminhoDoEscopo(scope),String(id)));return {ok:true,deleted:true};}
 async function listarFichasFaccoes(){
- if(MODO_FIRESTORE){const qs=await getDocs(facCol);return qs.docs.map(d=>({...d.data(),id:d.id,group:d.data().group||d.id}));}
- const r=await highOsDiscordRequest('/v1/factions');botSeasonId=String(r.season?.id||'').trim();
- return (r.records||[]).filter(daSeasonDoBot).map(fonte.fichaDoBot);
+ const qs=await getDocs(facCol);return qs.docs.map(d=>({...d.data(),id:d.id,group:d.data().group||d.id}));
 }
 async function lerFichaFaccao(group){
- if(MODO_FIRESTORE){const d=await getDoc(doc(db,'highos','data','faccoes',group));return d.exists()?{...d.data(),id:d.id}:{};}
- return (await highOsDiscordRequest('/v1/factions/'+encodeURIComponent(chaveNoBot(group)))).record||{};
+ const d=await getDoc(doc(db,'highos','data','faccoes',group));return d.exists()?{...d.data(),id:d.id}:{};
 }
 /* Anúncios no Discord do Ilegal (entrega / recolhimento): o painel posta
    direto no webhook do canal. URLs em highos/data/config/webhooks. */
@@ -179,7 +110,6 @@ async function publicarAnunciosIlegal(group,anuncios=[]){
   }
  }
 }
-function discordId(prefix='row'){return prefix+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);}
 
 
 const facCol=collection(db,'highos','data','faccoes'), histCol=collection(db,'highos','data','historico'), reqCol=collection(db,'highos','data','solicitacoes'), deliveryCol=collection(db,'highos','data','entregas'), orgCol=collection(db,'highos','data','organizacoes'), sessionCol=collection(db,'highos','data','sessoes_usuario'), usersCol=collection(db,'users');
@@ -1582,22 +1512,6 @@ document.addEventListener('submit',e=>{if(isAdmin())return;const mod=moduleForEl
    Tenta o e-mail em minusculas e depois exatamente como o Google devolveu.
    Quando falha, diz o PORQUE na tela, em vez do texto generico de sempre.
    ===================================================================== */
-async function highOsDiscordWriteSelfTest(){
- if(!currentUser)return {ok:false,reason:'no-user'};
- const id='web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
- const payload={kind:'HIGH_OS_WEB_WRITE_TEST',nonce:id,createdAt:new Date().toISOString(),email:String(currentUser.email||'').toLowerCase()};
- try{
-  await highOsStorePut('_selftest',id,payload);
-  const back=await highOsStoreGet('_selftest',id);
-  const ok=back?.kind===payload.kind&&back?.nonce===payload.nonce&&back?.email===payload.email;
-  await highOsStoreDelete('_selftest',id).catch(()=>{});
-  console.log('[HIGH OS][DISCORD SELFTEST]',{ok,id,source:'WEB',roundTrip:true});
-  return {ok,id,roundTrip:true};
- }catch(error){
-  console.error('[HIGH OS][DISCORD SELFTEST] FALHOU',error);
-  return {ok:false,id,error:error.message||String(error)};
- }
-}
 
 /* V15.6.3: o Planejador de Missões (~360 KB) só é baixado quando a página dele é aberta. */
 let planejadorCarregando=null;
@@ -1615,70 +1529,26 @@ function carregarPlanejadorMissoes(){
 }
 async function carregarCadastro(user){
  const email=String(user.email||'').trim().toLowerCase();
- if(MODO_FIRESTORE){
-  /* Cadastro em users/{email} no Firestore. A regra deixa cada um ler o
-     proprio documento; tenta minusculo e como o Google devolveu. */
-  const tentativas=[email,String(user.email||'').trim()].filter((x,i,a)=>x&&a.indexOf(x)===i);
-  try{
-   for(const id of tentativas){
-    const d=await getDoc(doc(db,'users',id));
-    if(!d.exists())continue;
-    const dados={...d.data(),id};
-    if(dados.active!==true)return {ok:false,explicacao:'<b>'+esc(email)+'</b> está cadastrado, mas o acesso está inativo.'};
-    return {ok:true,snap:{data:()=>dados},id};
-   }
-   return {ok:false,explicacao:'<b>'+esc(email)+'</b> foi autenticado no Google, mas não possui cadastro no High OS. Peça a um ADMIN para cadastrar seu e-mail em Usuários.'};
-  }catch(e){
-   return {ok:false,explicacao:'Falha ao consultar seu cadastro no High OS: <b>'+esc(e?.code||e?.message||String(e))+'</b>'};
-  }
- }
+ /* Cadastro em users/{email} no Firestore. A regra deixa cada um ler o
+    proprio documento; tenta minusculo e como o Google devolveu. */
+ const tentativas=[email,String(user.email||'').trim()].filter((x,i,a)=>x&&a.indexOf(x)===i);
  try{
-  let dados=null;
-  try{dados=await highOsStoreGet('users',email)}catch{}
-  if(!dados){
-   const users=await highOsStoreList('users');
-   dados=users.find(x=>String(x.email||x.id||'').trim().toLowerCase()===email)||null;
+  for(const id of tentativas){
+   const d=await getDoc(doc(db,'users',id));
+   if(!d.exists())continue;
+   const dados={...d.data(),id};
+   if(dados.active!==true)return {ok:false,explicacao:'<b>'+esc(email)+'</b> está cadastrado, mas o acesso está inativo.'};
+   return {ok:true,snap:{data:()=>dados},id};
   }
-  if(!dados)return {ok:false,explicacao:'<b>'+esc(email)+'</b> foi autenticado no Google, mas não possui cadastro no High OS Discord.'};
-  if(dados.active!==true)return {ok:false,explicacao:'<b>'+esc(email)+'</b> está cadastrado, mas o acesso está inativo.'};
-  return {ok:true,snap:{data:()=>dados},id:String(dados.id||email)};
+  return {ok:false,explicacao:'<b>'+esc(email)+'</b> foi autenticado no Google, mas não possui cadastro no High OS. Peça a um ADMIN para cadastrar seu e-mail em Usuários.'};
  }catch(e){
-  // NUNCA usar fallback quando o servidor recusou acesso. Apenas falhas reais de rede.
-  const mensagem=String(e?.message||e||'');
-  const erroRede=e instanceof TypeError||/failed to fetch|networkerror|load failed|fetch failed|connection refused|err_connection/i.test(mensagem);
-  if(erroRede){
-   const tentativas=[email,String(user.email||'').trim()].filter((x,i,a)=>x&&a.indexOf(x)===i);
-   for(const id of tentativas){
-    try{
-     const cadastro=await getDoc(doc(db,'users',id));
-     if(!cadastro.exists())continue;
-     const dados=cadastro.data()||{};
-     if(dados.active!==true)continue;
-     // Sem ampliar permissões do cadastro antigo; nenhuma permissão de edição.
-     const padrao=defaultPermissionsForRole(dados.role);
-     const permissoes=Object.fromEntries(SYSTEM_MODULES.map(m=>{
-      const valor=Object.prototype.hasOwnProperty.call(dados.permissions||{},m.id)
-       ? normalizePermission(dados.permissions[m.id]) : normalizePermission(padrao[m.id]);
-      return [m.id,valor==='NONE'?'NONE':'VIEW'];
-     }));
-     highOsEmergencyReadOnly=true;
-     const perfil={...dados,role:'CONSULTA',cargo:'CONTINGÊNCIA • LEITURA',permissions:permissoes};
-     return {ok:true,id,emergency:true,snap:{data:()=>perfil}};
-    }catch(erroFirebase){
-     console.warn('[HIGH OS] Cadastro de contingência não validado:',erroFirebase?.code||erroFirebase);
-    }
-   }
-   return {ok:false,explicacao:'O servidor Discord está offline e não foi possível validar um cadastro ativo no Firebase para contingência. O acesso permanece bloqueado.'};
-  }
-  /* Bot recém-ligado/atualizado: ainda lendo o canal 💾 storage. Não é acesso negado. */
-  if(/storage_loading|discord_not_ready/i.test(mensagem))return {ok:false,carregando:true,explicacao:'O bot do High OS acabou de ligar e ainda está carregando os dados do Discord.'};
-  return {ok:false,explicacao:'Falha ao consultar seu cadastro no High OS Discord: <b>'+esc(mensagem)+'</b>'};
+  return {ok:false,explicacao:'Falha ao consultar seu cadastro no High OS: <b>'+esc(e?.code||e?.message||String(e))+'</b>'};
  }
 }
 
 onAuthStateChanged(auth,async user=>{
  currentUser=user;
- if(!user){highOsEmergencyReadOnly=false;show(loginView);sessionArea.innerHTML='<button class="btn-google" id="loginTop">G&nbsp; Entrar com Google</button>';$('#loginTop').onclick=login;return}
+ if(!user){show(loginView);sessionArea.innerHTML='<button class="btn-google" id="loginTop">G&nbsp; Entrar com Google</button>';$('#loginTop').onclick=login;return}
  const email=(user.email||'').toLowerCase();
  try{
   /* V9.8 - o cadastro pode ter sido criado com o e-mail em outra caixa
@@ -1686,15 +1556,6 @@ onAuthStateChanged(auth,async user=>{
      usuario ficava trancado para fora sem saber o motivo. */
   await decidirFonteDosDados();
   let perfil=await carregarCadastro(user);
-  /* storage_loading: espera o bot terminar de carregar (até ~3 min) em vez de negar o acesso */
-  const tituloNegado=deniedView.querySelector('h2'),tituloOriginal=tituloNegado?.textContent||'ACESSO NÃO AUTORIZADO';
-  for(let i=1;!perfil.ok&&perfil.carregando&&i<=36;i++){
-   show(deniedView);if(tituloNegado)tituloNegado.textContent='BOT INICIANDO';
-   $('#deniedText').innerHTML=esc(perfil.explicacao)+'<br><small>Tentando de novo automaticamente… ('+i+')</small>';
-   await new Promise(r=>setTimeout(r,5000));if(currentUser!==user)return;
-   perfil=await carregarCadastro(user);
-  }
-  if(tituloNegado)tituloNegado.textContent=tituloOriginal;
   if(!perfil.ok){
    show(deniedView);
    $('#deniedText').innerHTML=perfil.explicacao;
@@ -1704,19 +1565,6 @@ onAuthStateChanged(auth,async user=>{
   }
   const snap=perfil.snap;
   currentProfile=snap.data();const role=String(currentProfile.role||'CONSULTA').toUpperCase();await startOrResumeSession(user,currentProfile);if(Date.now()-currentSessionStart>=SESSION_MAX_MS)return;show(appView);
-  if(highOsEmergencyReadOnly){
-   entrarModoLocal('Bot do High OS (PC) indisponível');
-   const aviso=document.createElement('div');
-   aviso.id='highOsEmergencyReadOnlyNotice';
-   aviso.setAttribute('role','status');
-   aviso.style.cssText='padding:10px 14px;margin:0 0 16px;background:#221c10;border:1px solid #8d682a;border-radius:10px;color:#ffe2a0;line-height:1.5;font-size:12px';
-   aviso.textContent='CONTINGÊNCIA • SOMENTE LEITURA: cadastro validado no Firebase. Dados do Discord indisponíveis; informações em cache podem estar desatualizadas. Nenhuma alteração será gravada até a API voltar.';
-   // .app é uma grid de duas colunas (sidebar + conteúdo).
-   // O aviso precisa ficar DENTRO do conteúdo, não como terceira coluna.
-   appView.querySelector('.content')?.prepend(aviso);
-  }else if(!MODO_FIRESTORE){
-   setTimeout(()=>highOsDiscordWriteSelfTest().then(r=>{if(!r.ok)console.warn('[HIGH OS] autoteste Discord falhou sem bloquear o painel',r)}),800);
-  }
   const userNameEl=$('#userName'),
 userRoleEl=$('#userRole'),
 userAccessEl=$('#userAccessLevel'),
@@ -1733,11 +1581,7 @@ userPhotoEl=$('#userPhoto');
   if(needsSegments)await loadSegmentConfig();
   if(initialPage==='dashboard')await loadDashboardConfig();
   await iniciarSeason();
-  /* ADMIN: garante que todo usuario cadastrado no bot tenha o espelho no
-     Firebase (regras da season/historico). Em segundo plano. */
-  if(isAdmin()&&!MODO_FIRESTORE)setTimeout(()=>highOsStoreList('users').then(l=>sincronizarUsuariosFirebase(l.map(x=>({email:String(x.email||x.id||'').toLowerCase(),...x})))).catch(()=>{}),4000);
   renderSeasonTopo();
-  await iniciarFila();
   if(needsSegments&&(!highOsEmergencyReadOnly||canViewModule('faccoes'))){
    try{await loadFaccoes()}catch(e){
     if(!highOsEmergencyReadOnly)throw e;
@@ -1756,8 +1600,7 @@ userPhotoEl=$('#userPhoto');
   if(canViewModule('chat'))$('#teamChatLauncher')?.classList.remove('hidden');
  }catch(e){
   show(deniedView);
-  $('#deniedText').innerHTML=`Falha ao carregar o painel: <b>${esc(e.code||'')}</b> ${esc(e.message||String(e))}`+
-   (MODO_FIRESTORE?'':`<br><br><span style="font-size:12px;opacity:.85">O login usa Firebase Auth; os dados operacionais são carregados pelo bot do High OS (Discord).</span>`);
+  $('#deniedText').innerHTML=`Falha ao carregar o painel: <b>${esc(e.code||'')}</b> ${esc(e.message||String(e))}`;
   console.error('[HIGH OS] falha no login:',e);
  }
 });
@@ -2277,7 +2120,7 @@ function abrirConferencia(){
   const atual=conf.conferenciaDe(q);
   status('Salvando...');
   try{
-   await salvarQg(fnsFila(),chave,{conferencia:{...atual,[campo]:valor,atualizadoPor:currentUser?.email||'',atualizadoEm:new Date().toISOString()}},currentUser?.email||'');
+   await salvarQg(fnsFirestore(),chave,{conferencia:{...atual,[campo]:valor,atualizadoPor:currentUser?.email||'',atualizadoEm:new Date().toISOString()}},currentUser?.email||'');
    status('Salvo.');
   }catch(e){status('');alert('Não salvou: '+e.message)}
  }
@@ -2364,7 +2207,7 @@ function abrirConferencia(){
    for(const q of linhas()){
     const g=String(q.group).toUpperCase();
     if(confs[g]){status(`Conferência de ${q.group}...`);
-     await salvarQg(fnsFila(),q.chave,{conferencia:{...confs[g],atualizadoPor:currentUser?.email||'',atualizadoEm:new Date().toISOString()}},currentUser?.email||'');nc++}
+     await salvarQg(fnsFirestore(),q.chave,{conferencia:{...confs[g],atualizadoPor:currentUser?.email||'',atualizadoEm:new Date().toISOString()}},currentUser?.email||'');nc++}
     if(whs[g]){status(`Webhooks de ${q.group}...`);
      await setDoc(doc(db,'highos','data','webhooks_baus',g),{...whs[g],group:g,atualizadoPor:currentUser?.email||'',atualizadoEm:serverTimestamp()},{merge:true});
      webhooksBaus[g]={...(webhooksBaus[g]||{}),...whs[g]};nw++}
@@ -2501,7 +2344,7 @@ function abrirBlipsQg(chave){
    try{
     const agora=new Date().toISOString();
     const solicitados={...(q.solicitados||{})};ids.forEach(id=>solicitados[id]=agora);
-    await salvarQg(fnsFila(),chave,{solicitados},currentUser?.email||'');
+    await salvarQg(fnsFirestore(),chave,{solicitados},currentUser?.email||'');
     await registrarHistoricoQg('QG_BLIPS_SOLICITADOS',q,`Solicitação de blips ${q.group||''}: ${ids.join(', ')}`);
    }catch(e){alert('O texto foi gerado, mas não marquei como solicitado: '+e.message)}
    desenhar();
@@ -2517,7 +2360,7 @@ function abrirBlipsQg(chave){
     const atual=new Set(blipsQg.instaladosDe(q));
     ids.forEach(id=>ligar?atual.add(id):atual.delete(id));
     const solicitados={...(q.solicitados||{})};if(ligar)ids.forEach(id=>delete solicitados[id]);
-    const novo=await salvarQg(fnsFila(),chave,{instalados:[...atual],solicitados},currentUser?.email||'');
+    const novo=await salvarQg(fnsFirestore(),chave,{instalados:[...atual],solicitados},currentUser?.email||'');
     await atualizarFichaFuncionando(novo||{...q,instalados:[...atual]});
     await registrarHistoricoQg(ligar?'QG_BLIPS_INSTALADOS':'QG_BLIPS_DESLIGADOS',q,`${ligar?'Funcionando':'Desligados'} em ${q.group||q.local}: ${ids.join(', ')}`);
     try{await loadFaccoes()}catch(_){}
@@ -2557,7 +2400,7 @@ async function vincularQg(chave){
     criadoEm:serverTimestamp(), updatedAt:serverTimestamp(), updatedBy:currentUser?.email||''
    },{merge:true});
   }
-  await vincularGroup(fnsFila(),chave,g,currentUser?.email||'');
+  await vincularGroup(fnsFirestore(),chave,g,currentUser?.email||'');
   await registrarHistoricoQg('QG_VINCULADO',q,`Group ${g} ${jaExiste?'vinculado':'criado e vinculado'} a ${q.local||chave}`);
   try{await loadFaccoes()}catch(e){}
   renderQgs(); renderSeasonBadge();
@@ -2570,7 +2413,7 @@ async function desvincularQg(chave){
  if(!q)return;
  if(!confirm(`Tirar o Group "${q.group}" de "${q.local||chave}"?\n\nO cadastro do Group não é apagado — ele só deixa de ocupar este QG.`))return;
  try{
-  await desvincularGroup(fnsFila(),chave,currentUser?.email||'');
+  await desvincularGroup(fnsFirestore(),chave,currentUser?.email||'');
   await registrarHistoricoQg('QG_DESVINCULADO',q,`Group ${q.group} desvinculado de ${q.local||chave}`);
   renderQgs(); renderSeasonBadge();
  }catch(e){alert('Não desvinculou: '+e.message)}
@@ -2605,7 +2448,7 @@ function abrirEditorQg(chave){
   btn.disabled=true; btn.textContent='SALVANDO...';
   try{
    const atualizado=qgsUi.lerEditor(modal,q);
-   const salvo=await salvarQg(fnsFila(),chave,{
+   const salvo=await salvarQg(fnsFirestore(),chave,{
     local:atualizado.local,setor:atualizado.setor,produto:atualizado.produto,cds:atualizado.cds
    },currentUser?.email||'');
    /* coordenada corrigida de um blip que ja funciona tem que chegar na
@@ -2789,82 +2632,6 @@ async function registrarHistoricoQg(tipo,q,descricao){
  }catch(e){console.warn('[QG] histórico não gravou:',e?.message||e)}
 }
 
-/* ============================================================
-   V13 · FILA DE ATUALIZAÇÕES PARA O BOT
-   O bot roda no PC de casa. Com a máquina desligada, o que
-   antes era recusado agora fica guardado e é reenviado na
-   ordem quando ela volta.
-   ============================================================ */
-let filaPendentes=null;         // null = ainda não consultado
-
-/* Uma leitura só, no login: o documento contador. Se não há
-   pendência, a coleção da fila não é tocada. */
-async function iniciarFila(){
- /* Sem bot no meio, nao existe fila: grava direto no Firestore. */
- if(MODO_FIRESTORE){filaPendentes=0;atualizarSeloFila();return}
- const st=await fila.lerStatusFila(fnsFila());
- filaPendentes=st.pendentes;
- atualizarSeloFila();
- /* API de volta e fila com itens: oferece drenar, não drena sozinho.
-    Reenviar sem a pessoa saber poderia sobrescrever algo que mudou
-    na cidade enquanto o PC estava fora. */
- if(!highOsEmergencyReadOnly && Number(filaPendentes)>0)setTimeout(oferecerDrenagem,1200);
-}
-
-function atualizarSeloFila(){
- const el=$('#filaBadge');
- if(!el)return;
- const n=filaPendentes;
- if(n===null){el.hidden=true;return}
- if(n===0&&!highOsEmergencyReadOnly){el.hidden=true;return}
- el.hidden=false;
- el.classList.toggle('offline',highOsEmergencyReadOnly);
- el.innerHTML=`<span><b>${n===null?'—':n} NA FILA</b><small>${highOsEmergencyReadOnly?'bot offline':'pronto para enviar'}</small></span>`;
- el.title=highOsEmergencyReadOnly
-  ? 'O bot está offline. As alterações ficam aqui e são enviadas quando o PC ligar.'
-  : 'Há alterações feitas com o bot offline esperando para ser enviadas. Clique para revisar.';
- el.onclick=abrirFila;
-}
-
-async function abrirFila(){
- let itens=[];
- try{itens=await fila.listarPendentes(fnsFila())}
- catch(e){return alert('Não consegui ler a fila: '+e.message)}
- if(!itens.length){filaPendentes=0;atualizarSeloFila();return alert('A fila está vazia.')}
-
- const lista=itens.map((x,i)=>`${i+1}. ${x.resumo}`).join('\n');
- if(highOsEmergencyReadOnly)
-  return alert(`${itens.length} alteração(ões) esperando o bot ligar:\n\n${lista}\n\nQuando o PC estiver ligado, abra o painel e envie por aqui.`);
-
- if(!confirm(`Enviar ${itens.length} alteração(ões) ao bot, na ordem em que foram feitas?\n\n${lista}\n\nSe alguma falhar, o envio para ali — para não aplicar as seguintes sobre um estado já divergente.`))return;
- await drenarFila();
-}
-
-function oferecerDrenagem(){
- if(!confirm(`O bot está no ar e há ${filaPendentes} alteração(ões) na fila feitas enquanto ele estava fora.\n\nRevisar e enviar agora?`))return;
- abrirFila();
-}
-
-async function drenarFila(){
- const r=await fila.drenar(fnsFila(),async item=>{
-  const res=await fetch(HIGH_OS_DISCORD_API+item.caminho,{
-   method:item.metodo,
-   headers:{'content-type':'application/json','authorization':'Bearer '+(await currentUser.getIdToken())},
-   body:item.corpo==null?undefined:JSON.stringify(item.corpo)
-  });
-  const data=await res.json().catch(()=>({}));
-  if(!res.ok)throw new Error(data.error||('HTTP '+res.status));
-  return data;
- });
- filaPendentes=Math.max(0,r.total-r.enviados);
- atualizarSeloFila();
- if(r.falhou){
-  alert(`Enviadas ${r.enviados} de ${r.total}.\n\nParou em "${r.parouEm?.resumo||'?'}": ${r.falhou}\n\nAs seguintes continuam na fila. Corrija o motivo e envie de novo.`);
- }else{
-  alert(`Fila enviada: ${r.enviados} alteração(ões) aplicadas no bot.`);
-  try{await loadFaccoes()}catch(e){}
- }
-}
 
 /* ============================================================
    V13 · SEASON ATIVA
@@ -3085,90 +2852,35 @@ function invalidarCacheRef(ref){
 /* V10.76 - só invalida o espelho depois que o Firestore confirma a escrita.
    Se quota/permissão/rede falhar, a última cópia local válida continua disponível. */
 function assertRemoteWriteAvailable(){
- if(highOsEmergencyReadOnly)throw new Error('Contingência somente leitura: API Discord indisponível. Nenhuma alteração foi salva.');
  if(!window.HighOSOffline?.ativo)return;
  const e=new Error('Modo local ativo: reconecte ao Firebase antes de gravar alterações.');
  e.code='highos/offline-write-blocked';
  throw e;
 }
-function discordStoreRef(ref){
- if(MODO_FIRESTORE)return null;
- try{
-  const seg=ref?._key?.path?.segments||ref?._path?.segments||[];
-  const ix=seg.lastIndexOf('data');
-  if(ix>=0&&seg[ix-1]==='highos'&&seg[ix+1])return {scope:String(seg[ix+1]),id:seg.slice(ix+2).join('/')};
- }catch{}
- return null;
-}
-function discordPlain(v){
- if(v===undefined)return undefined;if(v===null||['string','number','boolean'].includes(typeof v))return v;
- if(typeof v?.toDate==='function')return v.toDate().toISOString();
- if(Array.isArray(v))return v.map(discordPlain);
- if(typeof v==='object'){const o={};for(const [k,x] of Object.entries(v)){const y=discordPlain(x);if(y!==undefined)o[k]=y}return o}
- return String(v);
-}
-/* V15.1: o registro vindo do bot traz os nomes nativos (location, highOsFaction,
-   responsible…) e o painel edita os nomes em português (qg, faccao, lider…).
-   O bot lê primeiro o nome nativo, então um {...old, qg:''} reenviava o QG
-   antigo em "location" e a edição era desfeita. O campo em português manda. */
-const FACTION_PT_NATIVE=[['segmento','segment'],['qg','location'],['faccao','highOsFaction'],['lider','responsible'],['dataEntrega','deliveryDate'],['dataAssuncao','assumedAt'],['fabricacao','fabrication'],['producao','production'],['craft','craftDescription'],['autorizacao','authorization'],['beneficiosAssumir','assumeBenefits'],['motivoRecolhimento','collectionReason'],['dataRecolhimento','collectedAt'],['recolhidoPor','collectedBy'],['contingenteMin','contingentMin'],['contingenteMax','contingentMax'],['beneficios','benefits'],['observacoes','observations'],['observacao','observations']];
-async function discordFactionPatch(id,patch={}){
- // O backend faz merge atômico com o registro atual. Evita um GET extra
- // em cada alteração feita pelo painel Web.
- const p=discordPlain(patch);
- // V15.6.6 — segmentação customizada: o backend e o painel podem carregar
- // tanto segmento (PT) quanto segment (campo nativo). Não é seguro eliminar
- // o nativo ao reatribuir uma categoria: o valor antigo (APOIO) pode vencer
- // ao recarregar o cadastro. Atualizar ambos para o MESMO nome de segmento.
- for(const [pt,nat] of FACTION_PT_NATIVE){
-  if(!Object.prototype.hasOwnProperty.call(p,pt))continue;
-  if(pt==='segmento'){p.segment=String(p.segmento||'').trim();continue;}
-  delete p[nat];
- }
- return highOsDiscordRequest('/v1/factions/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify(comSeasonDoBot({...p,group:id}))});
-}
 const setDoc=async(ref,data,opts={})=>{
- const ds=discordStoreRef(ref);
- if(ds?.id){
-  assertRemoteWriteAvailable();
-  const payload=discordPlain(data||{});
-  if(ds.scope==='faccoes')await discordFactionPatch(ds.id,payload);
-  else{
-   let next=payload;
-   if(opts?.merge){try{next={...(await highOsStoreGet(ds.scope,ds.id)),...payload};delete next.id}catch{}}
-   await highOsStorePut(ds.scope,ds.id,next);
-  }
-  invalidarCacheRef(ref);return;
- }
  assertRemoteWriteAvailable();
  const ehFicha=ehRefFaccao(ref);
  const {dados,anuncios}=ehFicha?fonte.separarAnuncios(data||{}):{dados:data,anuncios:[]};
- /* O bot aceitava campo undefined (JSON descarta); o Firestore recusa. */
- const r=await _setDoc(ref,MODO_FIRESTORE?fonte.semIndefinidos(dados):dados,opts);invalidarCacheRef(ref);
+ /* O Firestore recusa campo undefined. */
+ const r=await _setDoc(ref,fonte.semIndefinidos(dados),opts);invalidarCacheRef(ref);
  if(anuncios.length)publicarAnunciosIlegal(ref.id,anuncios);
  return r;
 };
 function ehRefFaccao(ref){const seg=ref?._key?.path?.segments||ref?._path?.segments||[];return seg.length===4&&seg[0]==='highos'&&seg[1]==='data'&&seg[2]==='faccoes';}
 const addDoc=async(ref,data)=>{
- const ds=discordStoreRef(ref);
- if(ds&&!ds.id){
-  assertRemoteWriteAvailable();const id=discordId(ds.scope.slice(0,8));await highOsStorePut(ds.scope,id,discordPlain(data||{}));invalidarCacheRef(ref);return {id};
- }
- assertRemoteWriteAvailable();const r=await _addDoc(ref,MODO_FIRESTORE?fonte.semIndefinidos(data):data);invalidarCacheRef(ref);return r;
+ assertRemoteWriteAvailable();const r=await _addDoc(ref,fonte.semIndefinidos(data));invalidarCacheRef(ref);return r;
 };
 const deleteDoc=async(ref,...a)=>{
- const ds=discordStoreRef(ref);
- if(ds?.id){assertRemoteWriteAvailable();if(ds.scope==='faccoes')throw new Error('Exclusão direta de facção bloqueada; use recolhimento/status.');await highOsStoreDelete(ds.scope,ds.id);invalidarCacheRef(ref);return;}
  assertRemoteWriteAvailable();const r=await _deleteDoc(ref,...a);invalidarCacheRef(ref);return r;
 };
 
 const writeBatch=(...a)=>{
- const real=_writeBatch(...a),ops=[],tocadas=new Set(),anunciosDoLote=[];
+ const real=_writeBatch(...a),tocadas=new Set(),anunciosDoLote=[];
  const api={};
- api.set=(ref,data,opts={})=>{const ds=discordStoreRef(ref);if(ds){ops.push({type:'set',ref,data,opts});tocadas.add(ds.scope);return api}if(ehRefFaccao(ref)){const sep=fonte.separarAnuncios(data||{});data=sep.dados;if(sep.anuncios.length)anunciosDoLote.push([ref.id,sep.anuncios])}real.set(ref,MODO_FIRESTORE?fonte.semIndefinidos(data):data,opts);tocadas.add(cacheNameFromRef(ref));return api};
- api.update=(ref,data)=>{const ds=discordStoreRef(ref);if(ds){ops.push({type:'set',ref,data,opts:{merge:true}});tocadas.add(ds.scope);return api}real.update(ref,MODO_FIRESTORE?fonte.semIndefinidos(data):data);tocadas.add(cacheNameFromRef(ref));return api};
- api.delete=(ref)=>{const ds=discordStoreRef(ref);if(ds){ops.push({type:'delete',ref});tocadas.add(ds.scope);return api}real.delete(ref);tocadas.add(cacheNameFromRef(ref));return api};
- api.commit=async()=>{assertRemoteWriteAvailable();for(const op of ops){if(op.type==='delete')await deleteDoc(op.ref);else await setDoc(op.ref,op.data,op.opts)}if(!ops.length)await real.commit();for(const [g,an] of anunciosDoLote)publicarAnunciosIlegal(g,an);tocadas.forEach(nome=>{if(!nome)return;cacheMemoria.delete(nome);queryFreshAt.delete(nome);try{localStorage.removeItem(CACHE_PREFIX+nome)}catch{}});};
+ api.set=(ref,data,opts={})=>{if(ehRefFaccao(ref)){const sep=fonte.separarAnuncios(data||{});data=sep.dados;if(sep.anuncios.length)anunciosDoLote.push([ref.id,sep.anuncios])}real.set(ref,fonte.semIndefinidos(data),opts);tocadas.add(cacheNameFromRef(ref));return api};
+ api.update=(ref,data)=>{real.update(ref,fonte.semIndefinidos(data));tocadas.add(cacheNameFromRef(ref));return api};
+ api.delete=(ref)=>{real.delete(ref);tocadas.add(cacheNameFromRef(ref));return api};
+ api.commit=async()=>{assertRemoteWriteAvailable();await real.commit();for(const [g,an] of anunciosDoLote)publicarAnunciosIlegal(g,an);tocadas.forEach(nome=>{if(!nome)return;cacheMemoria.delete(nome);queryFreshAt.delete(nome);try{localStorage.removeItem(CACHE_PREFIX+nome)}catch{}});};
  return api;
 };
 
@@ -3363,53 +3075,12 @@ return comoSnapshot(mem.rows)}
    return comoSnapshot(local.rows);
   }
  }
- // Contingência: consultar cache ou dados históricos do Firestore, sem atualizá-los.
- if(highOsEmergencyReadOnly){
-  const anterior=mem||cacheLer(nome);
-  if(anterior?.rows?.length)return comoSnapshot(anterior.rows);
-  try{
-   const historico=await getDocs(colRef);
-   if(!historico.empty){
-    const rows=historico.docs.map(d=>({id:d.id,...d.data()}));
-    cacheMemoria.set(nome,{at:0,rows});
-    return comoSnapshot(rows);
-   }
-  }catch(error){
-   console.warn('[HIGH OS] Espelho Firestore não disponível:',nome,error?.code||error?.message||error);
-  }
-  throw new Error('Dados de '+nome+' indisponíveis: Discord offline e sem cópia local/histórica acessível.');
- }
  try{
-  const ds=discordStoreRef(colRef);
-  if(ds&&!ds.id){
-   let rows;
-   if(ds.scope==='faccoes'){const r=await highOsDiscordRequest('/v1/factions');botSeasonId=String(r.season?.id||'').trim();rows=(r.records||[]).filter(daSeasonDoBot).map(x=>({
-    ...x,
-    id:x.group||x.id,
-    group:x.group||x.id||'',
-    segmento:x.segmento||x.segment||'',
-    qg:x.qg||x.location||'',
-    produto:x.produto||x.product||'',
-    cds:x.cds||x.coords||'',
-    anuncio:x.anuncio||x.announced||'',
-    faccao:x.faccao||x.highOsFaction||'',
-    lider:x.lider||x.responsible||'',
-    staff:x.staff||'',
-    dataEntrega:x.dataEntrega||x.deliveryDate||'',
-    status:(String(x.status||'').toUpperCase()==='ENTREGUE'||String(x.highOsFaction||x.faccao||'').trim())?'ATIVA':'INATIVA',
-    beneficios:x.beneficios||x.benefits||{},
-    observacoes:x.observacoes||x.observations||'',
-    discordImageUrls:Array.isArray(x.discordImageUrls)?x.discordImageUrls:[]
-   }));}
-   else rows=await highOsStoreList(ds.scope);
-   cacheMemoria.set(nome,{at:Date.now(),rows});cacheEscrever(nome,rows);statBump(nome,'cache');sairModoLocal();
-   return comoSnapshot(rows);
-  }
   const qs=await getDocs(colRef);
 
   const rows=qs.docs.map(d=>({id:d.id,
 ...d.data()}));
-  if(MODO_FIRESTORE&&nome==='faccoes')rows.forEach(r=>{if(!r.group)r.group=r.id});
+  if(nome==='faccoes')rows.forEach(r=>{if(!r.group)r.group=r.id});
 
   cacheMemoria.set(nome,{at:Date.now(),
 rows});
@@ -5428,7 +5099,7 @@ async function saveUser(e){
  }
  try{
   await highOsStorePut('users',email,{...userData,updatedAt:new Date().toISOString(),updatedBy:currentUser.email});
-  try{await espelharUsuarioFirebase(userData)}catch(e){alert('Usuário salvo no bot, mas não no Firebase ('+(e?.code||e?.message)+'). Sem isso ele não vê a season.')}
+  try{await espelharUsuarioFirebase(userData)}catch(e){alert('Usuário salvo, mas o espelho no Firebase falhou ('+(e?.code||e?.message)+'). Sem isso ele não vê a season.')}
   await addDoc(histCol,{sessionId:currentSessionId||'',tipo:old?'USUARIO_EDITADO':'USUARIO_CRIADO',usuarioAlvo:email,antes:snapshot(old),depois:snapshot(payload),usuario:currentUser.email,data:serverTimestamp()});
   $('#userModal').classList.add('hidden');
   const local={...(old||{}),...clonePlain(userData),updatedBy:currentUser.email};
@@ -5697,7 +5368,7 @@ function renderSaudeSistema(){
    ${saudeCartao('ÚLTIMA SINCRONIZAÇÃO',syncTexto,'neutro',sync?new Date(sync).toLocaleString('pt-BR'):'')}
    ${saudeCartao('ÚLTIMO BACKUP',backupTexto,estadoBackup,estadoBackup==='ok'?'':'rode tools/backup-firestore.html')}
    ${saudeCartao('SESSÕES ABERTAS',String(sessoesAbertas),sessoesAbertas>4?'alerta':'ok','contas com sessão em andamento')}
-   ${saudeCartao('STORAGE OPERACIONAL','DISCORD','ok','Bot no PC / Discord Storage')}
+   ${saudeCartao('STORAGE OPERACIONAL','FIRESTORE','ok','Firebase (plano gratuito)')}
    ${saudeCartao('MISSÕES SALVAS',String((JSON.parse(localStorage.getItem('highos_mission_planner_v832_missions')||'[]')||[]).length),'neutro','neste navegador')}
   </div>`;
  document.getElementById('saudeAtualizar')?.addEventListener('click',renderSaudeSistema);
@@ -5918,7 +5589,7 @@ function derivedOrganizations(){
     facção da S2 aparecia "ocupando Armas01" no Armas01 da S3. */
  const ocupaNaSeason=new Set(faccoes.filter(f=>f.faccao).map(f=>String(f.faccao).toLowerCase()));
  organizacoes.forEach(o=>{const k=String(o.nome||o.id||'').toLowerCase();
-  const velho=(botSeasonId||(MODO_FIRESTORE&&season?.carregada))&&o.groupAtual&&!ocupaNaSeason.has(k);
+  const velho=season?.carregada&&o.groupAtual&&!ocupaNaSeason.has(k);
   map.set(k,{...o,...(velho?{groupAtual:'',qgAtual:'',segmentoAtual:''}:{}),source:'cadastro'})});
 
  faccoes.filter(f=>f.faccao).forEach(f=>{const k=String(f.faccao).toLowerCase(),
@@ -7144,7 +6815,7 @@ async function recolherParaTrocaV14(f,novaFaccao,justificativa){
  const [titulo,...corpo]=extrato.split('\n');
  await setDoc(doc(db,'highos','data','faccoes',f.group),{...vago,anuncioRecolhimento:{title:titulo,description:corpo.join('\n').trim(),imageDataUrl:''}});
  try{await setDoc(doc(db,'highos','data','organizacoes',orgKey(f.faccao)),{nome:f.faccao,status:'SEM_GROUP',groupAtual:'',segmentoAtual:f.segmento||'',qgAtual:'',ultimoRecolhimento:recolhimento,updatedBy:currentUser.email},{merge:true})}catch(e){}
- if(MODO_FIRESTORE)for(const d of entregas.filter(d=>d.group===f.group&&d.status==='ATIVA'&&entregaDaSeason(d)&&d.id&&!String(d.id).startsWith('discord:'))){try{await setDoc(doc(db,'highos','data','entregas',d.id),{status:'RECOLHIDA',recolhidaPor:currentUser.email,recolhimento,recolhidaEm:serverTimestamp()},{merge:true})}catch(e){console.warn('[ENTREGAS] troca:',e)}}
+ for(const d of entregas.filter(d=>d.group===f.group&&d.status==='ATIVA'&&entregaDaSeason(d)&&d.id&&!String(d.id).startsWith('discord:'))){try{await setDoc(doc(db,'highos','data','entregas',d.id),{status:'RECOLHIDA',recolhidaPor:currentUser.email,recolhimento,recolhidaEm:serverTimestamp()},{merge:true})}catch(e){console.warn('[ENTREGAS] troca:',e)}}
  entregas=entregas.map(d=>d.group===f.group&&d.status==='ATIVA'&&entregaDaSeason(d)?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email,recolhimento}:d);
  const i=faccoes.findIndex(x=>x.group===f.group);if(i>=0)faccoes[i]={...faccoes[i],...vago};
 }
@@ -7246,7 +6917,7 @@ createdBy:currentUser.email};
   });
   /* No Firestore a entrega vira registro proprio (antes o bot derivava). */
   let entregaId='discord:'+f.group+':'+Date.now();
-  if(MODO_FIRESTORE){
+  {
    try{
     const lote=writeBatch(db);
     previous.forEach(d=>{if(d.id&&!String(d.id).startsWith('discord:'))lote.set(doc(db,'highos','data','entregas',d.id),{status:'RECOLHIDA',recolhidaPor:currentUser.email,recolhidaEm:serverTimestamp()},{merge:true})});
@@ -7260,7 +6931,7 @@ createdBy:currentUser.email};
   $('#newDeliveryModal').classList.add('hidden');
   const previousIds=new Set(previous.map(d=>d.id));
   entregas=entregas.map(d=>previousIds.has(d.id)?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email}:d);
-  entregas.unshift({id:entregaId,...clonePlain(payload),createdAt:null,storage:MODO_FIRESTORE?'FIRESTORE':'DISCORD'});
+  entregas.unshift({id:entregaId,...clonePlain(payload),createdAt:null,storage:'FIRESTORE'});
   const fix=faccoes.findIndex(x=>x.group===f.group);
   if(fix>=0)faccoes[fix]={...clonePlain(deliveredGroup),id:faccoes[fix].id||f.group,updatedBy:currentUser.email};
   queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('entregas',Date.now());
@@ -7579,7 +7250,7 @@ let metricLiveUnsub=null,
 metricLiveLastAt=0;
 
 // V12.8: métricas não possuem mais referências Firestore no High OS Web.
-// Fonte oficial: Apps Script -> bot High OS (PC) -> Discord -> /v1/metrics.
+// Fonte oficial (V18): espelho mensal no Firestore (highos/data/metricas_mensais).
 
 const MARKET_CATALOG_URL='https://alvesjardimitalo-oss.github.io/high-mercado-negro/data/catalogo.json';
 
@@ -8037,9 +7708,8 @@ function renderMetricSourceStatus(){
  const srv=metricSourceConfig.serverSync||{};
  const localState=String(metricSourceState.status||'');
  const serverState=String(srv.status||'').toUpperCase();
- // V12.8: o bot do Discord é a fonte operacional. Não exigir mais URL local
- // da planilha para considerar a Central configurada.
- const discordOnline=/DISCORD|GOOGLE SHEETS|ONLINE|CACHE_LOCAL/.test(localState.toUpperCase())&&metricas.length>0;
+ // V18: as métricas moram no Firestore (espelho mensal).
+ const discordOnline=/FIRESTORE|GOOGLE SHEETS|ONLINE|CACHE_LOCAL/.test(localState.toUpperCase())&&metricas.length>0;
  const sheetConfigured=metricSourceConfig.mode==='GOOGLE_APPS_SCRIPT_FREE'||!!extractSpreadsheetId(metricSourceConfig.url);
  const configured=discordOnline||sheetConfigured;
  const online=discordOnline||serverState==='ONLINE'||localState==='ONLINE';
@@ -8049,8 +7719,8 @@ function renderMetricSourceStatus(){
  const last=metricTsToDate(srv.lastSuccessAt)||metricTsToDate(srv.lastRunAt)||(metricSourceState.lastSync?new Date(metricSourceState.lastSync):null);
  const when=last?last.toLocaleString('pt-BR'):'—';
  const count=Number(metricSourceState.count||srv.rows||metricas.length)||0;
- let title=discordOnline?'DISCORD • CENTRAL DE MÉTRICAS':(sheetConfigured?'GOOGLE SHEETS • FONTE DIRETA':'FONTE NÃO CONFIGURADA');
- let desc=discordOnline?`Base sincronizada pelo High OS Bot • ${count} registros históricos • Google Sheets → Bot → Discord → High OS`:(sheetConfigured?'Fonte Google Sheets configurada':'Aguardando Central de Métricas do Discord');
+ let title=discordOnline?'HIGH OS • CENTRAL DE MÉTRICAS':(sheetConfigured?'GOOGLE SHEETS • FONTE DIRETA':'FONTE NÃO CONFIGURADA');
+ let desc=discordOnline?`${count} registros salvos no High OS (Firestore)`:(sheetConfigured?'Fonte Google Sheets configurada':'Nenhuma métrica salva ainda — importe em Métricas');
  if(failed)desc=metricSourceState.error||srv.error||'Fonte temporariamente indisponível';
  el.innerHTML=`<div><span class="metric-source-dot"></span><div><b>${esc(title)}</b><small>${esc(desc)}</small></div></div><span>${configured?`Última sincronização: ${esc(when)}<br>COLETAS • 14H · 16H · 21H · 23H`:'AUTOMÁTICO'}</span>`;
 }
@@ -8216,7 +7886,7 @@ function renderMetricQuotaPanel(){
  const box=ensureMetricQuotaPanel()||document.getElementById('metricQuotaPanel');if(!box)return;
  const online=metricOrigem==='DISCORD';
  box.className='metric-quota-panel'+(online?'':' bloqueado');
- box.innerHTML=`<div class="mq-head"><b>MÉTRICAS • DISCORD</b><span>${online?'fonte oficial online':'fonte oficial indisponível'}</span></div><div class="mq-foot"><span>${metricas.length.toLocaleString('pt-BR')} registros carregados • Apps Script → bot (PC) → Discord → High OS</span><button type="button" id="metricSyncNow">ATUALIZAR AGORA</button></div>`;
+ box.innerHTML=`<div class="mq-head"><b>MÉTRICAS • DISCORD</b><span>${online?'fonte oficial online':'fonte oficial indisponível'}</span></div><div class="mq-foot"><span>${metricas.length.toLocaleString('pt-BR')} registros carregados • Firestore (espelho mensal)</span><button type="button" id="metricSyncNow">ATUALIZAR AGORA</button></div>`;
  document.getElementById('metricSyncNow')?.addEventListener('click',async()=>{const btn=document.getElementById('metricSyncNow');if(btn){btn.disabled=true;btn.textContent='ATUALIZANDO...'}try{await loadMetrics({force:true})}catch(e){alert('Não foi possível atualizar as métricas: '+e.message)}finally{if(btn){btn.disabled=false;btn.textContent='ATUALIZAR AGORA'}}});
 }
 
@@ -8299,7 +7969,8 @@ let metricOrigem='';
 let metricMesesCarregados=new Set();
 
 function metricMesDe(data=''){                       // 'dd/mm/aaaa' -> 'aaaa-mm'
- const m=String(data||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+ const iso=String(data||'').match(/^(\d{4})-(\d{2})-\d{2}/);if(iso)return `${iso[1]}-${iso[2]}`;
+ const m=String(normalizeMetricDate(data)||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 
  return m?`${m[3]}-${m[2]}`:'';
 
@@ -8346,18 +8017,39 @@ n++}
 
 /* Grava um documento por mes alterado. Substitui persistMetricRows no
    fluxo novo; a funcao antiga continua no arquivo para compatibilidade. */
+/* V18 - sem o bot, as metricas moram no espelho mensal do Firestore:
+   highos/data/metricas_mensais/AAAA-MM = um documento por mes. Gravar
+   mescla com o que ja existe (importacao parcial nao apaga o resto do mes)
+   e so escreve o mes cuja assinatura mudou. */
+const metricasMensaisCol=collection(db,'highos','data','metricas_mensais');
+function mesclarLinhasMetricas(base=[],novas=[]){
+ const m=new Map();
+ const chave=r=>alvesNorm(r.group||'').replace(/\s+/g,'')+'|'+r.data;
+ for(const r of [...base,...novas]){if(!r?.group||!r?.data)continue;const k=chave(r);const a=m.get(k);m.set(k,{group:a?.group||r.group,data:r.data,slots:{...(a?.slots||{}),...(r.slots||{})}})}
+ return [...m.values()];
+}
 async function salvarEspelhoMensal(rows=[],sheet=''){
- // V12 Discord Storage: métricas permanecem na Google Sheets.
- // O bot High OS lê a planilha diretamente; não replicar no Firestore.
- metricasCache=Array.isArray(rows)?rows.slice():[];
+ let gravados=0;
+ for(const [mes,linhas] of agruparPorMes(rows)){
+  const ref=doc(metricasMensaisCol,mes);
+  const atual=await getDoc(ref);
+  const antes=atual.exists()?expandirLinhas(atual.data().linhas||[]):[];
+  const todas=mesclarLinhasMetricas(antes,linhas);
+  const assinatura=assinaturaMes(todas);
+  if(atual.exists()&&atual.data().assinatura===assinatura)continue;
+  await setDoc(ref,{linhas:compactarLinhas(todas),assinatura,total:todas.length,origem:sheet||'IMPORTACAO',updatedAt:serverTimestamp(),updatedBy:currentUser?.email||''});
+  gravados++;
+ }
  metricSourceState={...metricSourceState,lastSync:Date.now()};
- return {gravados:0,source:'GOOGLE_SHEETS'};
+ return {gravados,source:'FIRESTORE'};
 }
 
-/* Le o espelho mensal. Usado quando o CSV nao esta disponivel. */
+/* Le o espelho mensal (todos os meses, ou so os pedidos). */
 async function lerEspelhoMensal(meses=[]){
- // Legado Firestore desativado: métricas vêm diretamente da Google Sheets.
- return [];
+ const docs=meses.length
+  ?(await Promise.all(meses.map(m=>getDoc(doc(metricasMensaisCol,m))))).filter(d=>d.exists())
+  :(await getDocs(metricasMensaisCol)).docs;
+ return docs.flatMap(d=>expandirLinhas(d.data().linhas||[]));
 }
 
 function aplicarLinhasMetricas(rows=[],origem=''){
@@ -8384,23 +8076,23 @@ async function loadMetrics({force=false}={}){
   await loadMetricSourceConfig().catch(()=>{});
   await carregarTransferenciasMetricas();
   try{
-   const remote=await metricTimeout(highOsDiscordRequest('/v1/metrics'),15000,'métricas do Discord');
-   if(!Array.isArray(remote?.rows)||!remote.rows.length)throw new Error('Snapshot de métricas vazio no Discord.');
-   aplicarLinhasMetricas(remote.rows,'DISCORD');
-   metricSourceState={...metricSourceState,status:'DISCORD / APPS SCRIPT',lastSync:remote.receivedAt||null,count:remote.rows.length,activeCount:activeMetricRows().length,error:''};
+   const linhas=await metricTimeout(lerEspelhoMensal(),15000,'métricas do Firestore');
+   if(!linhas.length)throw new Error('Nenhuma métrica salva no High OS ainda.');
+   aplicarLinhasMetricas(linhas,'FIRESTORE');
+   metricSourceState={...metricSourceState,status:'HIGH OS • FIRESTORE',lastSync:Date.now(),count:linhas.length,activeCount:activeMetricRows().length,error:''};
    renderMetricSourceStatus();
    metricsLoaded=true;
-   return remote;
+   return {rows:linhas,source:'firestore'};
   }catch(e){
    // Fallback para a planilha só quando ela estiver ativada como fonte
-   // (Métricas > Fonte de métricas). Padrão: somente Paradise via bot.
+   // (Métricas > Fonte de métricas). Padrão: espelho mensal do Firestore.
    try{
     if(metricSourceConfig.planilhaAtiva!==true)throw new Error('planilha desativada como fonte (somente Paradise)');
     const direct=await metricTimeout(readMetricsWithoutPopup(),15000,'leitura direta da planilha');
     if(!Array.isArray(direct?.rows)||!direct.rows.length)throw new Error('Planilha sem métricas reconhecíveis.');
     const rows=direct.rows.map(metricSnapshot);
     aplicarLinhasMetricas(rows,'GOOGLE_SHEETS_FALLBACK');
-    metricSourceState={...metricSourceState,status:'GOOGLE SHEETS • FALLBACK',lastSync:Date.now(),count:rows.length,activeCount:activeMetricRows().length,error:'Discord: '+(e?.message||String(e)),sheet:direct.sheet||metricSourceConfig.sheet||''};
+    metricSourceState={...metricSourceState,status:'GOOGLE SHEETS • FALLBACK',lastSync:Date.now(),count:rows.length,activeCount:activeMetricRows().length,error:'Firestore: '+(e?.message||String(e)),sheet:direct.sheet||metricSourceConfig.sheet||''};
     renderMetricSourceStatus();
     metricsLoaded=true;
     return {rows,source:'google_sheets_fallback',sheet:direct.sheet||''};
@@ -9361,13 +9053,7 @@ async function saveMetricImport(){
  const rows=parseMetricImport($('#metricImportText')?.value||'');
 if(!rows.length){alert('Nenhuma linha válida. Use um cabeçalho como: Group;Data;18:00;18:30;19:00;...');
 return}
- try{const batch=writeBatch(db);
-rows.forEach(r=>{const existing=metricas.find(x=>alvesNorm(x.group||'')===alvesNorm(r.group)&&normalizeMetricDate(x.data||x.date)===normalizeMetricDate(r.data));r={...r,
-slots:{...metricSlots(existing||{}),
-...r.slots}};r=metricSnapshot(r);const id=(r.group+'_'+r.data).replace(/[^a-zA-Z0-9_-]/g,'_');batch.set(doc(db,'highos','data','metricas',id),{...r,
-updatedAt:serverTimestamp(),
-updatedBy:currentUser.email},{merge:true})});
-await batch.commit();
+ try{await salvarEspelhoMensal(rows,'IMPORTACAO');
 await addDoc(histCol,{sessionId:currentSessionId||'',
 tipo:'IMPORTACAO_METRICAS',
 descricao:`${rows.length} registro(s) importado(s) com horários flexíveis`,
@@ -11046,38 +10732,8 @@ const MECHANIC02_REQUEST_CONFIG_20261019={
 // no bot do Discord. Só uma sessão autorizada ADMIN pode realizar a gravação.
 // Nunca cria Groups ausentes e não reverte edições posteriores à migração.
 async function persistirSolicitacaoMecanicas20261019(docs=[]){
- /* Ajuste da S2 feito no bot; os Groups da S3 ja nascem com as receitas. */
- if(MODO_FIRESTORE)return {updated:false};
- if(String(currentProfile?.role||'').toUpperCase()!=='ADMIN'||!currentUser)return {updated:false};
- const groups=['IlegalMechanic02','IlegalMechanic01'].filter(group=>
-  docs.some(d=>String(d.data()?.group||d.id).toLowerCase()===group.toLowerCase()));
- if(!groups.length)return {updated:false};
- let updated=false;
- for(const group of groups){
-  // Consulta sempre o registro vivo antes de fazer patch (cache pode estar antigo).
-  const old=await lerFichaFaccao(group);
-  if(old.solicitacaoMecanica20261019===true)continue;
-  const p=old.perfilTecnico||{},c=p.craft||{},f=p.farm||{};
-  const receitas=mergeRecipeLists(Array.isArray(c.receitas)?c.receitas:[],MECHANIC_REQUEST_RECIPES_20261019);
-  const perfilTecnico={...p,craft:{...c,ativo:true,receitas}};
-  const patch={perfilTecnico,solicitacaoMecanica20261019:true};
-  if(group==='IlegalMechanic02'){
-   const cfg=MECHANIC02_REQUEST_CONFIG_20261019;
-   const items=new Map((Array.isArray(f.itens)?f.itens:[]).map(x=>[String(x.spawn||'').toLowerCase(),{...x}]));
-   for(const spawn of cfg.itensFarm){
-    const prev=items.get(spawn)||{};
-    items.set(spawn,{...prev,spawn,nome:ITEM_META[spawn]?.nome||prev.nome||spawn,
-      imagem:ITEM_META[spawn]?.imagem||prev.imagem||'',qtd:cfg.faixaFarm,
-      detalhe:'Coleta de '+cfg.faixaFarm+' unidades',origem:'FARM DA SOLICITAÇÃO'});
-   }
-   perfilTecnico.craft={...perfilTecnico.craft,cds:cfg.craft,nome:c.nome||'Mecânica Ilegal'};
-   perfilTecnico.farm={...f,cds:cfg.farm,itens:[...items.values()]};
-   patch.beneficios={...(old.benefits||{}),craft:cfg.craft,farm:cfg.farm,garagemVipBlip:cfg.garagemVipBlip};
-  }
-  await discordFactionPatch(group,patch);
-  updated=true;
- }
- return {updated};
+ /* Ajuste da S2 que era feito no bot; os Groups da S3 ja nascem com as receitas. */
+ return {updated:false};
 }
 
 const GROUP_EXTRA_RECIPES={
@@ -17235,7 +16891,7 @@ document.querySelectorAll('.nav-item[data-page="metricas"]').forEach(b=>b.addEve
 setTimeout(()=>{try{rh15Render()}catch(e){console.warn('[RH]',e)}},0);
 
 /* ===== HIGH OS V14.6 · DIÁRIO OPERACIONAL =====
-   Agenda do dia = a mesma do post "📅 AGENDA DO DIA" do bot (/v1/agenda):
+   Agenda do dia = cronograma salvo no Firestore (cronograma_operacional):
    cronograma padrão do Ilegal + eventos do Discord + extras/reagendados.
    Cruza com os registros feitos no Discord (diario_operacional) para mostrar
    o que já foi realizado, o que está acontecendo agora e o que ficou pendente. */
@@ -17250,14 +16906,12 @@ function dgDiaLongo(date){const d=new Date(date+'T12:00:00');return d.toLocaleDa
 function dgShift(date,n){const d=new Date(date+'T12:00:00');d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 
 async function dgCarregar(date){
- let agenda=[],fonte='Bot do Discord',erroAgenda='';
- const [ag,regs]=await Promise.allSettled([highOsDiscordRequest('/v1/agenda?date='+encodeURIComponent(date)),highOsStoreList('diario_operacional')]);
- if(ag.status==='fulfilled'&&ag.value?.ok){agenda=ag.value.items||[];fonte=ag.value.source||fonte}
- else{erroAgenda=ag.reason?.message||'';
-  /* bot ainda sem a rota nova: usa só o cronograma extra salvo */
-  try{const sch=await highOsStoreList('cronograma_operacional');const day=diaryWeekday(date);
-   agenda=sch.filter(x=>x.active!==false&&(!x.date||x.date===date)&&dgNorm(x.day)===dgNorm(day)).map(x=>({time:x.time,name:x.name,type:x.type||'geral',typeLabel:DG_LABEL[x.type]||'ATIVIDADE',durationMinutes:x.durationMinutes||15,extraordinary:x.extraordinary}));fonte='Cronograma extra (bot sem /v1/agenda)'}catch(_){}
- }
+ let agenda=[],fonte='Cronograma do High OS',erroAgenda='';
+ /* V18: sem bot, a agenda vem so do cronograma salvo no Firestore. */
+ const [sch,regs]=await Promise.allSettled([highOsStoreList('cronograma_operacional'),highOsStoreList('diario_operacional')]);
+ if(sch.status==='fulfilled'){const day=diaryWeekday(date);
+  agenda=sch.value.filter(x=>x.active!==false&&(!x.date||x.date===date)&&dgNorm(x.day)===dgNorm(day)).map(x=>({time:x.time,name:x.name,type:x.type||'geral',typeLabel:DG_LABEL[x.type]||'ATIVIDADE',durationMinutes:x.durationMinutes||15,extraordinary:x.extraordinary}));}
+ else erroAgenda=sch.reason?.message||'';
  const registros=regs.status==='fulfilled'?regs.value.filter(x=>String(x.date||'')===date).sort((a,b)=>String(a.time||'').localeCompare(String(b.time||''))):[];
  agenda.sort((a,b)=>String(a.time||'').localeCompare(String(b.time||'')));
  /* liga cada atividade ao registro feito no Discord */
@@ -17304,7 +16958,7 @@ ${tot?`<ol class="dg-timeline">${D.agenda.map((a,i)=>`<li class="dg-item st-${a.
  ${a.reg?`<div class="dg-result">${a.reg.winner?`<span>🏅 <b>${esc(a.reg.winner)}</b></span>`:''}${a.reg.prize?`<span>🎁 ${esc(a.reg.prize)}</span>`:''}${a.reg.quantity?`<span>Qtd. ${esc(a.reg.quantity)}</span>`:''}${a.reg.result?`<span class="txt">${esc(a.reg.result)}</span>`:''}<span class="by">registrado por ${esc(a.reg.createdByName||'staff')}${a.reg.time?` às ${esc(a.reg.time)}`:''}</span></div>`:''}
  </div>
  <div class="dg-status">${{feito:'<span class="dg-pill ok">✓ REALIZADO</span>',agora:'<span class="dg-pill live">● AGORA</span>',pendente:'<span class="dg-pill warn">SEM REGISTRO</span>',agendado:'<span class="dg-pill">AGENDADO</span>'}[a.st]}</div>
-</li>`).join('')}</ol>`:`<div class="placeholder"><b>▦</b><h3>NADA NA AGENDA DESTA DATA</h3><p>${D.erroAgenda?esc(D.erroAgenda):'O bot não tem atividades programadas para este dia.'}</p></div>`}
+</li>`).join('')}</ol>`:`<div class="placeholder"><b>▦</b><h3>NADA NA AGENDA DESTA DATA</h3><p>${D.erroAgenda?esc(D.erroAgenda):'Nenhuma atividade no cronograma para este dia.'}</p></div>`}
 </section>
 ${D.avulsos.length?`<section class="dg-card"><header><b>Registros fora da agenda</b><small>Feitos no Discord sem atividade correspondente no cronograma</small></header><div class="dg-avulsos">${D.avulsos.map((r,i)=>`<article style="--i:${i}"><div class="t">${esc(r.time||'—')}</div><div><b>${esc(r.title||'Registro')}</b><small>${esc(String(r.type||'geral').toUpperCase())}${r.winner?' · 🏅 '+esc(r.winner):''}${r.prize?' · 🎁 '+esc(r.prize):''}${r.createdByName?' · por '+esc(r.createdByName):''}</small>${r.result?`<p>${esc(r.result)}</p>`:''}</div></article>`).join('')}</div></section>`:''}`;
 }
@@ -17475,14 +17129,8 @@ async function carregarAnunciosLivres(){
   if(f&&f.anuncioDiscordStatus&&f.anuncioDiscordStatus!==antes){
    const rec={group,...f.anuncioDiscordStatus};
    try{await highOsStorePut('anuncios_livres',group,rec);anunciosLivresMap.set(group.toLowerCase(),rec)}
-   catch(e){alert('Marcado nesta tela, mas não foi salvo no bot: '+(e.message||e))}
+   catch(e){alert('Marcado nesta tela, mas não foi salvo: '+(e.message||e))}
   }}}
-async function postarAnuncioLivre(f){
- if(!f)throw new Error('Group não encontrado');
- const imagens=[f.imagemAnuncio,...(Array.isArray(f.discordImageUrls)?f.discordImageUrls:[])].filter(u=>/^https:\/\//i.test(String(u||'')));
- return highOsDiscordRequest('/v1/anuncios/livre',{method:'POST',body:JSON.stringify({group:f.group,text:availableAnnouncementText(f),imageUrls:imagens})});
-}
-{const _deps=painelDepsV14;painelDepsV14=function(){return {..._deps(),postarAnuncio:f=>postarAnuncioLivre(f)}}}
 {const _lf=loadFaccoes;loadFaccoes=async function(...a){const r=await _lf.apply(this,a);carregarAnunciosLivres();return r}}
 setTimeout(()=>{if(currentUser)carregarAnunciosLivres()},1500);
 

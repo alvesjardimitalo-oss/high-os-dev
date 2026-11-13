@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>High OS · Tirar o painel do bot (Firestore)</title>
+<title>High OS · Última cópia do bot antes de excluir</title>
 <style>
   :root{--bg:#07060b;--panel:#141019;--line:#33283b;--purple:#8d35ff;--text:#f7f4fb;--muted:#a79db6;--ok:#50f5a0;--err:#ff5b76;--warn:#ffcf5c}
   *{box-sizing:border-box}
@@ -30,8 +30,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Tirar o painel do bot</h1>
-  <p class="sub">Copia do bot (PC) para o Firestore tudo o que o painel usa e, no fim, vira a chave: o painel passa a gravar no Firestore e funciona com o PC desligado. Rode <b>com o bot ligado</b>, logado como ADMIN. Pode rodar de novo quantas vezes quiser: só sobrescreve com o que está no bot.</p>
+  <h1>Última cópia do bot antes de excluir</h1>
+  <p class="sub">O painel não usa mais o bot do Discord (V18). Antes de excluir o bot, rode esta página <b>uma vez com o bot ligado</b>, logado como ADMIN: ela copia para o Firestore os dados, as <b>métricas</b> e a <b>agenda semanal</b> que só existiam no bot. Pode rodar de novo: só sobrescreve com o que está no bot. Depois de excluir o bot, esta página deixa de ter uso.</p>
 
   <div class="card">
     <h2>1 · ENTRAR</h2>
@@ -58,26 +58,25 @@
   </div>
 
   <div class="card">
-    <h2>4 · VIRAR A CHAVE</h2>
-    <p class="mut" style="margin:0">Depois da cópia, o painel de todo mundo passa a usar o Firestore no próximo login (ou F5). Para voltar ao bot, use o outro botão.</p>
-    <div style="margin-top:12px"><button id="virar" disabled>PAINEL NO FIRESTORE</button><button id="voltar" class="sec" disabled>VOLTAR PARA O BOT</button></div>
+    <h2>4 · MARCAR COMO MIGRADO</h2>
+    <p class="mut" style="margin:0">Marca no Firestore que a cópia terminou (o painel só avisa no console se essa marca faltar).</p>
+    <div style="margin-top:12px"><button id="virar" disabled>MARCAR MIGRAÇÃO CONCLUÍDA</button></div>
     <div id="stVirar"></div>
   </div>
 </div>
 
-<script src="../assets/api-config.js?v=3"></script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
-import { fichaDoBot, semIndefinidos, caminhoDoEscopo, WEBHOOK_OK } from '../assets/modules/fonte-dados.js?v=1.0.0';
+import { fichaDoBot, semIndefinidos, caminhoDoEscopo, WEBHOOK_OK } from '../assets/modules/fonte-dados.js?v=1.1.0';
 
 const firebaseConfig={apiKey:'AIzaSyBKtl3rCA9Id1RDMwGch-yi4hxAs83DraU',authDomain:'high-os.firebaseapp.com',projectId:'high-os',storageBucket:'high-os.firebasestorage.app',messagingSenderId:'471862600170',appId:'1:471862600170:web:ff55af6f7e808ff393d293'};
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const msg=(alvo,cls,html)=>$(alvo).innerHTML=`<div class="verdict ${cls}">${html}</div>`;
-$('#api').value=String(window.HIGH_OS_API_URL||'').replace(/\/+$/,'');
+$('#api').value='https://desktop-a2oor0c.taile5cb57.ts.net';
 
 /* Escopos guardados no bot que o painel le. sessoes_usuario fica de fora:
    sao sessoes antigas de login, so ocupariam espaco. */
@@ -103,8 +102,8 @@ $('#entrar').onclick=async()=>{
    return msg('#stEntrar','err',`<b>${esc(email)}</b> não é ADMIN ativo no Firebase. Só ADMIN faz a migração.`);
   $('#ident').textContent=email;
   try{const w=await getDoc(doc(db,'highos','data','config','webhooks'));if(w.exists()){$('#whE').value=w.data().entregas||'';$('#whR').value=w.data().recolhidas||''}}catch{}
-  try{const f=await getDoc(doc(db,'highos','fonte_dados'));msg('#stVirar','',`Hoje o painel usa: <b>${f.exists()&&f.data().fonte==='firestore'?'FIRESTORE':'BOT'}</b>.`)}catch{}
-  ['#salvarWh','#copiar','#virar','#voltar'].forEach(s=>$(s).disabled=false);
+  try{const f=await getDoc(doc(db,'highos','fonte_dados'));msg('#stVirar','',`Migração: <b>${f.exists()&&f.data().fonte==='firestore'?'JÁ MARCADA':'AINDA NÃO MARCADA'}</b>.`)}catch{}
+  ['#salvarWh','#copiar','#virar'].forEach(s=>$(s).disabled=false);
   msg('#stEntrar','ok','Pronto. Siga os passos 2, 3 e 4.');
  }catch(e){msg('#stEntrar','err','Não entrou: '+esc(e.message))}
 };
@@ -146,19 +145,47 @@ $('#copiar').onclick=async()=>{
    for(const x of rows){try{await gravar(caminhoDoEscopo(sc),x.id,{...(x.data||{})});ok++}catch(e){f.push(x.id+': '+(e.code||e.message))}}
    linha(sc,rows.length,ok,f);totalFalhas+=f.length;
   }
-  msg('#stCopiar',totalFalhas?'warn':'ok',totalFalhas?`Cópia terminada com <b>${totalFalhas}</b> falha(s) (veja a tabela). Itens que falharam ficam só no bot; o resto já está no Firestore.`:'Cópia completa. Agora vire a chave no passo 4.');
+  // Metricas: o bot guardava o historico; vao para o espelho mensal
+  {let rows=[];const f=[];let ok=0;
+   try{rows=((await bot('/v1/metrics')).rows||[])}catch(e){f.push('leitura: '+e.message)}
+   const porMes=new Map();
+   for(const r of rows){const g=String(r.group||'').trim(),d=dataBr(r.data||r.date),sl=r.slots||{};if(!g||!d)continue;
+    const mes=d.slice(6,10)+'-'+d.slice(3,5);if(!porMes.has(mes))porMes.set(mes,new Map());
+    const k=g.toLowerCase()+'|'+d,m=porMes.get(mes),a=m.get(k);m.set(k,{g,d,s:{...(a?.s||{}),...sl}})}
+   for(const [mes,m] of porMes){
+    try{const ref=doc(db,'highos','data','metricas_mensais',mes);const atual=await getDoc(ref);
+     const mapa=new Map((atual.exists()?atual.data().linhas||[]:[]).map(x=>[String(x.g).toLowerCase()+'|'+x.d,x]));
+     for(const [k,x] of m){const a=mapa.get(k);mapa.set(k,{g:x.g,d:x.d,s:{...(a?.s||{}),...x.s}})}
+     const linhas=[...mapa.values()];let soma=0,n=0;for(const x of linhas)for(const v of Object.values(x.s||{})){soma+=Number(v)||0;n++}
+     await setDoc(ref,{linhas,assinatura:`${linhas.length}:${n}:${soma}`,total:linhas.length,origem:'BOT',updatedAt:serverTimestamp(),updatedBy:user.email});ok++}
+    catch(e){f.push(mes+': '+(e.code||e.message))}}
+   linha('Métricas ('+rows.length+' linhas → meses)',porMes.size,ok,f);totalFalhas+=f.length}
+  // Agenda semanal: o bot montava a agenda do dia; vira cronograma_operacional
+  {const f=[];let ok=0,total=0;const hoje=new Date();
+   const DIAS=['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
+   for(let i=0;i<7;i++){const d=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate()+i);
+    const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,dia=DIAS[d.getDay()];
+    let itens=[];try{itens=((await bot('/v1/agenda?date='+iso)).items||[])}catch(e){f.push(dia+': '+e.message);continue}
+    for(const x of itens){if(x.extraordinary)continue;total++;
+     const id=idSeguro(dia+'_'+String(x.time||'').replace(':','h')+'_'+String(x.name||'atividade').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'-'));
+     try{await gravar(['highos','data','cronograma_operacional'],id,{day:dia,time:x.time||'',name:x.name||'Atividade',type:x.type||'geral',durationMinutes:Number(x.durationMinutes)||15,active:true,origem:'BOT'});ok++}
+     catch(e){f.push(id+': '+(e.code||e.message))}}}
+   linha('Agenda semanal → cronograma',total,ok,f);totalFalhas+=f.length}
+  msg('#stCopiar',totalFalhas?'warn':'ok',totalFalhas?`Cópia terminada com <b>${totalFalhas}</b> falha(s) (veja a tabela). Itens que falharam ficam só no bot; não exclua o bot antes de resolver.`:'Cópia completa. Marque no passo 4 — depois disso o bot pode ser excluído.');
  }catch(e){msg('#stCopiar','err','Parou: '+esc(e.message)+'<br>O bot está ligado? O endereço está certo?')}
  finally{$('#copiar').disabled=false}
 };
 
+function dataBr(v){const x=String(v??'').trim();let m=x.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+ if(m){let y=+m[3];if(y<100)y+=2000;return `${String(+m[1]).padStart(2,'0')}/${String(+m[2]).padStart(2,'0')}/${y}`}
+ m=x.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);return m?`${String(+m[3]).padStart(2,'0')}/${String(+m[2]).padStart(2,'0')}/${m[1]}`:''}
 async function marcar(fonte){
  try{
   await setDoc(doc(db,'highos','fonte_dados'),{fonte,updatedAt:serverTimestamp(),updatedBy:user.email});
-  msg('#stVirar','ok',fonte==='firestore'?'Feito: o painel agora usa o <b>FIRESTORE</b>. Quem estiver com ele aberto precisa dar F5.':'Feito: o painel voltou a usar o <b>BOT</b>.');
+  msg('#stVirar','ok','Feito: migração marcada como concluída.');
  }catch(e){msg('#stVirar','err','Não gravou: '+esc(e.code||e.message)+' — as regras novas do Firebase já foram publicadas?')}
 }
-$('#virar').onclick=()=>{if(confirm('Virar o painel para o Firestore agora?'))marcar('firestore')};
-$('#voltar').onclick=()=>{if(confirm('Voltar o painel para o bot?'))marcar('bot')};
+$('#virar').onclick=()=>{if(confirm('Marcar a migração como concluída?'))marcar('firestore')};
 </script>
 </body>
 </html>

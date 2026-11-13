@@ -1,12 +1,10 @@
 /* ============================================================
    FONTE DOS DADOS DO PAINEL
    ------------------------------------------------------------
-   Ate a V16 o painel gravava tudo no bot (PC de casa) e o Firestore
-   era so contingencia. Com o PC desligado o painel ficava somente
-   leitura. Agora a fonte e o Firestore (plano gratuito do Firebase)
-   e o bot vira opcional: se estiver ligado, o painel ainda usa ele
-   para metricas da Paradise, agenda do diario e a copia do anuncio
-   de faccao livre; se estiver desligado, nada trava.
+   Ate a V16 o painel gravava tudo no bot (PC de casa). Desde a V18 o
+   bot do Discord foi removido: a unica fonte e o Firestore (plano
+   gratuito do Firebase). fichaDoBot so serve a ultima copia
+   (tools/migrar-bot-firestore.html).
 
    Os anuncios de entrega e recolhimento no Discord do Ilegal saiam
    do bot pelo webhook do canal. Agora o proprio painel posta no
@@ -24,15 +22,7 @@ const TITULO = {
   RECOLHIMENTO: 'RECOLHIMENTO DE FACÇÃO — HIGH ILEGAL'
 };
 
-/**
- * 'bot' ou 'firestore' forcados em api-config.js; senao 'auto': o painel
- * le highos/fonte_dados, que a ferramenta de migracao grava ao terminar.
- * Assim o painel so troca de fonte depois que os dados ja foram copiados.
- */
-export function fonteDosDados(win = globalThis) {
-  const v = String(win?.HIGH_OS_FONTE || 'auto').toLowerCase();
-  return v === 'bot' || v === 'firestore' ? v : 'auto';
-}
+/** Marcador highos/fonte_dados: 'firestore' depois da ultima copia do bot. */
 export function fonteDoMarcador(dados) {
   return dados && String(dados.fonte || '').toLowerCase() === 'firestore' ? 'firestore' : 'bot';
 }

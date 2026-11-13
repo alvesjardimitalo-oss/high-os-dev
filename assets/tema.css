@@ -362,8 +362,6 @@ button:disabled{opacity:.45 !important}
 .season-badge.vazia b{color:var(--yellow,#ffc93c)}
 .season-ask-list button.atual{border-color:var(--lime-dim,#6f9e35)}
 .season-ask-list button.atual small{color:var(--lime,#a0f040)}
-.fila-badge.offline{border-style:dashed}
-.fila-badge.offline b{color:var(--yellow,#ffc93c)}
 
 /* =====================================================================
    V13 · QGs DA SEASON
