@@ -326,6 +326,11 @@ service cloud.firestore {
       allow read: if canView('faccoes');
       allow write: if isAdmin();
     }
+    // Webhooks dos baus (geral/admin x Ilegal/Logs High) de cada Group.
+    // Webhook e senha de canal: so ADMIN le e grava.
+    match /highos/data/webhooks_baus/{group} {
+      allow read, write: if isAdmin();
+    }
     // Webhooks do Discord do Ilegal: so quem entrega/recolhe Group le.
     match /highos/data/config/webhooks {
       allow read: if canEdit('faccoes');

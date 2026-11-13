@@ -27,7 +27,12 @@ export const ITENS_BLIP = [
  { id: 'atm', nome: 'ATM', campos: ['atm'] },
  { id: 'arena', nome: 'Arena', campos: ['arena'] },
  { id: 'bar', nome: 'Bar', campos: ['bar'] },
- { id: 'telao', nome: 'Telão', campos: ['telaoCds'] }
+ { id: 'telao', nome: 'Telão', campos: ['telaoCds'] },
+ /* interior por teleporte (ex.: HP ilegal no lab de Fort Zancudo) e NPCs */
+ { id: 'teleporte', nome: 'Teleporte', campos: ['tpEntrada', 'tpSaida'], tp: true },
+ { id: 'npc1', nome: 'NPC 1', campos: ['npc1'], npc: 'npc1Nome' },
+ { id: 'npc2', nome: 'NPC 2', campos: ['npc2'], npc: 'npc2Nome' },
+ { id: 'npc3', nome: 'NPC 3', campos: ['npc3'], npc: 'npc3Nome' }
 ];
 
 /* O que funciona na abertura da season, para QG que ainda nao tem
@@ -55,6 +60,13 @@ export function estadoItem(q = {}, id) {
 
 export function linhaItem(q = {}, item) {
  const c = q.cds || {};
+ if (item.tp) {
+  const e = txt(c.tpEntrada) || '—', s = txt(c.tpSaida) || '—';
+  return [`- Criar teleporte (TP) de ida e volta, com permissão para o Group ${txt(q.group) || '—'}:`, '',
+   `- Entrada: ${e} leva até ${s}`, '',
+   `- Saída: ${s} leva até ${e}`].join('\n');
+ }
+ if (item.npc) return `- Blip com NPC ${txt(c[item.npc]) || item.nome}: ${txt(c[item.campos[0]]) || '—'}`;
  if (item.par) {
   const [b, s] = item.campos.map(k => txt(c[k]));
   return `- Blip de ${item.nome}: Blip ${b || '—'} Spawn ${s || '—'}`;
@@ -121,7 +133,9 @@ export function fichaFuncionando(q = {}, { beneficios = {}, perfilTecnico = {} }
    : { vagas: '', blip: '', spawn: '', veiculos: '' },
   /* telao tem modelo, postit e caixas que nao vem da planilha: so liga a
      cds quando instalado e nunca apaga um telao ja configurado. */
-  telao: ligado('telao') ? { ...(op.telao || {}), ativo: true, cds: v('telaoCds') } : (op.telao || { ativo: false, cds: '' })
+  telao: ligado('telao') ? { ...(op.telao || {}), ativo: true, cds: v('telaoCds') } : (op.telao || { ativo: false, cds: '' }),
+  teleporte: ligado('teleporte') ? { entrada: v('tpEntrada'), saida: v('tpSaida') } : { entrada: '', saida: '' },
+  npcs: ['npc1', 'npc2', 'npc3'].filter(id => ligado(id) && v(id)).map(id => ({ nome: v(id + 'Nome'), cds: v(id) }))
  };
  return { beneficios: ben, perfilTecnico: p, cds: v('local') || v('farm') };
 }

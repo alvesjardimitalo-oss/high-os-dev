@@ -52,3 +52,17 @@ test('ficha leva so o que funciona e preserva receitas e telao', () => {
  const g = fichaFuncionando({ ...qg, instalados: ['farm', 'craft', 'garagemPublica', 'garagemVip'] });
  assert.equal(g.perfilTecnico.operacional.garagens.length, 2);
 });
+
+test('teleporte de ida e volta e NPCs no modelo da cidade', async () => {
+ const m = await import('../assets/modules/blips-qg.js');
+ const q = { group: 'IlegalMedic02', cds: { tpEntrada: '2570.81,4667.97,34.07,325.99', tpSaida: '-1922.29,3749.64,-99.65,87.88',
+  npc1: '-1868.41,3749.82,-99.85,93.55', npc1Nome: 'Médico Comerciante de Órgãos' }, instalados: ['teleporte', 'npc1'] };
+ const t = m.textoSolicitacao(q, ['teleporte', 'npc1']);
+ assert.match(t, /TP\) de ida e volta, com permissão para o Group IlegalMedic02/);
+ assert.match(t, /Entrada: 2570\.81,4667\.97,34\.07,325\.99 leva até -1922\.29/);
+ assert.match(t, /Saída: -1922\.29,3749\.64,-99\.65,87\.88 leva até 2570\.81/);
+ assert.match(t, /NPC Médico Comerciante de Órgãos: -1868\.41/);
+ const f = m.fichaFuncionando(q);
+ assert.equal(f.perfilTecnico.operacional.teleporte.saida, '-1922.29,3749.64,-99.65,87.88');
+ assert.deepEqual(f.perfilTecnico.operacional.npcs, [{ nome: 'Médico Comerciante de Órgãos', cds: '-1868.41,3749.82,-99.85,93.55' }]);
+});

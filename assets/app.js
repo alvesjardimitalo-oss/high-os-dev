@@ -30,8 +30,9 @@ import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/bli
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.0';
 import * as fila from './modules/fila-bot.js?v=13.1.0';
-import * as qgsUi from './modules/qgs-ui.js?v=13.4.0';
-import * as blipsQg from './modules/blips-qg.js?v=1.0.0';
+import * as qgsUi from './modules/qgs-ui.js?v=13.5.0';
+import * as conf from './modules/conferencia.js?v=1.0.0';
+import * as blipsQg from './modules/blips-qg.js?v=1.1.0';
 import * as solCraft from './modules/solicitacao-craft.js?v=1.0.0';
 import * as catCraft from './modules/catalogo-craft.js?v=13.1.0';
 import * as catUi from './modules/catalogo-ui.js?v=13.1.0';
@@ -2193,7 +2194,193 @@ function ligarQgs(){
  box.querySelectorAll('[data-qg-blips]').forEach(b=>b.onclick=()=>abrirBlipsQg(b.dataset.qgBlips));
  box.querySelectorAll('[data-qg-craft]').forEach(b=>b.onclick=()=>abrirCraftQg(b.dataset.qgCraft));
  box.querySelectorAll('[data-qg-sol-craft]').forEach(b=>b.onclick=()=>abrirSolicitacaoCraft([]));
+ box.querySelectorAll('[data-qg-conferencia]').forEach(b=>b.onclick=()=>abrirConferencia());
 }
+
+/* ------------------------------------------------------------
+   CONFERÊNCIA BÁSICA E WEBHOOKS DOS BAÚS
+   O que a planilha "Documento das facções" fazia, agora no painel:
+   conferência de craft, rota, baú e garagem pública de cada QG (fica
+   no próprio QG da season) e os 4 webhooks dos baús de cada Group
+   (highos/data/webhooks_baus, só ADMIN lê: webhook é senha de canal).
+   O teste roda no navegador e só CONSULTA o Discord, não posta nada.
+   ------------------------------------------------------------ */
+const PLANILHA_DOC_FACCOES='1MBVzWMFrAzIhYlT7-ZgWZEAoJLjPn3JeZdmHyRcZf2A';
+const PLANILHA_WEBHOOKS_PRIVADA='1yuxVqkTgE53QB0CuQtD6-JYj6ZWom-ej8A09yeSuVkQ';
+let webhooksBaus={};
+
+async function carregarWebhooksBaus(){
+ webhooksBaus={};
+ if(!isAdmin())return webhooksBaus;
+ const qs=await getDocs(collection(db,'highos','data','webhooks_baus'));
+ qs.forEach(d=>{webhooksBaus[String(d.id).toUpperCase()]=d.data()||{}});
+ return webhooksBaus;
+}
+
+function abrirConferencia(){
+ const pode=canEditModule('faccoes'), admin=isAdmin();
+ const modal=document.createElement('div');
+ modal.className='modal';
+ modal.innerHTML=`<div class="modal-card conf-modal">
+  <button class="modal-x" type="button" aria-label="Fechar">×</button>
+  <div class="eyebrow">QGs DA SEASON</div>
+  <h2 style="margin:4px 0 2px">Conferência e webhooks dos baús</h2>
+  <p class="page-subtitle" style="margin:0 0 12px">Craft, rota, baú e garagem pública de cada QG. ${admin?'Cada Group tem 2 baús (geral e admin) e cada baú posta no Discord do Ilegal e no de logs da High: 4 webhooks.':'Os webhooks só aparecem para ADMIN.'}</p>
+  <div class="conf-barra">
+   <input id="confBusca" placeholder="Buscar Group ou QG...">
+   ${admin?'<button type="button" class="mini-btn primaria" data-conf-testar>TESTAR WEBHOOKS</button>':''}
+   ${admin?'<button type="button" class="mini-btn" data-conf-importar>IMPORTAR DAS PLANILHAS</button>':''}
+   <span id="confStatus" class="conf-status"></span>
+  </div>
+  <div id="confTabela" class="conf-tabela-box"><div class="placeholder"><b>◆</b><h3>CARREGANDO...</h3></div></div>
+ </div>`;
+ document.body.appendChild(modal);
+ const fechar=()=>modal.remove();
+ modal.querySelector('.modal-x').onclick=fechar;
+ modal.onclick=e=>{if(e.target===modal)fechar()};
+ const status=t=>{const el=modal.querySelector('#confStatus');if(el)el.textContent=t};
+ let busca='';
+
+ const linhas=()=> (season.qgs||[]).filter(q=>String(q.group||'').trim())
+  .sort((a,b)=>(season.ordem?.get?.(String(a.group).toUpperCase())??999)-(season.ordem?.get?.(String(b.group).toUpperCase())??999));
+
+ function desenhar(){
+  const idx=conf.indiceWebhooks(webhooksBaus);
+  const lista=linhas().filter(q=>!busca||[q.group,q.local,q.setor].join(' ').toLowerCase().includes(busca));
+  const sel=(q,campo,valor)=>`<select data-conf="${esc(q.chave)}" data-campo="${campo}" ${pode?'':'disabled'}>
+    <option value="">—</option>${conf.OPCOES_CONF.map(o=>`<option${o===valor?' selected':''}>${o}</option>`).join('')}</select>`;
+  modal.querySelector('#confTabela').innerHTML=`<table class="conf-tabela"><thead><tr>
+   <th>GROUP</th><th>QG</th><th>CONFERIDO</th>${conf.ITENS_CONF.map(i=>`<th>${esc(i.nome.toUpperCase())}</th>`).join('')}
+   <th>PENDÊNCIA</th>${admin?'<th>WEBHOOKS</th><th>TESTE</th><th></th>':''}</tr></thead><tbody>
+   ${lista.map(q=>{
+    const c=conf.conferenciaDe(q), g=String(q.group).toUpperCase(), w=webhooksBaus[g]||{};
+    const n=conf.contarWebhooks(w);
+    const rep=conf.CAMPOS_WEBHOOK.some(k=>conf.repetidoEm(g,k.id,w[k.id],idx).length);
+    return `<tr>
+     <td><b>${esc(q.group)}</b><small>${esc(q.setor||'')}</small></td>
+     <td>${esc(q.local||'')}</td>
+     <td><select data-conf="${esc(q.chave)}" data-campo="conferido" ${pode?'':'disabled'}>
+      <option${c.conferido==='SIM'?' selected':''}>SIM</option><option${c.conferido!=='SIM'?' selected':''}>NÃO</option></select></td>
+     ${conf.ITENS_CONF.map(i=>`<td class="conf-st conf-${(c[i.id]||'vazio').toLowerCase()}">${sel(q,i.id,c[i.id])}</td>`).join('')}
+     <td><input data-conf="${esc(q.chave)}" data-campo="pendencia" value="${esc(c.pendencia)}" ${pode?'':'disabled'} placeholder="—"></td>
+     ${admin?`<td class="conf-wh ${n===4&&!rep?'ok':n?'meio':''}">${n}/4${rep?' <b title="Link repetido">⚠</b>':''}</td>
+      <td class="conf-teste ${/^OK/.test(w.teste?.texto||'')?'ok':w.teste?.texto?'falhou':''}" title="${esc(w.teste?.texto||'')}">${esc(w.teste?.texto?(w.teste.texto.length>60?w.teste.texto.slice(0,60)+'…':w.teste.texto):'—')}</td>
+      <td><button type="button" class="mini-btn" data-conf-wh="${esc(g)}">WEBHOOKS</button></td>`:''}
+    </tr>`}).join('')}
+  </tbody></table>`;
+  ligar();
+ }
+
+ async function salvarCampo(chave,campo,valor){
+  const q=(season.qgs||[]).find(x=>x.chave===chave);
+  if(!q)return;
+  const atual=conf.conferenciaDe(q);
+  status('Salvando...');
+  try{
+   await salvarQg(fnsFila(),chave,{conferencia:{...atual,[campo]:valor,atualizadoPor:currentUser?.email||'',atualizadoEm:new Date().toISOString()}},currentUser?.email||'');
+   status('Salvo.');
+  }catch(e){status('');alert('Não salvou: '+e.message)}
+ }
+
+ function ligar(){
+  const box=modal.querySelector('#confTabela');
+  box.querySelectorAll('select[data-conf]').forEach(el=>el.onchange=async()=>{await salvarCampo(el.dataset.conf,el.dataset.campo,el.value);desenhar()});
+  box.querySelectorAll('input[data-conf]').forEach(el=>el.onchange=()=>salvarCampo(el.dataset.conf,el.dataset.campo,el.value.trim()));
+  box.querySelectorAll('[data-conf-wh]').forEach(b=>b.onclick=()=>editarWebhooks(b.dataset.confWh));
+ }
+
+ function editarWebhooks(g){
+  const w=webhooksBaus[g]||{}, baus=conf.nomesBaus(g);
+  const m2=document.createElement('div');
+  m2.className='modal';
+  m2.innerHTML=`<div class="modal-card qg-modal">
+   <button class="modal-x" type="button" aria-label="Fechar">×</button>
+   <div class="eyebrow">WEBHOOKS DOS BAÚS</div>
+   <h2 style="margin:4px 0 12px">${esc(g)}</h2>
+   ${['geral','admin'].map(b=>`<h4 style="margin:10px 0 6px">Baú ${esc(b==='geral'?baus.geral:baus.admin)}</h4>
+    ${conf.CAMPOS_WEBHOOK.filter(c=>c.bau===b).map(c=>`<label class="conf-wh-campo"><span>${c.servidor==='ILEGAL'?'Discord do Ilegal':'Discord de logs da High'}</span>
+     <input data-wh="${c.id}" value="${esc(w[c.id]||'')}" placeholder="https://discord.com/api/webhooks/..."></label>`).join('')}`).join('')}
+   <p id="whErros" class="conf-erros"></p>
+   <div class="modal-actions"><button type="button" class="btn-secondary" data-fechar>FECHAR</button>
+    <button type="button" class="btn-primary compact" data-salvar>SALVAR</button></div>
+  </div>`;
+  document.body.appendChild(m2);
+  const f2=()=>m2.remove();
+  m2.querySelector('.modal-x').onclick=f2; m2.querySelector('[data-fechar]').onclick=f2;
+  m2.querySelector('[data-salvar]').onclick=async ev=>{
+   const novo={};
+   m2.querySelectorAll('[data-wh]').forEach(i=>novo[i.dataset.wh]=i.value.trim());
+   const erros=conf.validarWebhooks(g,novo,webhooksBaus);
+   if(erros.length){m2.querySelector('#whErros').innerHTML=erros.map(esc).join('<br>');return}
+   ev.currentTarget.disabled=true;
+   try{
+    await setDoc(doc(db,'highos','data','webhooks_baus',g),{...novo,group:g,teste:null,
+     atualizadoPor:currentUser?.email||'',atualizadoEm:serverTimestamp()},{merge:true});
+    webhooksBaus[g]={...(webhooksBaus[g]||{}),...novo,teste:null};
+    f2(); desenhar();
+   }catch(e){ev.currentTarget.disabled=false;alert('Não salvou: '+e.message)}
+  };
+ }
+
+ async function testar(){
+  const btn=modal.querySelector('[data-conf-testar]');
+  btn.disabled=true;
+  try{
+   const idx=conf.indiceWebhooks(webhooksBaus);
+   const urls=Object.keys(idx).filter(u=>conf.WEBHOOK_RE.test(u));
+   const resp={};
+   for(let i=0;i<urls.length;i++){
+    status(`Consultando ${i+1} de ${urls.length} no Discord...`);
+    resp[urls[i]]=await conf.consultarWebhook(urls[i]);
+    await new Promise(r=>setTimeout(r,250));
+   }
+   status('Gravando resultado...');
+   let ok=0,falhas=0;
+   for(const [g,w] of Object.entries(webhooksBaus)){
+    const r=conf.avaliarTeste(g,w,resp,idx);
+    if(!r.texto)continue;
+    r.ok?ok++:falhas++;
+    const teste={texto:r.texto,em:new Date().toISOString(),por:currentUser?.email||''};
+    await setDoc(doc(db,'highos','data','webhooks_baus',g),{teste},{merge:true});
+    w.teste=teste;
+   }
+   status(`${ok} Group(s) com os 4 webhooks funcionando · ${falhas} com problema.`);
+   desenhar();
+  }catch(e){status('');alert('Teste interrompido: '+e.message)}
+  finally{btn.disabled=false}
+ }
+
+ async function importar(){
+  if(!confirm('Importar a conferência da planilha "Documento das facções" e os webhooks da sua planilha privada?\n\nO que estiver nas planilhas substitui o que está no painel para os mesmos Groups.'))return;
+  const btn=modal.querySelector('[data-conf-importar]');
+  btn.disabled=true;
+  try{
+   status('Conectando ao Google Planilhas...');
+   const token=await facSheetAuthorize();
+   const ler=(id,range)=>facSheetFetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`,{token});
+   const [c,w]=await Promise.all([ler(PLANILHA_DOC_FACCOES,"'Conferencia Basica'!A1:I60"),ler(PLANILHA_WEBHOOKS_PRIVADA,"'Webhooks dos Baús'!A1:H60")]);
+   const confs=conf.conferenciaDaPlanilha(c.values||[]), whs=conf.webhooksDaPlanilha(w.values||[]);
+   let nc=0,nw=0;
+   for(const q of linhas()){
+    const g=String(q.group).toUpperCase();
+    if(confs[g]){status(`Conferência de ${q.group}...`);
+     await salvarQg(fnsFila(),q.chave,{conferencia:{...confs[g],atualizadoPor:currentUser?.email||'',atualizadoEm:new Date().toISOString()}},currentUser?.email||'');nc++}
+    if(whs[g]){status(`Webhooks de ${q.group}...`);
+     await setDoc(doc(db,'highos','data','webhooks_baus',g),{...whs[g],group:g,atualizadoPor:currentUser?.email||'',atualizadoEm:serverTimestamp()},{merge:true});
+     webhooksBaus[g]={...(webhooksBaus[g]||{}),...whs[g]};nw++}
+   }
+   status(`Importado: conferência de ${nc} Group(s) e webhooks de ${nw}.`);
+   desenhar();
+  }catch(e){status('');alert('Não importou: '+e.message)}
+  finally{btn.disabled=false}
+ }
+
+ modal.querySelector('#confBusca').oninput=e=>{busca=e.target.value.trim().toLowerCase();desenhar()};
+ modal.querySelector('[data-conf-testar]')?.addEventListener('click',testar);
+ modal.querySelector('[data-conf-importar]')?.addEventListener('click',importar);
+ carregarWebhooksBaus().catch(e=>{console.warn('[WEBHOOKS] leitura:',e);status('Webhooks indisponíveis: '+(e.code||e.message))}).finally(desenhar);
+}
+
 
 /* ------------------------------------------------------------
    SOLICITACAO DE CRAFT E ROTA · padrao da cidade

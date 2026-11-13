@@ -37,6 +37,17 @@ export const CAMPOS_CDS=[
  ['telaoCds','Telão']
 ];
 
+/* Pontos que so alguns QGs tem (interior por teleporte, NPC de comercio).
+   Ficam fora da contagem "x de 20 coordenadas" para nao derrubar o
+   progresso das favelas comuns. Os nomes dos NPCs vao junto das CDS. */
+export const CAMPOS_EXTRAS=[
+ ['tpEntrada','Teleporte · entrada (rua)'],
+ ['tpSaida','Teleporte · saída (dentro)'],
+ ['npc1','NPC 1 · CDS'],['npc1Nome','NPC 1 · nome'],
+ ['npc2','NPC 2 · CDS'],['npc2Nome','NPC 2 · nome'],
+ ['npc3','NPC 3 · CDS'],['npc3Nome','NPC 3 · nome']
+];
+
 /* Minimo para um QG poder ser entregue. Sem farm e craft a favela nao
    funciona; o resto e beneficio. */
 export const ESSENCIAIS=['farm','craft','bau'];
@@ -125,6 +136,7 @@ export function qgsHtml({season,faccoes=[],esc,filtro={}}){
  <div class="qg-filtros">
   <input id="qgBusca" placeholder="Buscar favela, Group ou produto..." value="${esc(filtro.busca||'')}">
   <button type="button" class="mini-btn primaria" data-qg-sol-craft>SOLICITAR CRAFT E ROTA</button>
+  <button type="button" class="mini-btn" data-qg-conferencia>CONFERÊNCIA E WEBHOOKS</button>
   <select id="qgSetor">
    <option value="">TODOS OS SETORES</option>
    ${Object.keys(r.setores).sort().map(s=>`<option value="${esc(s)}"${s===fSetor?' selected':''}>${esc(s)} (${r.setores[s]})</option>`).join('')}
@@ -203,6 +215,13 @@ export function editorHtml(q,esc){
     </label>`).join('')}
   </div>
   <p class="qg-editor-ajuda">* essenciais: sem eles o QG não pode ser entregue.</p>
+  <div class="eyebrow" style="margin-top:14px">TELEPORTE E NPCs (só se o QG tiver)</div>
+  <div class="qg-editor-grade">
+   ${CAMPOS_EXTRAS.map(([k,rot])=>`<label>
+     <span>${esc(rot)}</span>
+     <input data-qg-cds="${k}" value="${esc(q.cds?.[k]||'')}" placeholder="${/Nome$/.test(k)?'Ex.: Médico Comerciante de Órgãos':'x, y, z, h'}">
+    </label>`).join('')}
+  </div>
  </div>`;
 }
 
