@@ -1271,7 +1271,7 @@ async function logout(reason='LOGOUT'){
  saindo=true;
  if(sessionTimer){clearInterval(sessionTimer);sessionTimer=null}
  try{await Promise.race([closeCurrentSession(reason).catch(()=>{}),new Promise(r=>setTimeout(r,3000))])}
- finally{try{await signOut(auth)}finally{saindo=false}}
+ finally{try{facSheetDropToken()}catch(e){}try{await signOut(auth)}finally{saindo=false}}
 }
 async function startOrResumeSession(user,profile){
  const email=String(user.email||'').toLowerCase(),
@@ -6832,7 +6832,7 @@ if(!$('#dLider').value.trim())return alert('Informe o líder (passaporte e nome)
 // Não altera o cadastro do outro ocupante se a autorização falhar.
 if(!facSheetAccessToken){
  try{await facSheetAuthorize()}catch(error){
-  return alert('Não foi possível autorizar a sincronização com a planilha. Entrega não iniciada.\n\n'+(error?.message||error));
+  return alert('Não foi possível autorizar a sincronização com a planilha. Entrega não iniciada.\n\n'+facSheetAuthErrorText(error));
  }
 }
 const pendentes=deliveryMissingData();
@@ -6855,7 +6855,7 @@ let trocaParaExecutar=null;
 // A planilha é a base de dados: salvar status/IDs realmente confirmados antes de registrar entrega.
 if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
 try{await dlvSaveVipSheet({fromDelivery:true,silent:true})}
-catch(error){return alert('A entrega não foi concluída: checklist VIP não pôde ser salvo na planilha. '+(error?.message||error))}
+catch(error){return alert('A entrega não foi concluída: checklist VIP não pôde ser salvo na planilha.\n\n'+(error?.code?facSheetAuthErrorText(error):(error?.message||error)))}
 if(trocaParaExecutar){
  try{await recolherParaTrocaV14(trocaParaExecutar.f,trocaParaExecutar.faccao,trocaParaExecutar.justificativa)}
  catch(err){return alert('Não foi possível recolher a facção anterior: '+err.message)}
@@ -12218,7 +12218,23 @@ const FAC_SHEET_GID=1572584288;
 
 const FAC_SHEET_SCOPE='https://www.googleapis.com/auth/spreadsheets';
 
-let facSheetAccessToken='',
+/* Autorização da planilha guardada nesta aba por ~55 min (o token do Google vale 1 h).
+   Assim recarregar a página ou fazer várias entregas não abre a janela do Google toda vez. */
+const FAC_SHEET_TOKEN_KEY='highos_facsheet_token_v1';
+function facSheetLoadToken(){try{const x=JSON.parse(sessionStorage.getItem(FAC_SHEET_TOKEN_KEY)||'null');
+ if(x&&x.token&&Number(x.exp)>Date.now())return x.token;sessionStorage.removeItem(FAC_SHEET_TOKEN_KEY)}catch(e){}return ''}
+function facSheetStoreToken(token){try{token?sessionStorage.setItem(FAC_SHEET_TOKEN_KEY,JSON.stringify({token,exp:Date.now()+55*60*1000})):sessionStorage.removeItem(FAC_SHEET_TOKEN_KEY)}catch(e){}}
+function facSheetDropToken(){facSheetAccessToken='';facSheetStoreToken('')}
+/* Mensagem clara para cada falha da janela do Google. */
+function facSheetAuthErrorText(error){
+ const code=String(error?.code||'');
+ if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request')return 'A janela do Google foi fechada antes de terminar.\n\nClique de novo e, na janela do Google:\n1. Escolha a sua conta (a mesma do High OS).\n2. Se aparecer "O Google não verificou este app", clique em Avançado → Acessar.\n3. Marque a permissão de planilhas (Ver, editar...) e clique em Continuar.\n\nNão feche a janela até ela sumir sozinha.';
+ if(code==='auth/popup-blocked')return 'O navegador bloqueou a janela do Google.\n\nPermita pop-ups para este site (ícone na barra de endereço) e clique de novo.';
+ if(code==='auth/network-request-failed')return 'Sem conexão com o Google. Verifique a internet e tente de novo.';
+ if(code==='auth/user-mismatch'||code==='auth/account-exists-with-different-credential')return 'Use a mesma conta Google com que você entrou no High OS.';
+ return String(error?.message||error||'Erro desconhecido.');
+}
+let facSheetAccessToken=facSheetLoadToken(),
 facSheetTitle='',
 facSheetRowMap=new Map(),
 facSheetPendingDiffs=[],
@@ -12295,15 +12311,14 @@ async function facSheetAuthorize(){
  if(facSheetAccessToken)return facSheetAccessToken;
 if(!currentUser)throw new Error('Entre no High OS antes de conectar a planilha.');
 
- facSheetProvider.setCustomParameters({prompt:'consent',
-login_hint:currentUser.email||''});
+ facSheetProvider.setCustomParameters({login_hint:currentUser.email||''});
 
  const result=await signInWithPopup(auth,facSheetProvider),
 cred=GoogleAuthProvider.credentialFromResult(result),
 token=cred?.accessToken;
 
  if(!token)throw new Error('O Google não retornou autorização de edição da planilha.');
-facSheetAccessToken=token;
+facSheetAccessToken=token;facSheetStoreToken(token);
 facSheetRenderStatus('online','Google Sheets conectado. Alterações feitas no High OS serão enviadas automaticamente.');
 try{await facSheetResolveTitle(token)}catch(e){console.warn('[PLANILHAS] Documento das Facções indisponível; BLIPS COORDENADAS pode continuar normalmente:',e)}
 return token;
@@ -12320,7 +12335,7 @@ if(body!==null){opt.headers['Content-Type']='application/json';
 opt.body=JSON.stringify(body)}
  const r=await fetch(url,opt);
 const p=await r.json().catch(()=>({}));
-if(!r.ok){if(r.status===401||r.status===403)facSheetAccessToken='';
+if(!r.ok){if(r.status===401||r.status===403)facSheetDropToken();
 throw new Error(p?.error?.message||`Google Sheets HTTP ${r.status}`)}return p;
 
 }
@@ -12467,7 +12482,7 @@ async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true,overwriteFi
   return inconsistencies.length===0;
  }catch(error){
   console.warn('[BLIPS COORDENADAS] Falha de sincronização:',error);
-  if(/HTTP (401|403)|unauthorized|invalid authentication credentials/i.test(String(error?.message||error)))facSheetAccessToken='';
+  if(/HTTP (401|403)|unauthorized|invalid authentication credentials/i.test(String(error?.message||error)))facSheetDropToken();
   if(!quiet)alert('Não foi possível atualizar a aba BLIPS COORDENADAS: '+(error?.message||error));
   return false;
  }
