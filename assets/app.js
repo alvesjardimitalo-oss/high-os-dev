@@ -6926,8 +6926,7 @@ createdBy:currentUser.email};
     await lote.commit();entregaId=ref.id;
    }catch(e){console.warn('[ENTREGAS] registro da entrega não gravado:',e)}
   }
-  const sheetSynced=await syncGroupsToOfficialSheet([deliveredGroup],{quiet:true,previousGroups:[f]});
-
+  // Entrega já está salva no High OS: fecha a janela na hora e só depois manda para a planilha.
   $('#newDeliveryModal').classList.add('hidden');
   const previousIds=new Set(previous.map(d=>d.id));
   entregas=entregas.map(d=>previousIds.has(d.id)?{...d,status:'RECOLHIDA',recolhidaPor:currentUser.email}:d);
@@ -6937,6 +6936,11 @@ createdBy:currentUser.email};
   queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('entregas',Date.now());
   cacheEscrever('entregas_resumo',entregas);
   renderFaccoes();renderDeliveries();renderOrganizations();
+  // Planilha com limite de 30 s: se o Google demorar, a entrega não fica "pendurada".
+  const sheetSynced=await Promise.race([
+   syncGroupsToOfficialSheet([deliveredGroup],{quiet:true,previousGroups:[f]}).catch(e=>{console.warn('[PLANILHAS] entrega:',e);return false}),
+   new Promise(r=>setTimeout(()=>r(false),30000))
+  ]);
   alert(sheetSynced?'Entrega registrada no High OS e sincronizada com as planilhas.':'Entrega registrada no High OS, mas a planilha NÃO foi sincronizada. Conecte o Google Sheets e sincronize novamente.');
 
 
