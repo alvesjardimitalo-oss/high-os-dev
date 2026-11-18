@@ -26,7 +26,8 @@ import { getFirestore,
  arrayUnion } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
 import * as fonte from './modules/fonte-dados.js?v=1.1.0';
 import { situacaoGroup, ocupado as ocupadoV14, inconsistencias } from './modules/ocupacao.js';
-import { syncBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=1.3.0';
+import { compareBlipsCoordinates, valuesFor as blipsValuesFor } from './modules/blips-sheet-sync.js?v=2.0.0';
+import { planejarConferencia, resolvidasPorCelula, linkCelula, ORIGENS as PEND_ORIGENS } from './modules/planilha-pendencias.js?v=1.0.0';
 import { montarLinhaDoTempo, atribuirLinhas, coletaDoDia, rotuloColeta, msDe, chaveGroup, descartarColetasVazias } from './modules/metricas-motor.js?v=14.8.2';
 import { painelOcupacaoHtml, painelDisponiveisHtml, ligarPaineis, abrirRevisao } from './modules/painel-ocupacao.js?v=14.7.1';
 import * as qgsUi from './modules/qgs-ui.js?v=13.5.0';
@@ -54,7 +55,8 @@ sheetsProvider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly')
 
 const facSheetProvider=new GoogleAuthProvider();
 
-facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+/* 18/11/2026 - SOMENTE LEITURA: o High OS não tem mais permissão de editar planilhas. */
+facSheetProvider.addScope('https://www.googleapis.com/auth/spreadsheets.readonly');
 
 const $=s=>document.querySelector(s), loginView=$('#loginView'),deniedView=$('#deniedView'),appView=$('#appView'),sessionArea=$('#sessionArea');
 
@@ -1271,7 +1273,7 @@ async function logout(reason='LOGOUT'){
  saindo=true;
  if(sessionTimer){clearInterval(sessionTimer);sessionTimer=null}
  try{await Promise.race([closeCurrentSession(reason).catch(()=>{}),new Promise(r=>setTimeout(r,3000))])}
- finally{try{facSheetDropToken()}catch(e){}try{await signOut(auth)}finally{saindo=false}}
+ finally{try{facSheetDropToken()}catch(e){}try{pendParar()}catch(e){}try{await signOut(auth)}finally{saindo=false}}
 }
 async function startOrResumeSession(user,profile){
  const email=String(user.email||'').toLowerCase(),
@@ -1582,6 +1584,7 @@ userPhotoEl=$('#userPhoto');
   if(initialPage==='dashboard')await loadDashboardConfig();
   await iniciarSeason();
   renderSeasonTopo();
+  pendIniciar();
   if(needsSegments&&(!highOsEmergencyReadOnly||canViewModule('faccoes'))){
    try{await loadFaccoes()}catch(e){
     if(!highOsEmergencyReadOnly)throw e;
@@ -1764,7 +1767,7 @@ async function syncApprovedActionPayout({name,officialMin,officialMax,proposedMi
  '\nVariação: '+candidate.delta.toLocaleString('pt-BR')+
  '\nBUFF: '+candidate.oldBuff+' → '+candidate.nextBuff+
  '\nNERF: '+candidate.oldNerf+' → '+candidate.nextNerf+
- '\n\nO máximo é recalculado por FÓRMULA: a estimativa acima NÃO é uma edição direta do valor máximo. Confirmo a alteração dos ajustes de BUFF/NERF na aba VALORES AÇÃO BLIPADA?';
+ '\n\nO máximo é recalculado por FÓRMULA na planilha. O High OS NÃO altera a planilha: a aprovação fica registrada e o BUFF/NERF entra em PENDÊNCIAS DA PLANILHA para você atualizar à mão. Registrar a aprovação?';
  if(!confirm(proposal))return {cancelled:true};
  // A confirmação pode levar tempo: validar novamente as células antes do POST.
  const fresh=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token});
@@ -1785,22 +1788,13 @@ async function syncApprovedActionPayout({name,officialMin,officialMax,proposedMi
   if(typeof input==='string'&&input.startsWith('='))
    throw Error('BUFF/NERF recebeu uma fórmula durante a confirmação. Nenhuma célula foi alterada.');
  }
- const updates=[['buff',checked.nextBuff],['nerf',checked.nextNerf]].map(([key,num])=>({
-   updateCells:{start:{sheetId:checked.sheetId,rowIndex:checked[key].rowIndex,columnIndex:checked[key].columnIndex},
-     rows:[{values:[{userEnteredValue:{numberValue:num}}]}],fields:'userEnteredValue'}
- }));
- await facSheetFetch(root+':batchUpdate',{method:'POST',body:{requests:updates},token});
- const after=await facSheetFetch(root+'/values/'+range+'?valueRenderOption=UNFORMATTED_VALUE',{token});
- const pos=checked.min;
- const calculatedMinimum=Number(after.values?.[pos.rowIndex]?.[pos.columnIndex]);
- const calculatedMaximum=Number(after.values?.[checked.max.rowIndex]?.[checked.max.columnIndex]);
- const verifiedMaximum=Number.isFinite(calculatedMaximum)&&
-  Math.abs(calculatedMaximum-checked.proposedMax)<=Math.max(2,Math.abs(checked.proposedMax)*.005);
- const verified=Number.isFinite(calculatedMinimum)&&Math.abs(calculatedMinimum-value)<2;
- const {extractPublishedActionPrizes}=await import('./modules/acoes-sheet-sync.js?v=3');
- const actual=extractPublishedActionPrizes(after.values||[]).find(x=>
-  x.name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase()===
-  name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase());
+ // 18/11/2026 - SOMENTE LEITURA: em vez de gravar, registra a pendência das duas células.
+ const pend=[['BUFF',checked.buff,checked.oldBuff,checked.nextBuff],['NERF',checked.nerf,checked.oldNerf,checked.nextNerf]]
+  .filter(([,,oldV,nextV])=>String(oldV??'')!==String(nextV??''))
+  .map(([campo,pos,oldV,nextV])=>({origem:'ACAO',aba:checked.sheetName||'VALORES AÇÃO BLIPADA',sheetId:DLV_VIP_SHEET_ID,sheetGid:checked.sheetId,
+   group:name,campo,celula:planilhaColuna(pos.columnIndex)+(pos.rowIndex+1),naPlanilha:String(oldV??''),noHighOS:String(nextV??''),tipo:'ALTERAR',
+   obs:'Aprovação de prêmio: mínimo '+Math.round(checked.previousMin).toLocaleString('pt-BR')+' → '+value.toLocaleString('pt-BR')+' (máx. estimado '+Math.round(checked.proposedMax).toLocaleString('pt-BR')+').'}));
+ const registro=await pendenciasRegistrarCelulas(pend);
  let audited=false;
  try{
   await addDoc(histCol,{tipo:'AJUSTE_PREMIACAO_ACAO',usuario:currentUser.email,
@@ -1808,18 +1802,15 @@ async function syncApprovedActionPayout({name,officialMin,officialMax,proposedMi
    taxaLavagem:tax,winChanceAssumida:Number.isFinite(winChance)?winChance:null,
    premioMinAnterior:checked.previousMin,premioMaxAnterior:checked.previousMax,
    premioMinProposto:value,premioMaxEstimado:checked.proposedMax,
-   premioMaxConfirmado:Number.isFinite(calculatedMaximum)?calculatedMaximum:null,
    buffAnterior:checked.oldBuff,nerfAnterior:checked.oldNerf,
    buffNovo:checked.nextBuff,nerfNovo:checked.nextNerf,
    origem:source,motivo:String(reason).slice(0,600),
-   planilha:'VALORES AÇÃO BLIPADA',data:serverTimestamp()});
+   planilha:'VALORES AÇÃO BLIPADA',pendentePlanilha:true,data:serverTimestamp()});
   audited=true;
- }catch(error){console.warn('[AÇÕES] Atualização feita, mas falha ao registrar auditoria:',error)}
- return {updated:true,verified,verifiedMaximum,audited,previous:checked.previousMin,
-  previousMax:checked.previousMax,next:value,estimatedMax:checked.proposedMax,
-  actualMin:verified&&actual?actual.min:null,actualMax:verified&&actual?actual.max:null,
-  actualBuff:verified&&actual?actual.buff:null,actualNerf:verified&&actual?actual.nerf:null,
-  publicationPending:true};
+ }catch(error){console.warn('[AÇÕES] Aprovação registrada, mas falha na auditoria:',error)}
+ return {updated:false,pendente:true,pendencias:pend.length,pendenciasSalvas:registro.ok,audited,
+  previous:checked.previousMin,previousMax:checked.previousMax,next:value,estimatedMax:checked.proposedMax,
+  buff:checked.nextBuff,nerf:checked.nextNerf,oldBuff:checked.oldBuff,oldNerf:checked.oldNerf,cells:pend.map(p=>p.campo+' '+p.celula)};
 }
 
 function activateAppPage(page){
@@ -1839,7 +1830,7 @@ if(page==='receitas')setTimeout(async()=>{await carregarCatalogo();renderCatalog
 if(['dashboard','metricas','faccoes','organizacoes','disponiveis','entregas','group-profile','group-settings','org-profile'].includes(page)&&!faccoesLoaded)setTimeout(()=>loadFaccoes().catch(e=>console.warn('[FACÇÕES] lazy-load falhou',e)),0);
 if(['dashboard','metricas'].includes(page)&&!metricsLoaded)setTimeout(async()=>{try{if(!faccoesLoaded)await loadFaccoes();await loadMetrics()}catch(e){console.warn('[MÉTRICAS] lazy-load falhou',e)}},0);
 if(page==='planejador')carregarPlanejadorMissoes().then(()=>setTimeout(()=>window.HighMissionPlanner?.activate?.(),60)).catch(err=>{console.error('[PLANEJADOR]',err);const box=document.querySelector('#page-planejador');if(box)box.insertAdjacentHTML('afterbegin','<div class="placeholder"><h3>NÃO FOI POSSÍVEL CARREGAR O PLANEJADOR</h3><p>Recarregue a página.</p></div>')});
-if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=28').then(mod=>mod.mountActionPlanner({
+if(page==='planejador-acoes')import('./modules/acoes-planejador-ui.js?v=29').then(mod=>mod.mountActionPlanner({
  onApproveAction:canEditModule('economia')?syncApprovedActionPayout:null,
  onReadReference:actionReadReference,onSaveReference:canEditModule('economia')?actionSaveReference:null,
  onRejectAction:canEditModule('economia')?actionRejectProposal:null,
@@ -3918,7 +3909,7 @@ const activeIds=new Set(activeDeliveries.map(d=>d.id));
 entregas=entregas.map(d=>activeIds.has(d.id)?{...d,status:'RECOLHIDA',recolhimento:clonePlain(recolhimento),recolhidaPor:currentUser.email}:d);
 queryFreshAt.set('faccoes',Date.now());queryFreshAt.set('organizacoes',Date.now());queryFreshAt.set('entregas',Date.now());
 renderFaccoes();renderOrganizations();renderDeliveries();
-closeRecollectModal();closeGroupProfilePage();alert(sheetSynced?'Facção recolhida com sucesso. Histórico, organização e evidências registrados.':'Facção recolhida no High OS. Planilha PENDENTE: conecte o Google Sheets e sincronize novamente.')}catch(err){alert('Erro ao recolher: '+err.message)}finally{recollectInFlight=false;if(submitBtn)submitBtn.disabled=false}});
+closeRecollectModal();closeGroupProfilePage();alert(sheetSynced?'Facção recolhida com sucesso. Histórico, organização e evidências registrados; a planilha já está igual ao High OS.':'Facção recolhida no High OS. A planilha não é alterada pelo painel: veja em PENDÊNCIAS DA PLANILHA o que atualizar à mão.')}catch(err){alert('Erro ao recolher: '+err.message)}finally{recollectInFlight=false;if(submitBtn)submitBtn.disabled=false}});
 
 function snapshot(o){if(!o)return null;
 const x={...o};
@@ -4940,7 +4931,7 @@ usuario:currentUser?.email||'',
 data:serverTimestamp()});
 const currentGroup={...previousGroup,perfilTecnico:mut.perfilTecnico,beneficios:mut.beneficios};
 const synced=await syncBlipsGroups([currentGroup],{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup([previousGroup],[currentGroup])});
-if(!synced)facSheetRenderStatus('warn','Solicitação aplicada ao Group; BLIPS COORDENADAS pendente de sincronização.');
+if(!synced)facSheetRenderStatus('warn','Solicitação aplicada ao Group no High OS; BLIPS COORDENADAS: veja PENDÊNCIAS DA PLANILHA.');
 }}
    await archiveTechnicalRequest({tipo,
 titulo:$('#reqAssunto')?.value||requestTypeName(tipo),
@@ -6328,55 +6319,31 @@ async function dlvSaveVipSheet({fromDelivery=false,silent=false}={}){
  if(!edits.size)return true;
  if(dlvSheetCache.source!=='original')throw Error('Conecte o Google Sheets e atualize a leitura da planilha antes de salvar o checklist.');
  const token=await facSheetAuthorize();
- // Buscar o quadro do Group no momento da gravação, nunca usar posições antigas.
+ /* 18/11/2026 - SOMENTE LEITURA: lê o quadro do Group agora, compara e
+    registra em PENDÊNCIAS DA PLANILHA o que você precisa preencher à mão. */
  const url='https://sheets.googleapis.com/v4/spreadsheets/'+DLV_VIP_SHEET_ID;
  const fresh=await facSheetFetch(url+'/values/'+encodeURIComponent("'BENEFICIOS FACÇÕES'!A:AU")+'?valueRenderOption=FORMATTED_VALUE',{token});
- let found=dlvVipRead(group,[{name:'BENEFICIOS FACÇÕES',grid:{cells:fresh.values||[]}}]);
+ const found=dlvVipRead(group,[{name:'BENEFICIOS FACÇÕES',grid:{cells:fresh.values||[]}}]);
+ const base={origem:'VIP',aba:'BENEFICIOS FACÇÕES',sheetId:DLV_VIP_SHEET_ID,sheetGid:DLV_VIP_SHEET_GID,group};
+ const pend=[];
  if(!Object.keys(found).length){
-  // Novo Group: acrescentar uma linha no fim do inventário, sem tocar na tabela antiga.
-  const rows=fresh.values||[];
-  const header=rows.findIndex(row=>{const g=(row||[]).findIndex(x=>dlvFold(x)==='group');return g>=0&&dlvFold(row[g+3])==='pacote vip org'});
-  if(header<0)throw Error('Tabela de inventário VIP não encontrada. Nenhuma célula foi alterada.');
-  const col=(rows[header]||[]).findIndex(x=>dlvFold(x)==='group');
-  let dest=header+1;
-  while(dest<rows.length&&rows[dest]?.[col])dest++;
-  if((rows[dest]||[]).some(x=>x!==null&&x!==undefined&&x!==''))throw Error('Linha final do inventário está ocupada. Nenhuma célula foi alterada.');
-  const meta=await facSheetFetch(url+'?fields=sheets.properties(sheetId,gridProperties(rowCount))',{token});
-  const properties=(meta.sheets||[]).find(x=>Number(x.properties?.sheetId)===DLV_VIP_SHEET_GID)?.properties;
-  if(!properties)throw Error('Aba de benefícios não disponível para cadastro do novo Group.');
-  const creation=[];
-  if(dest>=Number(properties.gridProperties?.rowCount||0))creation.push({appendDimension:{sheetId:DLV_VIP_SHEET_GID,dimension:'ROWS',length:5}});
-  creation.push({copyPaste:{source:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:dest-1,endRowIndex:dest,startColumnIndex:col,endColumnIndex:col+42},
-   destination:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:dest,endRowIndex:dest+1,startColumnIndex:col,endColumnIndex:col+42},pasteType:'PASTE_NORMAL',pasteOrientation:'NORMAL'}});
-  creation.push({repeatCell:{range:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:dest,endRowIndex:dest+1,startColumnIndex:col,endColumnIndex:col+42},cell:{},fields:'userEnteredValue'}});
-  creation.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:dest,columnIndex:col},rows:[{values:[{userEnteredValue:{stringValue:group}}]}],fields:'userEnteredValue'}});
-  creation.push({setBasicFilter:{filter:{range:{sheetId:DLV_VIP_SHEET_GID,startRowIndex:header,endRowIndex:dest+1,startColumnIndex:col,endColumnIndex:col+42}}}});
-  await facSheetFetch(url+':batchUpdate',{token,method:'POST',body:{requests:creation}});
-  const reloaded=await facSheetFetch(url+'/values/'+encodeURIComponent("'BENEFICIOS FACÇÕES'!A:AU")+'?valueRenderOption=FORMATTED_VALUE',{token});
-  found=dlvVipRead(group,[{name:'BENEFICIOS FACÇÕES',grid:{cells:reloaded.values||[]}}]);
-  if(!Object.keys(found).length)throw Error('Falha ao cadastrar o novo Group no inventário VIP.');
- }
- const requests=[];
- for(const [label,value] of edits){
+  pend.push({...base,campo:'GROUP',celula:'',naPlanilha:'',noHighOS:group,tipo:'ADICIONAR',
+   obs:'Group não existe no inventário VIP. Acrescente uma linha no fim da tabela e preencha: '+
+    [...edits].map(([l,v])=>l+' = '+(v||'(vazio)')).join(' • ')});
+ }else for(const [label,value] of edits){
   const item=found[label];
   if(!item)throw Error('O campo '+label+' não existe no quadro '+group+'.');
   if(!Number.isInteger(item.row)||!Number.isInteger(item.col)||item.col<0)throw Error('Posição inválida para '+label);
-  const remote=String(item.value??'').trim(),old=baseline.get(label)||'';
+  const remote=String(item.value??'').trim();
   if(remote===value)continue;
-  if(remote!==old)throw Error('O campo '+label+' do '+group+' foi alterado na planilha por outra pessoa. Atualize a planilha e revise antes de salvar.');
-  requests.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:item.row,columnIndex:item.col},
-   rows:[{values:[{userEnteredValue:{stringValue:value}}]}],fields:'userEnteredValue'}});
+  pend.push({...base,campo:label,celula:planilhaColuna(item.col)+(item.row+1),naPlanilha:remote,noHighOS:value,tipo:value?'ALTERAR':'LIMPAR',obs:''});
  }
- if(requests.length){
-  const last=found['ATUALIZADO EM'],by=found['ATUALIZADO POR'];
-  if(last)requests.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:last.row,columnIndex:last.col},rows:[{values:[{userEnteredValue:{stringValue:new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}}]}],fields:'userEnteredValue'}});
-  if(by)requests.push({updateCells:{start:{sheetId:DLV_VIP_SHEET_GID,rowIndex:by.row,columnIndex:by.col},rows:[{values:[{userEnteredValue:{stringValue:currentUser?.email||''}}]}],fields:'userEnteredValue'}});
-  await facSheetFetch(url+':batchUpdate',{token,method:'POST',body:{requests}});
- }
+ const registro=pend.length?await pendenciasRegistrarCelulas(pend):{ok:true};
  for(const [label,value] of edits){if(dlvCurrent.vip?.[label])dlvCurrent.vip[label].value=value;}
- dlvSheetCache={at:0,tabs:null,promise:null,error:'',source:''};
- if(!silent){await fillDeliveryFromGroup(group,{force:true});const fb=$('#dVipSheetFeedback');if(fb)fb.textContent='Checklist salvo no Google Sheets • '+requests.length+' campo(s) atualizado(s).'}
- return true;
+ if(!silent){const fb=$('#dVipSheetFeedback');if(fb)fb.textContent=!pend.length?'Checklist conferido: a planilha já está igual ao High OS.':
+  (registro.ok?'Checklist guardado no High OS • '+pend.length+' campo(s) para você atualizar na planilha (PENDÊNCIAS DA PLANILHA).':
+   'ATENÇÃO: '+pend.length+' campo(s) diferentes, mas a pendência não foi salva no Firebase: '+registro.erro)}
+ return registro.ok;
 }
 const DLV_ULTRA_PACKAGE_KEYS=new Set(['vipOrg','salario','chatFaccao','radio','garagemVip','bau','roupasFaccao','rotaExclusiva']);
 const dlvUltraStaffConfirmed=new Set();
@@ -6852,10 +6819,10 @@ let trocaParaExecutar=null;
   trocaParaExecutar={f,faccao,justificativa:just.trim()};
  }}
 
-// A planilha é a base de dados: salvar status/IDs realmente confirmados antes de registrar entrega.
+// 18/11/2026: o painel só lê a planilha; o checklist confirmado vira pendência para atualização manual.
 if(!$('#dData').value.trim())$('#dData').value=new Date().toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'});
 try{await dlvSaveVipSheet({fromDelivery:true,silent:true})}
-catch(error){return alert('A entrega não foi concluída: checklist VIP não pôde ser salvo na planilha.\n\n'+(error?.code?facSheetAuthErrorText(error):(error?.message||error)))}
+catch(error){return alert('A entrega não foi concluída: não consegui ler a planilha para conferir o checklist VIP.\n\n'+(error?.code?facSheetAuthErrorText(error):(error?.message||error)))}
 if(trocaParaExecutar){
  try{await recolherParaTrocaV14(trocaParaExecutar.f,trocaParaExecutar.faccao,trocaParaExecutar.justificativa)}
  catch(err){return alert('Não foi possível recolher a facção anterior: '+err.message)}
@@ -6941,7 +6908,7 @@ createdBy:currentUser.email};
    syncGroupsToOfficialSheet([deliveredGroup],{quiet:true,previousGroups:[f]}).catch(e=>{console.warn('[PLANILHAS] entrega:',e);return false}),
    new Promise(r=>setTimeout(()=>r(false),30000))
   ]);
-  alert(sheetSynced?'Entrega registrada no High OS e sincronizada com as planilhas.':'Entrega registrada no High OS, mas a planilha NÃO foi sincronizada. Conecte o Google Sheets e sincronize novamente.');
+  alert(sheetSynced?'Entrega registrada no High OS. A planilha já está igual ao High OS.':(facSheetAccessToken?'Entrega registrada no High OS. A planilha NÃO é alterada pelo painel: veja em PENDÊNCIAS DA PLANILHA o que atualizar à mão.':'Entrega registrada no High OS. Conecte o Google Sheets (somente leitura) para o painel conferir a planilha e listar o que atualizar.'));
 
 
  }catch(err){alert('Erro ao concluir entrega: '+err.message)}
@@ -12134,7 +12101,7 @@ b]){
     $('#movementModal')?.classList.add('hidden');
     closeGroupProfilePage();
     const pending=[];
-    if(!sheetOk)pending.push('planilha PENDENTE: reconecte o Google Sheets e sincronize');
+    if(!sheetOk)pending.push('planilha: atualizar à mão (veja PENDÊNCIAS DA PLANILHA)');
     if(!occupationSynced)pending.push('registro complementar de ocupação PENDENTE: publicar as novas regras do Firestore');
     alert(pending.length?'Operação concluída e auditada no High OS; '+pending.join('; ')+'.':'Operação concluída, auditada e planilhas sincronizadas.');
   }catch(e){
@@ -12220,7 +12187,7 @@ const FAC_SHEET_SPREADSHEET_ID='1MBVzWMFrAzIhYlT7-ZgWZEAoJLjPn3JeZdmHyRcZf2A';
 
 const FAC_SHEET_GID=1572584288;
 
-const FAC_SHEET_SCOPE='https://www.googleapis.com/auth/spreadsheets';
+const FAC_SHEET_SCOPE='https://www.googleapis.com/auth/spreadsheets.readonly';
 
 /* Autorização da planilha guardada nesta aba por ~55 min (o token do Google vale 1 h).
    Assim recarregar a página ou fazer várias entregas não abre a janela do Google toda vez. */
@@ -12321,9 +12288,9 @@ if(!currentUser)throw new Error('Entre no High OS antes de conectar a planilha.'
 cred=GoogleAuthProvider.credentialFromResult(result),
 token=cred?.accessToken;
 
- if(!token)throw new Error('O Google não retornou autorização de edição da planilha.');
+ if(!token)throw new Error('O Google não retornou autorização de leitura da planilha.');
 facSheetAccessToken=token;facSheetStoreToken(token);
-facSheetRenderStatus('online','Google Sheets conectado. Alterações feitas no High OS serão enviadas automaticamente.');
+facSheetRenderStatus('online','Google Sheets conectado em SOMENTE LEITURA. O High OS compara com a planilha e lista o que você precisa atualizar.');
 try{await facSheetResolveTitle(token)}catch(e){console.warn('[PLANILHAS] Documento das Facções indisponível; BLIPS COORDENADAS pode continuar normalmente:',e)}
 return token;
 
@@ -12331,6 +12298,8 @@ return token;
 async function facSheetFetch(url,{method='GET',
 body=null,
 token=''}={}){
+ // 18/11/2026: nenhuma gravação em planilha sai do High OS, em nenhum fluxo.
+ if(String(method).toUpperCase()!=='GET'||body!==null)throw new Error('High OS em SOMENTE LEITURA: nada é gravado na planilha. A alteração fica no High OS e entra em PENDÊNCIAS DA PLANILHA.');
  token=token||facSheetAccessToken;
 if(!token)throw new Error('PLANILHA_NAO_CONECTADA');
 const opt={method,
@@ -12469,95 +12438,241 @@ function blipsChangedFieldsByGroup(previousGroups=[],currentGroups=[]){
  }
  return changes;
 }
-async function syncBlipsGroups(rows=[],{onlyMissing=false,quiet=true,overwriteFieldsByGroup={}}={}){
+/* ===== 18/11/2026 · PLANILHAS EM SOMENTE LEITURA + PENDÊNCIAS =====
+   O High OS e o High OS Dev não gravam mais em nenhuma planilha.
+   Tudo o que muda no painel fica no Firebase; o painel lê a planilha,
+   compara e lista em PENDÊNCIAS DA PLANILHA o que o ADMIN atualiza à mão.
+   Quando a planilha passa a bater, a pendência some sozinha. */
+const pendCol=collection(db,'highos','data','pendencias_planilha');
+let pendencias=[],pendUnsub=null,pendUltimaContagem=null,pendConferindo=null,pendTimer=null,pendAvisouRegras=false;
+function planilhaColuna(index){let n=Number(index)+1,s='';while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s}
+function pendErroRegras(error){
+ const msg=String(error?.message||error||'');
+ if(/permission|insufficient/i.test(msg)&&!pendAvisouRegras){
+  pendAvisouRegras=true;
+  console.warn('[PENDÊNCIAS] Firestore recusou highos/data/pendencias_planilha. Publique o firestore.rules atualizado no Firebase Console.');
+ }
+ return msg;
+}
+async function pendGravar(gravar=[],resolver=[],motivo='CONFERENCIA_AUTOMATICA'){
+ const ops=[...gravar.map(p=>['set',p]),...resolver.map(id=>['ok',id])];
+ for(let i=0;i<ops.length;i+=400){
+  const batch=writeBatch(db);
+  for(const [tipo,x] of ops.slice(i,i+400)){
+   if(tipo==='set'){
+    const dados={...x};delete dados.id;
+    batch.set(doc(pendCol,x.id),{...dados,atualizadoEm:serverTimestamp(),atualizadoPor:currentUser?.email||''},{merge:true});
+   }else batch.set(doc(pendCol,x),{status:'RESOLVIDA',resolvidaEm:serverTimestamp(),resolvidaPor:motivo},{merge:true});
+  }
+  await batch.commit();
+ }
+}
+/* Diferenças vindas de uma comparação completa de uma origem (BLIPS / DOC_FACCOES):
+   abre o que está diferente e fecha o que voltou a bater dentro do escopo conferido. */
+async function pendAplicarConferencia(origem,novas=[],groups=null){
+ const snap=await getDocs(query(pendCol,where('origem','==',origem)));
+ const existentes=snap.docs.map(d=>({...d.data(),id:d.id}));
+ const {gravar,resolver}=planejarConferencia(existentes,novas.map(n=>({...n,origem})),{origem,groups});
+ await pendGravar(gravar,resolver);
+ return {abertas:novas.length,novas:gravar.length,resolvidas:resolver.length};
+}
+/* Pendências pontuais (checklist VIP, BUFF/NERF): só abre; a conferência de célula fecha. */
+async function pendenciasRegistrarCelulas(lista=[]){
+ if(!lista.length)return {ok:true,total:0};
+ try{
+  const origem=lista[0].origem;
+  const snap=await getDocs(query(pendCol,where('origem','==',origem)));
+  const {gravar}=planejarConferencia(snap.docs.map(d=>({...d.data(),id:d.id})),lista,{origem,groups:[]});
+  await pendGravar(gravar,[]);
+  pendAvisar(lista.length);
+  return {ok:true,total:lista.length};
+ }catch(error){return {ok:false,total:lista.length,erro:pendErroRegras(error)}}
+}
+async function pendConferirCelulas(token){
+ const abertas=(await getDocs(query(pendCol,where('status','==','PENDENTE')))).docs.map(d=>({...d.data(),id:d.id}))
+  .filter(p=>(p.origem==='VIP'||p.origem==='ACAO')&&p.celula&&p.sheetId);
+ let resolvidas=0;
+ const porPlanilha=new Map();
+ for(const p of abertas){if(!porPlanilha.has(p.sheetId))porPlanilha.set(p.sheetId,[]);porPlanilha.get(p.sheetId).push(p)}
+ for(const [sheetId,lista] of porPlanilha){
+  const chaves=[...new Set(lista.map(p=>p.aba+'!'+p.celula))];
+  const valores=new Map();
+  for(let i=0;i<chaves.length;i+=80){
+   const parte=chaves.slice(i,i+80);
+   const qs=parte.map(k=>{const [aba,cel]=[k.slice(0,k.lastIndexOf('!')),k.slice(k.lastIndexOf('!')+1)];return 'ranges='+encodeURIComponent("'"+aba.replace(/'/g,"''")+"'!"+cel)}).join('&');
+   const r=await facSheetFetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values:batchGet?valueRenderOption=FORMATTED_VALUE&'+qs,{token});
+   (r.valueRanges||[]).forEach((vr,j)=>valores.set(parte[j],String(vr?.values?.[0]?.[0]??'')));
+  }
+  const ok=resolvidasPorCelula(lista,valores);
+  if(ok.length){await pendGravar([],ok);resolvidas+=ok.length}
+ }
+ return resolvidas;
+}
+function pendDocDiffs(records=[],groups=[]){
+ const porGroup=new Map(records.map(r=>[r.key,r]));
+ const base={aba:'DOCUMENTO DAS FACÇÕES',sheetId:FAC_SHEET_SPREADSHEET_ID,sheetGid:FAC_SHEET_GID};
+ const diffs=[];
+ for(const f of groups){
+  if(!f?.group)continue;
+  const rec=porGroup.get(facSheetNorm(f.group));
+  const esperado=facSheetRowFromGroup(f);
+  if(!rec){
+   diffs.push({...base,group:f.group,campo:'GROUP',celula:'',naPlanilha:'',noHighOS:f.group,tipo:'ADICIONAR',
+    obs:'Group não está no Documento das Facções. Linha esperada: '+FAC_SHEET_FIELDS.map(([,l],i)=>l+' = '+(esperado[i]===''?'(vazio)':esperado[i])).join(' • ')});
+   continue;
+  }
+  FAC_SHEET_FIELDS.forEach(([field,label],i)=>{
+   if(field==='group')return;
+   const hos=facSheetComparable(field,f[field]),sheet=facSheetComparable(field,rec.patch[field]);
+   if(field!=='status'&&!String(hos))return;
+   if(hos===sheet)return;
+   diffs.push({...base,group:f.group,campo:label,celula:planilhaColuna(i)+rec.rowNumber,naPlanilha:String(rec.row?.[i]??''),noHighOS:String(esperado[i]??''),tipo:String(rec.row?.[i]??'').trim()?'ALTERAR':'PREENCHER',obs:''});
+  });
+ }
+ return diffs;
+}
+/* Confere High OS × planilhas. groups=null => todos os Groups da season. */
+async function conferirPlanilhas({groups=null,quiet=true,authorize=false}={}){
+ if(pendConferindo)return pendConferindo;
+ pendConferindo=(async()=>{
+  let token=facSheetAccessToken;
+  if(!token&&authorize)token=await facSheetAuthorize();
+  if(!token)return {ok:false,motivo:'PLANILHA_NAO_CONECTADA',abertas:0};
+  if(!faccoesLoaded)await loadFaccoes();
+  const alvo=(groups||faccoes).filter(Boolean);
+  const res={ok:true,abertas:0,resolvidas:0,erros:[]};
+  facSheetRenderStatus('busy','Conferindo High OS × planilha (somente leitura)...');
+  try{
+   const b=await compareBlipsCoordinates({token,groups:alvo});
+   const r=await pendAplicarConferencia('BLIPS',b.diffs.map(d=>({...d,sheetId:DLV_VIP_SHEET_ID})),b.checkedGroups);
+   res.abertas+=r.abertas;res.resolvidas+=r.resolvidas;
+  }catch(e){res.erros.push('BLIPS COORDENADAS: '+pendErroRegras(e))}
+  try{
+   const records=await facSheetReadAll();
+   const r=await pendAplicarConferencia('DOC_FACCOES',pendDocDiffs(records,alvo),alvo.map(f=>f.group));
+   res.abertas+=r.abertas;res.resolvidas+=r.resolvidas;
+  }catch(e){res.erros.push('Documento das Facções: '+pendErroRegras(e))}
+  try{res.resolvidas+=await pendConferirCelulas(token)}catch(e){res.erros.push('Células VIP/Ações: '+pendErroRegras(e))}
+  res.ok=!res.erros.length;
+  facSheetSetLastCheck();
+  facSheetRenderStatus(res.erros.length?'warn':'online',res.erros.length?'Conferência parcial: '+res.erros.join(' | '):
+   (res.abertas?res.abertas+' item(ns) diferentes entre High OS e planilha. Veja PENDÊNCIAS DA PLANILHA.':'Planilha conferida: igual ao High OS.'));
+  if(!quiet&&res.erros.length)alert('Conferência parcial da planilha:\n\n'+res.erros.join('\n'));
+  return res;
+ })();
+ try{return await pendConferindo}finally{pendConferindo=null}
+}
+/* Mantêm os nomes antigos porque entrega, edição, troca e cadastro de Group
+   chamam estas funções. Agora só conferem: true = planilha já bate. */
+async function syncBlipsGroups(rows=[],{quiet=true}={}){
  if(!facSheetAccessToken)return false;
  try{
-  const result=await syncBlipsCoordinates({token:facSheetAccessToken,groups:rows,onlyMissing,overwriteFieldsByGroup});
-  if(result.created)console.info('[BLIPS COORDENADAS] '+result.created+' quadro(s) cadastrado(s) na categoria correta.');
-  if(result.semEspaco?.length){
-   console.warn('[BLIPS COORDENADAS] Sem quadro livre na aba (estrutura fixa, nenhuma linha criada):',result.semEspaco);
-   if(!quiet)alert('BLIPS COORDENADAS: '+result.semEspaco.map(x=>x.group).join(', ')+' não tem quadro livre no segmento. A aba tem estrutura fixa, então nada foi criado; as coordenadas continuam salvas no painel.');
-  }
-  const inconsistencies=[...(result.categoryMismatches||[]),...(result.duplicates||[])];
-  if(inconsistencies.length){
-   console.warn('[BLIPS COORDENADAS] Groups que precisam de revisão de categoria/duplicidade:',inconsistencies);
-   if(!quiet)alert('Sincronização parcial: '+inconsistencies.length+' Group(s) precisam de revisão na categoria ou estão duplicados. Consulte o console para detalhes.');
-  }
-  return inconsistencies.length===0;
+  const b=await compareBlipsCoordinates({token:facSheetAccessToken,groups:rows});
+  const r=await pendAplicarConferencia('BLIPS',b.diffs.map(d=>({...d,sheetId:DLV_VIP_SHEET_ID})),b.checkedGroups);
+  if(r.abertas)pendAvisar(r.abertas);
+  return r.abertas===0;
  }catch(error){
-  console.warn('[BLIPS COORDENADAS] Falha de sincronização:',error);
+  console.warn('[BLIPS COORDENADAS] Conferência falhou:',error);
   if(/HTTP (401|403)|unauthorized|invalid authentication credentials/i.test(String(error?.message||error)))facSheetDropToken();
-  if(!quiet)alert('Não foi possível atualizar a aba BLIPS COORDENADAS: '+(error?.message||error));
+  if(!quiet)alert('Não foi possível conferir a aba BLIPS COORDENADAS: '+pendErroRegras(error));
   return false;
  }
 }
-async function syncGroupsToOfficialSheet(groups=[],{quiet=false,
-forceAuthorize=false,previousGroups=[]}={}){
+async function syncGroupsToOfficialSheet(groups=[],{quiet=false,forceAuthorize=false}={}){
  const clean=groups.filter(Boolean);
-if(!clean.length)return true;
-let token=facSheetAccessToken;
-if(!token&&forceAuthorize)token=await facSheetAuthorize();
-if(!token){facSheetRenderStatus('warn','High OS salvo. Conecte o Google Sheets para enviar as alterações pendentes à planilha.');
-return false}
- const blipsOk=await syncBlipsGroups(clean,{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup(previousGroups,clean)});
- try{facSheetRenderStatus('busy',`Enviando ${clean.length} Group(s) para a planilha...`);
-if(!facSheetRowMap.size)await facSheetReadAll();
-const title=await facSheetResolveTitle(token);
-for(const f of clean){const key=facSheetNorm(f.group),
-row=facSheetRowMap.get(key),
-values=[facSheetRowFromGroup(f)];
-if(row){const range=`'${String(title).replace(/'/g,"''")}'!A${row}:L${row}`,
-u=`https://sheets.googleapis.com/v4/spreadsheets/${FAC_SHEET_SPREADSHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
-await facSheetFetch(u,{method:'PUT',
-body:{range,
-majorDimension:'ROWS',
-values},
-token})}else{const range=`'${String(title).replace(/'/g,"''")}'!A:L`,
-u=`https://sheets.googleapis.com/v4/spreadsheets/${FAC_SHEET_SPREADSHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-await facSheetFetch(u,{method:'POST',
-body:{range,
-majorDimension:'ROWS',
-values},
-token});
-facSheetRowMap.clear()}}
- facSheetSetLastCheck();
-facSheetRenderStatus(blipsOk?'online':'warn',blipsOk?`${clean.length} Group(s) sincronizado(s) com as planilhas.`:'Documento das facções atualizado, mas BLIPS COORDENADAS não sincronizou.');
-return blipsOk}catch(e){facSheetRenderStatus('warn','High OS foi salvo, mas a planilha não recebeu a atualização: '+e.message);
-if(!quiet)alert('High OS salvo, mas houve erro ao atualizar a planilha: '+e.message);
-return false}
+ if(!clean.length)return true;
+ let token=facSheetAccessToken;
+ if(!token&&forceAuthorize)token=await facSheetAuthorize();
+ if(!token){facSheetRenderStatus('warn','High OS salvo. Conecte o Google Sheets para o painel conferir a planilha e listar o que atualizar.');return false}
+ const res=await conferirPlanilhas({groups:clean,quiet});
+ if(res.abertas)pendAvisar(res.abertas);
+ return res.ok&&res.abertas===0;
 }
 async function facSheetPushAll(){
  if(!isAdmin())return;
-const btn=$('#facSheetPushAllBtn');
-if(btn){btn.disabled=true;
-btn.textContent='ENVIANDO...'}try{if(!facSheetAccessToken)await facSheetAuthorize();
-if(!confirm(`Enviar os ${faccoes.length} Groups atuais do High OS para a planilha oficial?\n\nLinhas existentes serão atualizadas pelo Group e Groups ausentes serão adicionados.`))return;
-const ok=await syncGroupsToOfficialSheet(faccoes,{forceAuthorize:true});
-if(ok){await addDoc(histCol,{sessionId:currentSessionId||'',
-tipo:'SYNC_PLANILHA_FACCOES_EXPORT',
-descricao:`Base High OS enviada manualmente para a planilha oficial: ${faccoes.length} Group(s)`,
-usuario:currentUser.email,
-data:serverTimestamp()});
-alert('Planilha atualizada com a base atual do High OS.')}}catch(e){alert('Erro ao enviar a base: '+e.message)}finally{if(btn){btn.disabled=false;
-btn.textContent='ENVIAR HIGH OS → PLANILHA'}}
+ const btn=$('#facSheetPushAllBtn');
+ if(btn){btn.disabled=true;btn.textContent='CONFERINDO...'}
+ try{
+  const res=await conferirPlanilhas({quiet:false,authorize:true});
+  pendAbrirModal();
+  if(res.ok&&!res.abertas)alert('Planilha conferida: está igual ao High OS.');
+ }catch(e){alert('Erro ao conferir a planilha: '+(e?.message||e))}
+ finally{if(btn){btn.disabled=false;btn.textContent='CONFERIR HIGH OS × PLANILHA'}}
 }
 $('#facSheetConnectBtn')?.addEventListener('click',async()=>{try{await facSheetAuthorize();
-const blipsOk=await syncBlipsGroups(faccoes,{onlyMissing:true,quiet:false});
-try{await facSheetReadAll()}catch(e){console.warn('[PLANILHAS] Documento das Facções indisponível:',e)}
-facSheetSetLastCheck();
-if(blipsOk)alert('Google Sheets conectado. A aba BLIPS COORDENADAS foi conferida e os Groups ausentes foram incluídos na categoria correta.')}catch(e){facSheetRenderStatus('offline','Falha ao conectar: '+e.message);alert('Não foi possível conectar a planilha: '+e.message)}});
+ const res=await conferirPlanilhas({quiet:false});
+ alert('Google Sheets conectado em SOMENTE LEITURA.\n\n'+(res.abertas?res.abertas+' item(ns) diferentes. Veja PENDÊNCIAS DA PLANILHA.':'A planilha está igual ao High OS.'))}catch(e){facSheetRenderStatus('offline','Falha ao conectar: '+e.message);alert('Não foi possível conectar a planilha.\n\n'+facSheetAuthErrorText(e))}});
 
 $('#facSheetCheckBtn')?.addEventListener('click',facSheetCheckForChanges);
 
 $('#facSheetPushAllBtn')?.addEventListener('click',facSheetPushAll);
-$('#blipsSyncAllBtn')?.addEventListener('click',async()=>{
- if(!isAdmin())return;
- try{
-  if(!facSheetAccessToken)await facSheetAuthorize();
-  const success=await syncBlipsGroups(faccoes,{onlyMissing:false,quiet:false});
-  if(success)alert('BLIPS COORDENADAS sincronizada: Groups organizados por segmento, com os dados cadastrados no High OS.');
- }catch(e){alert('Erro ao sincronizar BLIPS COORDENADAS: '+(e?.message||e));}
+$('#blipsSyncAllBtn')?.addEventListener('click',()=>{if(isAdmin())pendAbrirModal()});
+
+/* ---------- aviso e tela das pendências ---------- */
+function pendAvisar(qtd){
+ if(!qtd)return;
+ const t=$('#pendToast');
+ if(!t)return;
+ t.innerHTML=isAdmin()?`<b>PLANILHA</b> ${qtd} item(ns) para você atualizar à mão. <u>Ver pendências</u>`:`<b>PLANILHA</b> Salvo no High OS. ${qtd} item(ns) aguardando o ADMIN atualizar a planilha.`;
+ t.classList.remove('hidden');
+ clearTimeout(pendAvisar._t);pendAvisar._t=setTimeout(()=>t.classList.add('hidden'),9000);
+}
+function pendRenderBadge(){
+ const btn=$('#pendPlanilhaBtn');
+ if(!btn)return;
+ const n=pendencias.length;
+ btn.hidden=!isAdmin();
+ btn.classList.toggle('tem',n>0);
+ btn.innerHTML=`<span>PLANILHA</span><b>${n}</b>`;
+ btn.title=n?n+' item(ns) para atualizar na planilha':'Planilha igual ao High OS';
+ if(pendUltimaContagem!==null&&n>pendUltimaContagem&&isAdmin())pendAvisar(n-pendUltimaContagem);
+ pendUltimaContagem=n;
+}
+function pendRenderModal(){
+ const list=$('#pendPlanilhaList'),sum=$('#pendPlanilhaSummary');
+ if(!list)return;
+ const grupos=new Map();
+ for(const p of [...pendencias].sort((a,b)=>String(a.aba).localeCompare(String(b.aba))||String(a.group).localeCompare(String(b.group))||String(a.celula).localeCompare(String(b.celula),'pt',{numeric:true}))){
+  const k=p.aba+'||'+p.group;if(!grupos.has(k))grupos.set(k,[]);grupos.get(k).push(p);
+ }
+ if(sum)sum.innerHTML=`<b>${pendencias.length}</b><span>ITEM(NS) PARA ATUALIZAR NA PLANILHA</span><small>Última conferência: ${esc($('#facSheetLastCheck')?.textContent||'—')}</small>`;
+ list.innerHTML=pendencias.length?[...grupos].map(([k,itens])=>{const [aba,group]=k.split('||');return `<article class="sheet-diff-card"><header><div><span>${esc(aba)}</span><h3>${esc(group)}</h3></div><b>${itens.length} ITEM(NS)</b></header>${itens.map(p=>{const link=linkCelula(p);return `<div class="pend-row" data-id="${esc(p.id)}"><span class="pend-campo">${esc(p.campo)}<small>${p.celula?(link?`<a href="${esc(link)}" target="_blank" rel="noopener">${esc(p.celula)} ↗</a>`:esc(p.celula)):esc(p.tipo)}</small></span><del title="Na planilha">${esc(p.naPlanilha||'(vazio)')}</del><i>→</i><ins title="No High OS">${esc(p.noHighOS||'(vazio)')}</ins><div class="pend-acoes"><button type="button" data-pend-copy>COPIAR</button><button type="button" data-pend-feito>FEITO</button><button type="button" data-pend-ignorar>IGNORAR</button></div>${p.obs?`<p class="pend-obs">${esc(p.obs)}</p>`:''}</div>`}).join('')}</article>`}).join(''):'<div class="pend-vazio">Nenhuma pendência. A planilha está igual ao High OS na última conferência.</div>';
+}
+function pendAbrirModal(){pendRenderModal();$('#pendPlanilhaModal')?.classList.remove('hidden')}
+async function pendMarcar(id,status){
+ const p=pendencias.find(x=>x.id===id);if(!p)return;
+ try{await setDoc(doc(pendCol,id),{status,[status==='IGNORADA'?'ignoradaEm':'resolvidaEm']:serverTimestamp(),[status==='IGNORADA'?'ignoradaPor':'resolvidaPor']:currentUser?.email||''},{merge:true})}
+ catch(e){alert('Não foi possível atualizar a pendência: '+pendErroRegras(e))}
+}
+$('#pendPlanilhaBtn')?.addEventListener('click',pendAbrirModal);
+$('#pendPlanilhaClose')?.addEventListener('click',()=>$('#pendPlanilhaModal')?.classList.add('hidden'));
+$('#pendToast')?.addEventListener('click',()=>{$('#pendToast')?.classList.add('hidden');if(isAdmin())pendAbrirModal()});
+$('#pendPlanilhaConferir')?.addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;b.textContent='CONFERINDO...';
+ try{const r=await conferirPlanilhas({quiet:false,authorize:true});if(r.ok&&!r.abertas)alert('Planilha conferida: está igual ao High OS.')}
+ catch(err){alert('Erro ao conferir: '+(err?.message||err))}finally{b.disabled=false;b.textContent='CONFERIR AGORA'}});
+$('#pendPlanilhaList')?.addEventListener('click',async e=>{
+ const row=e.target.closest('.pend-row');if(!row)return;
+ const id=row.dataset.id,p=pendencias.find(x=>x.id===id);if(!p)return;
+ if(e.target.closest('[data-pend-copy]')){try{await navigator.clipboard.writeText(p.noHighOS||'');e.target.textContent='COPIADO'}catch(_){prompt('Copie o valor:',p.noHighOS||'')}}
+ else if(e.target.closest('[data-pend-feito]'))await pendMarcar(id,'RESOLVIDA');
+ else if(e.target.closest('[data-pend-ignorar]')){if(confirm('Ignorar esta diferença? Ela só volta se o valor no High OS mudar.'))await pendMarcar(id,'IGNORADA')}
 });
+function pendIniciar(){
+ if(!currentUser||pendUnsub||!canViewModule('faccoes'))return;
+ try{
+  pendUnsub=onSnapshot(query(pendCol,where('status','==','PENDENTE')),snap=>{
+   pendencias=snap.docs.map(d=>({...d.data(),id:d.id}));
+   pendRenderBadge();
+   if(!$('#pendPlanilhaModal')?.classList.contains('hidden'))pendRenderModal();
+  },err=>pendErroRegras(err));
+ }catch(e){pendErroRegras(e)}
+ if(!isAdmin())return;
+ // Conferência automática silenciosa enquanto a autorização de leitura do Google valer.
+ const rodar=()=>{if(facSheetAccessToken&&document.visibilityState!=='hidden')conferirPlanilhas({quiet:true}).catch(e=>console.warn('[PENDÊNCIAS] conferência automática:',e))};
+ setTimeout(rodar,5000);
+ clearInterval(pendTimer);pendTimer=setInterval(rodar,15*60*1000);
+}
+function pendParar(){try{pendUnsub?.()}catch(_){}pendUnsub=null;clearInterval(pendTimer);pendTimer=null;pendencias=[];pendUltimaContagem=null;pendRenderBadge()}
 
 $('#facSheetDiffClose')?.addEventListener('click',()=>$('#facSheetDiffModal')?.classList.add('hidden'));
 
@@ -12918,7 +13033,7 @@ updatedBy:currentUser?.email||''},{merge:true});
  }
  const currentGroup={...(local||{group}),perfilTecnico};
  const techSheetOk=await syncBlipsGroups([currentGroup],{quiet:true,overwriteFieldsByGroup:blipsChangedFieldsByGroup([previousGroup],[currentGroup])});
- if(!techSheetOk)facSheetRenderStatus('warn','Perfil técnico salvo no High OS; planilha de coordenadas pendente.');
+ if(!techSheetOk)facSheetRenderStatus('warn','Perfil técnico salvo no High OS; planilha de coordenadas: veja PENDÊNCIAS DA PLANILHA.');
  return clonePlain(perfilTecnico);
 
 }

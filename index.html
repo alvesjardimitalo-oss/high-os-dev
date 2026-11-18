@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <title>High OS • Gestão do Ilegal</title>
-  <link rel="stylesheet" href="assets/style.css?v=12.9.8">
+  <link rel="stylesheet" href="assets/style.css?v=12.9.9">
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css?v=1.9.4">
   <link rel="stylesheet" href="assets/mission-planner.css?v=12.18.0">
   <link rel="stylesheet" href="assets/mission-planner-nav.css?v=12.8.0">
@@ -45,6 +45,7 @@
       <a class="brand" href="index.html"><img src="assets/high_logo.png" alt="High"><div class="brand-copy"><strong>HIGH OS</strong><span>GESTÃO DO ILEGAL • DEV</span></div></a>
       
       <button type="button" id="seasonTopBtn" class="season-top" hidden title="Trocar de season"></button>
+      <button type="button" id="pendPlanilhaBtn" class="pend-top" hidden title="Pendências da planilha"><span>PLANILHA</span><b>0</b></button>
       <div class="session" id="sessionArea">
         <button class="btn-google" id="loginBtn">G&nbsp; Entrar com Google</button>
       </div>
@@ -836,10 +837,10 @@
 
           <div class="admin-tab-panel" data-admin-panel="integracoes">
             <div class="sheet-sync-admin-card">
-              <div class="sheet-sync-head"><div><div class="eyebrow">GOOGLE SHEETS • DOCUMENTO DAS FACÇÕES</div><h3>SINCRONIZAÇÃO BIDIRECIONAL</h3><p>Planilha oficial ↔ High OS. Alterações vindas da planilha entram somente após sua confirmação; alterações feitas no High OS são enviadas diretamente à linha do Group quando o Google está conectado.</p></div><div id="facSheetSyncBadge" class="sheet-sync-badge offline">DESCONECTADO</div></div>
-              <div class="sheet-sync-meta"><div><span>PLANILHA</span><b>DOCUMENTO DAS FACÇÕES</b><small id="facSheetName">ID 1MBVzWMFrAzIhYlT7-ZgWZEAoJLjPn3JeZdmHyRcZf2A • gid 1572584288</small></div><div><span>ÚLTIMA VERIFICAÇÃO</span><b id="facSheetLastCheck">—</b><small id="facSheetStatusText">Conecte sua conta Google com permissão de edição.</small></div></div>
-              <div class="sheet-sync-actions"><button type="button" id="facSheetConnectBtn" class="btn-primary compact">CONECTAR GOOGLE SHEETS</button><button type="button" id="facSheetCheckBtn" class="btn-secondary compact">VERIFICAR ALTERAÇÕES DA PLANILHA</button><button type="button" id="facSheetPushAllBtn" class="btn-secondary compact">ENVIAR HIGH OS → PLANILHA</button><button type="button" id="blipsSyncAllBtn" class="btn-secondary compact">SINCRONIZAR BLIPS E COORDENADAS</button></div>
-              <div class="sheet-sync-note">Campos sincronizados: nº, CDS, anúncio, nome do QG, Group, produto, facção, status, líder, staff responsável, data de entrega e observações. A aba BLIPS COORDENADAS da planilha Ilegal - High Season 2 recebe os dados técnicos do Group na categoria correta. Receitas de craft, farm, métricas e histórico permanecem no High OS.</div>
+              <div class="sheet-sync-head"><div><div class="eyebrow">GOOGLE SHEETS • DOCUMENTO DAS FACÇÕES</div><h3>SOMENTE LEITURA</h3><p>O High OS só LÊ as planilhas. Alterações feitas no painel ficam no Firebase; o painel compara com a planilha e lista em PENDÊNCIAS DA PLANILHA o que você atualiza à mão. Alterações vindas da planilha entram no High OS somente após sua confirmação.</p></div><div id="facSheetSyncBadge" class="sheet-sync-badge offline">DESCONECTADO</div></div>
+              <div class="sheet-sync-meta"><div><span>PLANILHA</span><b>DOCUMENTO DAS FACÇÕES</b><small id="facSheetName">ID 1MBVzWMFrAzIhYlT7-ZgWZEAoJLjPn3JeZdmHyRcZf2A • gid 1572584288</small></div><div><span>ÚLTIMA VERIFICAÇÃO</span><b id="facSheetLastCheck">—</b><small id="facSheetStatusText">Conecte sua conta Google (permissão só de leitura).</small></div></div>
+              <div class="sheet-sync-actions"><button type="button" id="facSheetConnectBtn" class="btn-primary compact">CONECTAR GOOGLE SHEETS</button><button type="button" id="facSheetCheckBtn" class="btn-secondary compact">VERIFICAR ALTERAÇÕES DA PLANILHA</button><button type="button" id="facSheetPushAllBtn" class="btn-secondary compact">CONFERIR HIGH OS × PLANILHA</button><button type="button" id="blipsSyncAllBtn" class="btn-secondary compact">VER PENDÊNCIAS DA PLANILHA</button></div>
+              <div class="sheet-sync-note">Campos conferidos: Documento das Facções (nº, CDS, anúncio, QG, produto, facção, status, líder, staff, data de entrega, observações), BLIPS COORDENADAS (coordenadas do perfil técnico), checklist VIP (BENEFICIOS FACÇÕES) e BUFF/NERF aprovados (VALORES AÇÃO BLIPADA). Nenhum desses é gravado pelo painel.</div>
             </div>
             
           </div>
@@ -1177,7 +1178,7 @@
   <script src="assets/ui-kit.js?v=10.4.1"></script>
   <!-- V15.6.3: eventos-painel, mission-planner e mission-planner-nav carregam só ao abrir o Planejador (app.js) -->
   <script src="assets/anim-v15.js?v=15.0.0" defer></script>
-  <script type="module" src="assets/app.js?v=18.1.3"></script>
+  <script type="module" src="assets/app.js?v=18.2.0"></script>
 
 <div id="newDeliveryModal" class="modal hidden"><div class="modal-card delivery-modal-v5"><button class="modal-x" id="newDeliveryClose">×</button>
   <div class="eyebrow">NOVA OCUPAÇÃO</div><h2>ENTREGA DE GROUP</h2><p class="delivery-help">O Group traz sua estrutura instalada. Personalize apenas o que será ativado para a nova facção.</p>
@@ -1233,6 +1234,13 @@ Armas02;08/09/2026;7;8;9;10;11;12;10;8"></textarea><div class="modal-actions"><b
 
 <div id="movementModal" class="modal hidden"><div class="modal-card movement-card"><button class="modal-x" id="movementClose">×</button><div class="eyebrow">GESTÃO DE GROUPS • OPERAÇÃO AUDITADA</div><h2 id="movementTitle">TRANSFERÊNCIA</h2><p id="movementHelp" class="page-subtitle"></p><div class="movement-grid"><div class="movement-side"><span>ORIGEM</span><b id="movementOrigin">—</b></div><div class="movement-arrow">→</div><label class="movement-side">DESTINO<select id="movementDestination"></select></label></div><label>Data efetiva da mudança<input id="movementEffectiveDate" type="date"></label><p class="delivery-help"><b>Importante:</b> “Transferir facção” muda a organização de Group e o histórico acompanha a facção. “Trocar QG / Local” mantém cada facção no próprio Group e troca somente o local físico.</p><label>Motivo / observação<textarea id="movementReason" rows="3" placeholder="Informe o motivo administrativo da operação..."></textarea></label><div id="movementPreview" class="movement-preview"></div><div class="modal-actions"><button type="button" class="btn-secondary" id="movementCancel">CANCELAR</button><button type="button" class="btn-primary" id="movementConfirm">CONFIRMAR OPERAÇÃO</button></div></div></div>
 
+<div class="modal hidden" id="pendPlanilhaModal"><div class="modal-card sheet-diff-modal"><div class="modal-head"><div><div class="eyebrow">HIGH OS → VOCÊ ATUALIZA A PLANILHA</div><h2>PENDÊNCIAS DA PLANILHA</h2></div><button type="button" id="pendPlanilhaClose">×</button></div>
+  <p class="delivery-help">O High OS não grava nas planilhas. Abaixo está o que está diferente entre o High OS (Firebase) e a planilha. Clique na célula para abrir a planilha no lugar certo, copie o valor e cole. Na próxima conferência, o que já estiver igual sai da lista sozinho.</p>
+  <div id="pendPlanilhaSummary" class="sheet-diff-summary"></div>
+  <div id="pendPlanilhaList" class="sheet-diff-list"></div>
+  <div class="modal-actions"><button type="button" id="pendPlanilhaConferir" class="btn-primary">CONFERIR AGORA</button></div>
+</div></div>
+<div id="pendToast" class="pend-toast hidden" role="status"></div>
 <div class="modal hidden" id="facSheetDiffModal"><div class="modal-card sheet-diff-modal"><div class="modal-head"><div><div class="eyebrow">PLANILHA → HIGH OS</div><h2>CONFIRMAR ALTERAÇÕES</h2></div><button type="button" id="facSheetDiffClose">×</button></div>
   <p class="delivery-help">Estas diferenças foram encontradas na planilha oficial. Nada será alterado no High OS até você confirmar.</p>
   <div id="facSheetDiffSummary" class="sheet-diff-summary"></div>

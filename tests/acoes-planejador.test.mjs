@@ -180,6 +180,8 @@ test('A aprovação revalida a planilha e protege fórmulas/aba original',()=>{
  assert.match(fn,/Number\(sheetEntry\.properties\.sheetId\)!==candidate\.sheetId/);
  assert.match(fn,/latestFormulas=await facSheetFetch/);
  assert.match(fn,/BUFF\/NERF recebeu uma fórmula durante a confirmação/);
- assert.ok(fn.indexOf('latestFormulas=await')<fn.indexOf("root+':batchUpdate'"));
+ // 18/11/2026: somente leitura - a aprovação vira pendência, nunca gravação.
+ assert.doesNotMatch(fn,/batchUpdate|method:'POST'|method:'PUT'/);
+ assert.ok(fn.indexOf('latestFormulas=await')<fn.indexOf('pendenciasRegistrarCelulas('));
 });
 

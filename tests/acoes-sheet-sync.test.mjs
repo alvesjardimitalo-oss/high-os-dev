@@ -44,11 +44,12 @@ test('Ação não encontrada e novo prêmio inválido não alteram células',()=
  assert.throws(()=>planApprovedActionSheetUpdate(template(),'FAKE',438571,497858),/não encontrada/);
  assert.throws(()=>planApprovedActionSheetUpdate(template(),'LOJA DE DEPARTAMENTO',438571,-1),/inválida/);
 });
-test('Somente a aba original recebe aprovação; novo módulo não cria abas',()=>{
+test('Aprovação aponta a aba original e NÃO grava na planilha (somente leitura)',()=>{
  const app=readFileSync(new URL('../assets/app.js',import.meta.url),'utf8');
  assert.match(app,/syncApprovedActionPayout/);
  assert.match(app,/VALORES AÇÃO BLIPADA/);
- assert.match(app,/updateCells/);
+ assert.doesNotMatch(app,/updateCells/);
+ assert.match(app,/origem:'ACAO',aba:checked\.sheetName/);
  assert.match(app,/canEditModule\('economia'\)/);
  const h=readFileSync(new URL('../index.html',import.meta.url),'utf8');
  assert.match(h,/id="apApprove"/);
@@ -72,8 +73,7 @@ test('Aprovação lê ambos os prêmios e preserva as fórmulas do máximo',()=>
  assert.match(app,/planApprovedActionSheetUpdate\(first\.values\|\|\[\],name,officialMin,value,/);
  assert.match(app,/officialMax,proposedMax/);
  assert.match(app,/checked\.previousMax/);
- assert.match(app,/calculatedMaximum/);
- assert.match(app,/verifiedMaximum/);
- assert.match(app,/premioMaxConfirmado/);
+ assert.match(app,/premioMaxEstimado:checked\.proposedMax/);
+ assert.match(app,/pendentePlanilha:true/);
  assert.doesNotMatch(app,/updateCells:\{start:\{sheetId:checked\.sheetId,rowIndex:checked\.max\.rowIndex/);
 });

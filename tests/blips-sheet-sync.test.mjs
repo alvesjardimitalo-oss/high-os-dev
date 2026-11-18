@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const code=readFileSync(new URL('../assets/modules/blips-sheet-sync.js',import.meta.url),'utf8');
-const {syncBlipsCoordinates,valuesFor}=await import('data:text/javascript,'+encodeURIComponent(code));
+const {compareBlipsCoordinates,valuesFor,sameSheetValue}=await import('data:text/javascript,'+encodeURIComponent(code));
 
 function fakeSheet(){
  const rows=Array.from({length:10},()=>[]);
@@ -27,25 +27,16 @@ function group(){
 }
 async function withSheet(rows,work){
  const previous=globalThis.fetch;
- const batches=[];
+ const writes=[];
  globalThis.fetch=async (url,opt={})=>{
-  if(url.includes(':batchUpdate')){
-   batches.push(JSON.parse(opt.body));
-   return {ok:true,json:async()=>({replies:[]})};
-  }
+  if((opt.method||'GET')!=='GET'||opt.body!==undefined)writes.push({url,opt});
   if(url.includes('/values/'))return {ok:true,json:async()=>({values:rows})};
   return {ok:true,json:async()=>({sheets:[{properties:{
-   sheetId:2037219913,title:'BLIPS COORDENADAS',gridProperties:{rowCount:300}
+   sheetId:1571924835,title:'BLIPS COORDENADAS',gridProperties:{rowCount:300}
   }}]})};
  };
- try{return await work(batches)}
+ try{return await work(writes)}
  finally{globalThis.fetch=previous}
-}
-function writes(batches){
- return batches.flatMap(b=>b.requests).filter(x=>x.updateCells).map(x=>({
-  row:x.updateCells.start.rowIndex,col:x.updateCells.start.columnIndex,
-  value:x.updateCells.rows[0].values[0].userEnteredValue.stringValue
- }));
 }
 test('Garagens, blindados e farm são serializados sem perder os spawns',()=>{
  const v=valuesFor(group());
@@ -58,103 +49,74 @@ test('Garagens, blindados e farm são serializados sem perder os spawns',()=>{
  assert.equal(Object.hasOwn(v,'VIPORG'),false);
  assert.equal(Object.hasOwn(v,'CAPACIDADEBAU'),false);
 });
-test('Entrega não substitui garagem instalada; novas CDS entram',async()=>{
- await withSheet(fakeSheet(),async batches=>{
-  await syncBlipsCoordinates({token:'mock',groups:[group()]});
-  const cells=writes(batches);
-  assert.equal(cells.some(x=>x.row===2 && x.col===6),false);
-  assert.equal(cells.find(x=>x.row===3 && x.col===6)?.value,'BLIP: 30,30,30\nSPAWN: 31,31,31');
-  assert.equal(cells.find(x=>x.row===4 && x.col===6)?.value,'BLIP: 40,40,40\nSPAWN: 41,41,41');
+test('SOMENTE LEITURA: a conferência nunca faz requisição de escrita',async()=>{
+ await withSheet(fakeSheet(),async writes=>{
+  await compareBlipsCoordinates({token:'mock',groups:[group(),{group:'Armas99',segmento:'Armas',beneficios:{craft:'1,1,1'}}]});
+  assert.equal(writes.length,0);
  });
 });
-test('Alteração explícita substitui apenas o campo selecionado',async()=>{
- await withSheet(fakeSheet(),async batches=>{
-  await syncBlipsCoordinates({token:'mock',groups:[group()],overwriteFieldsByGroup:{
-   Armas01:['GARAGEMPUBLICA']
-  }});
-  const cells=writes(batches);
-  assert.equal(cells.find(x=>x.row===2 && x.col===6)?.value,'BLIP: 20,20,20\nSPAWN: 21,21,21');
-  assert.equal(cells.some(x=>x.row===2 && x.col===7),false);
+test('Lista célula a célula o que difere; campo igual não entra',async()=>{
+ await withSheet(fakeSheet(),async()=>{
+  const {diffs,checkedGroups}=await compareBlipsCoordinates({token:'mock',groups:[group()]});
+  assert.deepEqual(checkedGroups,['Armas01']);
+  const pub=diffs.find(d=>d.campo==='GARAGEM PUBLICA');
+  assert.equal(pub.celula,'G3');
+  assert.equal(pub.tipo,'ALTERAR');
+  assert.equal(pub.naPlanilha,'BLIP: 10,10,10\nSPAWN: 11,11,11');
+  assert.equal(pub.noHighOS,'BLIP: 20,20,20\nSPAWN: 21,21,21');
+  const deluxe=diffs.find(d=>d.campo==='GARAGEM DELUXE');
+  assert.equal(deluxe.tipo,'PREENCHER');
+  assert.equal(deluxe.celula,'G4');
+  assert.equal(diffs.find(d=>d.campo==='FARM').noHighOS,'42,42,42');
+  assert.equal(diffs.every(d=>d.aba==='BLIPS COORDENADAS'&&d.sheetGid===1571924835),true);
+ });
+ const rows=fakeSheet();rows[5][6]='42, 42, 42';
+ await withSheet(rows,async()=>{
+  const {diffs}=await compareBlipsCoordinates({token:'mock',groups:[group()]});
+  assert.equal(diffs.some(d=>d.campo==='FARM'),false,'espaço após vírgula não é diferença');
  });
 });
-test('Remoção explícita permite limpar coordenada; sem ação explícita preserva',async()=>{
- await withSheet(fakeSheet(),async batches=>{
+test('Campo vazio no High OS não gera pendência (planilha mantém o que tem)',async()=>{
+ await withSheet(fakeSheet(),async()=>{
   const g=group();g.perfilTecnico.operacional.garagens=[];
-  await syncBlipsCoordinates({token:'mock',groups:[g],overwriteFieldsByGroup:{
-   Armas01:['GARAGEMPUBLICA']
-  }});
-  assert.equal(writes(batches).find(x=>x.row===2 && x.col===6)?.value,'');
+  const {diffs}=await compareBlipsCoordinates({token:'mock',groups:[g]});
+  assert.equal(diffs.some(d=>d.campo==='GARAGEM PUBLICA'),false);
  });
 });
-test('Group existente no setor errado é sinalizado, sem criar cópia',async()=>{
+test('Group ausente vira ADICIONAR com quadro livre sugerido',async()=>{
+ const rows=fakeSheet();
+ rows[1][12]='GROUP';rows[1][13]='N/A';
+ await withSheet(rows,async()=>{
+  const {diffs}=await compareBlipsCoordinates({token:'mock',groups:[{group:'Armas99',segmento:'Armas',beneficios:{craft:'1,1,1'}}]});
+  assert.equal(diffs.length,1);
+  assert.equal(diffs[0].tipo,'ADICIONAR');
+  assert.equal(diffs[0].celula,'N2');
+ });
+ await withSheet(fakeSheet(),async()=>{
+  const {diffs}=await compareBlipsCoordinates({token:'mock',groups:[{group:'Armas99',segmento:'Armas'}]});
+  assert.equal(diffs[0].celula,'');
+  assert.match(diffs[0].obs,/não há quadro livre/);
+ });
+});
+test('Campo repartido em várias células é comparado inteiro e sinalizado',async()=>{
+ const rows=fakeSheet();rows[2][7]='Outra coordenada técnica';
+ await withSheet(rows,async()=>{
+  const {diffs}=await compareBlipsCoordinates({token:'mock',groups:[group()]});
+  const pub=diffs.find(d=>d.campo==='GARAGEM PUBLICA');
+  assert.match(pub.obs,/2 células/);
+  assert.match(pub.naPlanilha,/Outra coordenada técnica/);
+ });
+});
+test('Group achado em outra categoria ainda é comparado no quadro existente',async()=>{
  const rows=fakeSheet();rows[0][4]='MUNIÇÃO';
- await withSheet(rows,async batches=>{
-  const result=await syncBlipsCoordinates({token:'mock',groups:[group()]});
-  assert.equal(result.created,0);
-  assert.equal(result.categoryMismatches.length,1);
-  assert.equal(result.categoryMismatches[0].group,'Armas01');
+ await withSheet(rows,async()=>{
+  const {diffs}=await compareBlipsCoordinates({token:'mock',groups:[group()]});
+  assert.equal(diffs.some(d=>d.tipo==='ADICIONAR'),false);
+  assert.equal(diffs.some(d=>d.campo==='GARAGEM PUBLICA'),true);
  });
 });
-
-test('Prefixo canônico do Group prevalece sobre segmento inconsistente (Mecânica)',async()=>{
- const rows=fakeSheet();
- rows[0][4]='DROGAS';
- rows[1][6]='IlegalMechanic02';
- await withSheet(rows,async batches=>{
-  const g={group:'IlegalMechanic02',segmento:'Drogas',perfilTecnico:{operacional:{}}};
-  const result=await syncBlipsCoordinates({token:'mock',groups:[g]});
-  assert.equal(result.created,0);
-  assert.deepEqual(result.categoryMismatches,[{group:'IlegalMechanic02',actual:'DROGAS',expected:'MECANICAILEGAL'}]);
-  assert.equal(batches.length,0);
- });
-});
-
-test('Group de Munição não assume categoria Armas por segmento antigo',async()=>{
- const rows=fakeSheet();
- rows[1][6]='Municao10';
- await withSheet(rows,async batches=>{
-  const g={group:'Municao10',segmento:'Armas',perfilTecnico:{operacional:{}}};
-  const result=await syncBlipsCoordinates({token:'mock',groups:[g]});
-  assert.equal(result.created,0);
-  assert.deepEqual(result.categoryMismatches,[{group:'Municao10',actual:'ARMAS',expected:'MUNICAO'}]);
-  assert.equal(batches.length,0);
- });
-});
-
-test('Alteração explícita bloqueia campo histórico dividido em várias células',async()=>{
- const rows=fakeSheet();
- rows[2][7]='Outra coordenada técnica';
- await withSheet(rows,async batches=>{
-  await assert.rejects(
-   syncBlipsCoordinates({token:'mock',groups:[group()],overwriteFieldsByGroup:{Armas01:['GARAGEMPUBLICA']}}),
-   /possui 2 células preenchidas/
-  );
-  assert.equal(batches.length,0,'falha deve ocorrer antes de qualquer batchUpdate');
- });
-});
-
-test('Mecânica Ilegal e Hospital Ilegal permanecem separados de Apoio',async()=>{
- for(const [group,segment,expected] of [
-  ['IlegalMechanic01','Mecânica Ilegal','MECANICAILEGAL'],
-  ['IlegalMechanic02','Mecânica Ilegal','MECANICAILEGAL'],
-  ['IlegalMedic01','Hospital Ilegal','HOSPITALILEGAL'],
-  ['IlegalMedic2','Hospital Ilegal','HOSPITALILEGAL']
- ]){
-  const rows=fakeSheet();rows[0][4]='APOIO';rows[1][6]=group;
-  await withSheet(rows,async batches=>{
-   const result=await syncBlipsCoordinates({token:'mock',groups:[{group,segmento:segment}]});
-   assert.deepEqual(result.categoryMismatches,[{group,actual:'APOIO',expected}]);
-   assert.equal(result.created,0);
-   assert.equal(batches.length,0);
-  });
- }
-});
-
-test('Estrutura fixa: Group sem quadro livre fica de fora e nenhuma linha e criada',async()=>{
- await withSheet(fakeSheet(),async batches=>{
-  const r=await syncBlipsCoordinates({token:'mock',groups:[{group:'Armas99',segmento:'Armas',beneficios:{craft:'1,1,1'}}]});
-  assert.deepEqual(r.semEspaco,[{group:'Armas99',sector:'ARMAS'}]);
-  const reqs=batches.flatMap(b=>b.requests);
-  assert.equal(reqs.some(x=>x.appendDimension||x.insertDimension||x.copyPaste||x.repeatCell),false);
- });
+test('sameSheetValue ignora espaços e caixa',()=>{
+ assert.equal(sameSheetValue(' 1.5, 2 ,3 ','1.5,2,3'),true);
+ assert.equal(sameSheetValue('abc','ABC'),true);
+ assert.equal(sameSheetValue('1,2,3','1,2,4'),false);
 });
