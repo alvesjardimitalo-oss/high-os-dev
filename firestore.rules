@@ -303,6 +303,15 @@ service cloud.firestore {
       allow read: if canView('faccoes');
       allow write: if canEdit('faccoes');
     }
+    // 18/11/2026 - o High OS só LÊ as planilhas. O que está diferente entre o
+    // Firebase e a planilha vira pendência para o ADMIN atualizar à mão.
+    // Quem entrega/edita Group ou aprova prêmio abre/atualiza pendência;
+    // só ADMIN apaga.
+    match /highos/data/pendencias_planilha/{docId} {
+      allow read: if canView('faccoes') || canView('economia');
+      allow create, update: if canEdit('faccoes') || canEdit('economia');
+      allow delete: if isAdmin();
+    }
     // Espelho das abas da planilha oficial (checklist VIP da entrega)
     match /highos/data/planilha/{docId} {
       allow read: if canView('faccoes');

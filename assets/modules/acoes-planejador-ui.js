@@ -581,12 +581,22 @@ async function approveProposal(mode='sugestao'){
  const buttons=[el('apApprove'),el('apApproveManual'),el('apReject')].filter(Boolean);
  buttons.forEach(x=>x.disabled=true);
  const message=el('apCopyStatus'),reason=el('apDecisionReason')?.value?.trim()||'';
- message.textContent='Conferindo células, fórmulas e premiação oficial da planilha...';
+ message.textContent='Conferindo células, fórmulas e premiação oficial da planilha (somente leitura)...';
  try{
   const result=await approveHandler({name:a.nome,officialMin:p.min,officialMax:p.max,
    proposedMin:value,proposedMax,team:p.team,cost:p.kit.total,tax:p.tax,winChance:d.winChance,reason,
    source:manual?'manual':'sugestao'});
   if(result?.cancelled){message.textContent='Aprovação cancelada. Nada foi alterado.';return;}
+  if(result?.pendente){
+   // 18/11/2026 - o High OS só lê a planilha: a aprovação vira pendência para atualização manual.
+   approvedThisSession.add(a.nome);
+   message.textContent='Aprovação registrada no High OS. A planilha NÃO foi alterada: atualize à mão '+
+    (result.cells?.length?result.cells.join(' e '):'BUFF/NERF')+' na aba VALORES AÇÃO BLIPADA'+
+    ' (BUFF '+result.oldBuff+' → '+result.buff+' • NERF '+result.oldNerf+' → '+result.nerf+'). '+
+    (result.pendenciasSalvas?'Item listado em PENDÊNCIAS DA PLANILHA. ':'ATENÇÃO: a pendência não foi salva no Firebase (confira as regras). ')+
+    (result.audited?'Histórico registrado.':'Auditoria pendente.');
+   return;
+  }
   if(!result?.updated)throw Error('A planilha não confirmou a alteração.');
   approvedThisSession.add(a.nome);
   if(result.verified&&Number.isFinite(result.actualMin)&&Number.isFinite(result.actualMax)){

@@ -100,17 +100,23 @@ export function valuesFor(f){
   /* Benefícios e rota exclusiva NÃO pertencem à aba de coordenadas. */
  };
 }
-async function sheets(url,token,method="GET",body){
- const opt={method,headers:{"Authorization":"Bearer "+token}};
- if(body!==undefined){opt.headers["Content-Type"]="application/json";opt.body=JSON.stringify(body);}
- const response=await fetch(url,opt);
+/* SOMENTE LEITURA (18/11/2026): o High OS nunca grava nesta planilha.
+   Ele le, compara com o Firebase e avisa o que a equipe deve atualizar a mao. */
+async function sheets(url,token){
+ const response=await fetch(url,{method:"GET",headers:{"Authorization":"Bearer "+token}});
  const data=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error(data?.error?.message||("Google Sheets HTTP "+response.status));
  return data;
 }
-function put(reqs,sheetId,row,col,val){
- reqs.push({updateCells:{start:{sheetId,rowIndex:row,columnIndex:col},
-  rows:[{values:[{userEnteredValue:{stringValue:String(val)}}]}],fields:"userEnteredValue"}});
+function colLetter(index){
+ let n=index+1,s="";
+ while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}
+ return s;
+}
+/* Comparacao tolerante: espacos e espacos apos virgula nao contam como diferenca. */
+export function sameSheetValue(a,b){
+ const n=v=>plain(v).replace(/\s*,\s*/g,",").replace(/\s+/g," ").toUpperCase();
+ return n(a)===n(b);
 }
 function sectionsIn(rows){
  const sections=[];
@@ -137,91 +143,64 @@ function safeBlank(rows,sec,entry){
  }
  return true;
 }
-/* Preenche apenas células pertencentes ao quadro do Group, em quadros que
-   ja existem. A aba tem estrutura fixa: nada de linha ou quadro novo. */
-export async function syncBlipsCoordinates({token,groups=[],onlyMissing=false,preserveExisting=true,overwriteFieldsByGroup={}}={}){
- if(!token)throw new Error("Conecte o Google Sheets para sincronizar Blips e Coordenadas.");
+/* Compara o cadastro do High OS (Firebase) com a aba BLIPS COORDENADAS.
+   Nada e gravado: devolve a lista do que esta diferente, celula por celula,
+   para a equipe atualizar a planilha manualmente. So entram campos em que o
+   High OS TEM valor e a planilha mostra outro (ou nada). */
+export async function compareBlipsCoordinates({token,groups=[]}={}){
+ if(!token)throw new Error("Conecte o Google Sheets para conferir Blips e Coordenadas.");
  const list=[...new Map(groups.filter(g=>g&&plain(g.group)).map(g=>[fold(g.group),g])).values()];
- if(!list.length)return {created:0,updated:0,skipped:0};
+ if(!list.length)return {diffs:[],checkedGroups:[],sheetGid:null};
  const root="https://sheets.googleapis.com/v4/spreadsheets/"+SHEET_ID;
  const meta=await sheets(root+"?fields=sheets.properties(sheetId,title,gridProperties)",token);
  const abas=(meta.sheets||[]).map(s=>s.properties||{});
  const tab=TAB_GIDS.map(g=>abas.find(p=>Number(p.sheetId)===g)).find(Boolean)
   ||abas.find(p=>fold(p.title)===fold(TAB_TITLE));
  if(!tab)throw new Error("A aba BLIPS COORDENADAS não foi encontrada.");
- const TAB_GID=Number(tab.sheetId);
- const a1="'"+String(tab.title).replace(/'/g,"''")+"'";
+ const sheetGid=Number(tab.sheetId),aba=String(tab.title);
+ const a1="'"+aba.replace(/'/g,"''")+"'";
  const range=a1+"!A1:CD"+Math.min(tab.gridProperties?.rowCount||1006,4000);
  const data=await sheets(root+"/values/"+encodeURIComponent(range)+"?valueRenderOption=FORMATTED_VALUE",token);
  const rows=data.values||[];
  const sections=sectionsIn(rows);
- if(!sections.length)throw new Error("Quadros da planilha não reconhecidos. Nenhuma alteração feita.");
- const requests=[];
- let created=0,updated=0,skipped=0;
- const categoryMismatches=[],duplicates=[],semEspaco=[];
- const findSector=key=>sections.filter(s=>s.sector===key);
+ if(!sections.length)throw new Error("Quadros da planilha não reconhecidos na aba BLIPS COORDENADAS.");
+ const diffs=[];
  for(const f of list){
   const key=fold(f.group),[sectorKey,title]=sector(f);
-  const correct=findSector(sectorKey);
-  let selected=null,isNew=false;
-  // Primeiro tenta a ficha já existente NA categoria correta.
-  for(const s of correct){
+  let selected=null;
+  for(const s of sections.filter(s=>s.sector===sectorKey)){
    const entry=s.entries.find(e=>fold(e.name)===key);
    if(entry){selected={s,entry};break;}
   }
-  // Se já existe em uma seção histórica diferente, atualiza-a sem criar duplicata.
   if(!selected)for(const s of sections){
    const entry=s.entries.find(e=>fold(e.name)===key);
-   if(entry){selected={s,entry};categoryMismatches.push({group:f.group,actual:s.sector,expected:sectorKey});break;}
+   if(entry){selected={s,entry};break;}
   }
-  const matches=sections.flatMap(sec=>sec.entries.filter(e=>fold(e.name)===key).map(e=>sec.sector));
-  if(matches.length>1)duplicates.push({group:f.group,sectors:matches});
-  if(selected&&onlyMissing){skipped++;continue;}
   if(!selected){
-   for(const s of correct){
-    const entry=s.entries.find(e=>!s.reserved.has(e.col)&&(s.newBlock||safeBlank(rows,s,e)));
-    if(entry){selected={s,entry};isNew=true;s.reserved.add(entry.col);break;}
+   // Sugere o primeiro quadro livre (N/A sem dados) do segmento certo.
+   let livre=null;
+   for(const s of sections.filter(s=>s.sector===sectorKey)){
+    const e=s.entries.find(e=>safeBlank(rows,s,e));
+    if(e){livre=colLetter(e.col)+(s.headerRow+1);break;}
    }
+   diffs.push({group:f.group,aba,sheetGid,campo:"GROUP",tipo:"ADICIONAR",
+    celula:livre||"",naPlanilha:"",noHighOS:f.group,
+    obs:livre?"Group não está na aba. Quadro livre sugerido em "+title+": "+livre+".":"Group não está na aba e não há quadro livre em "+title+"."});
+   continue;
   }
-  /* ESTRUTURA CONGELADA: a aba nao pode ganhar linha nem quadro novo.
-     Sem quadro livre no segmento, o Group fica de fora e e reportado -
-     a equipe abre espaco na planilha a mao, se quiser. */
-  if(!selected){semEspaco.push({group:f.group,sector:sectorKey});skipped++;continue;}
-  const {s,entry}=selected;
-  const fields=valuesFor(f),col=entry.col,header=s.headerRow;
-  const forceFields=new Set((overwriteFieldsByGroup[key]||overwriteFieldsByGroup[f.group]||[]).map(fold));
-  // Campos por rótulo, não por posição fixa: há diferenças entre os segmentos.
-  for(let r=header;r<Math.min(s.footerRow,header+MAX_FIELDS_SCAN);r++){
-   const label=s.newBlock?s.labels[r-header]:cell(rows,r,col-1);
+  const {s,entry}=selected,col=entry.col,fields=valuesFor(f);
+  for(let r=s.headerRow+1;r<Math.min(s.footerRow,s.headerRow+MAX_FIELDS_SCAN);r++){
+   const label=cell(rows,r,col-1);
    if(!label||fold(label)==="TRUE")continue;
-   const fieldKey=fold(label),value=fields[fieldKey];
-   const explicitChange=forceFields.has(fieldKey);
-   // Só uma alteração EXPLÍCITA pode limpar valor antigo.
-   if(!value&&!explicitChange)continue;
-   const found=s.newBlock?"":first(...Array.from({length:6},(_,i)=>cell(rows,r,col+i)));
-   if(!value&&!found)continue;
-   if(!isNew&&value===found)continue;
-   if(!isNew&&onlyMissing)continue;
-   if(!isNew&&preserveExisting&&found&&!explicitChange)continue; // entrega não altera instalações preexistentes
-   const occupiedColumns=s.newBlock?[]:Array.from({length:6},(_,i)=>col+i)
-    .filter(c=>Boolean(cell(rows,r,c)));
-   // Há planilhas históricas com dados técnicos repartidos entre colunas.
-   // Substituir só a primeira esconderia as demais CDS e criaria estado misto.
-   if(explicitChange&&occupiedColumns.length>1){
-    throw new Error("BLIPS COORDENADAS: "+f.group+" / "+label+
-     " possui "+occupiedColumns.length+" células preenchidas. "+
-     "Revise/consolide este campo na planilha antes de alterar; nada foi gravado.");
-   }
-   const existingAnchor=occupiedColumns[0]??col;
-   put(requests,TAB_GID,r,existingAnchor,value);
+   const value=fields[fold(label)];
+   if(!plain(value))continue;
+   const occupied=Array.from({length:6},(_,i)=>col+i).filter(c=>cell(rows,r,c));
+   const found=occupied.map(c=>cell(rows,r,c)).join(" / ");
+   if(sameSheetValue(value,found))continue;
+   diffs.push({group:f.group,aba,sheetGid,campo:label,tipo:found?"ALTERAR":"PREENCHER",
+    celula:colLetter(occupied[0]??col)+(r+1),naPlanilha:found,noHighOS:plain(value),
+    obs:occupied.length>1?"Campo repartido em "+occupied.length+" células na planilha.":""});
   }
-  if(isNew){created++;entry.name=f.group;}else updated++;
  }
- if(requests.length){
-  // Limite defensivo: uma falha não deve apagar a planilha preexistente.
-  if(requests.some(r=>r.appendDimension||r.insertDimension||r.copyPaste||r.repeatCell))
-   throw new Error("BLIPS COORDENADAS: a estrutura da aba é fixa; nada foi gravado.");
-  await sheets(root+":batchUpdate",token,"POST",{requests});
- }
- return {created,updated,skipped,groups:list.length,sectionsAdded:[],semEspaco,categoryMismatches,duplicates};
+ return {diffs,checkedGroups:list.map(f=>f.group),sheetGid};
 }

@@ -30,6 +30,7 @@ jobs:
           node --check assets/app.js
           node --check assets/mission-planner.js
           node --check assets/modules/blips-sheet-sync.js
+          node --check assets/modules/planilha-pendencias.js
           node --check assets/modules/metricas-parser.js
           node --check assets/modules/acoes-core.js
           node --check assets/modules/acoes-sheet-sync.js
